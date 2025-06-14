@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - Carpet PvP</title>
+    <meta name="description" content="Complete documentation for Carpet PvP - Commands, rules, features, and examples for the ultimate Minecraft server mod.">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto:wght@300;400;500;700&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary-color: #00ff41;
+            --secondary-color: #ff6b35;
+            --accent-color: #7c3aed;
+            --bg-dark: #0a0a0a;
+            --bg-darker: #000000;
+            --text-light: #ffffff;
+            --text-gray: #a0a0a0;
+            --text-muted: #6b7280;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --border-glow: rgba(0, 255, 65, 0.3);
+            --code-bg: rgba(0, 0, 0, 0.4);
+            --nav-bg: rgba(0, 0, 0, 0.9);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--bg-darker);
+            color: var(--text-light);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Animated background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(45deg, #000000, #0a0a0a, #1a1a1a);
+            opacity: 0.8;
+        }
+
+        .bg-animation::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(0, 255, 65, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(124, 58, 237, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 107, 53, 0.1) 0%, transparent 50%);
+            animation: pulse 4s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            100% { opacity: 0.7; }
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--nav-bg);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-glow);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--primary-color);
+            text-decoration: none;
+            text-shadow: 0 0 10px var(--primary-color);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+            background: rgba(0, 255, 65, 0.1);
+        }
+
+        /* Mobile nav toggle */
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-light);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Main container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 100px 2rem 2rem;
+        }
+
+        /* Sidebar */
+        .docs-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 3rem;
+            margin-top: 2rem;
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+            background: var(--card-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 15px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .sidebar h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-family: 'Orbitron', monospace;
+        }
+
+        .sidebar ul {
+            list-style: none;
+        }
+
+        .sidebar ul ul {
+            margin-left: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .sidebar a {
+            color: var(--text-gray);
+            text-decoration: none;
+            display: block;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .sidebar a:hover, .sidebar a.active {
+            color: var(--primary-color);
+            padding-left: 0.5rem;
+        }
+
+        /* Content */
+        .content {
+            background: var(--card-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 15px;
+            padding: 3rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .content h1 {
+            font-family: 'Orbitron', monospace;
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            text-shadow: 0 0 20px var(--primary-color);
+        }
+
+        .content h2 {
+            font-family: 'Orbitron', monospace;
+            color: var(--secondary-color);
+            font-size: 2rem;
+            margin: 3rem 0 1.5rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--secondary-color);
+        }
+
+        .content h3 {
+            color: var(--accent-color);
+            font-size: 1.5rem;
+            margin: 2rem 0 1rem 0;
+        }
+
+        .content h4 {
+            color: var(--primary-color);
+            font-size: 1.2rem;
+            margin: 1.5rem 0 0.5rem 0;
+        }
+
+        .content p {
+            margin-bottom: 1rem;
+            color: var(--text-gray);
+        }
+
+        .content ul, .content ol {
+            margin: 1rem 0 1rem 2rem;
+            color: var(--text-gray);
+        }
+
+        .content li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Code blocks */
+        .content code {
+            font-family: 'Fira Code', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.5rem;
+            border-radius: 5px;
+            color: var(--primary-color);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+        }
+
+        .content pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .content pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            display: block;
+            color: var(--text-light);
+        }
+
+        /* Tables */
+        .content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .content th, .content td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .content th {
+            background: var(--primary-color);
+            color: var(--bg-darker);
+            font-weight: 700;
+        }
+
+        .content tr:hover {
+            background: rgba(0, 255, 65, 0.1);
+        }
+
+        /* Feature cards */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .feature-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 15px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 255, 65, 0.2);
+        }
+
+        .feature-card h4 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .feature-card p {
+            color: var(--text-gray);
+        }
+
+        /* Command boxes */
+        .command-box {
+            background: linear-gradient(135deg, var(--code-bg), rgba(0, 0, 0, 0.6));
+            border: 1px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            position: relative;
+        }
+
+        .command-box::before {
+            content: '>';
+            position: absolute;
+            left: 1rem;
+            top: 1.5rem;
+            color: var(--primary-color);
+            font-family: 'Fira Code', monospace;
+            font-weight: bold;
+        }
+
+        .command-box code {
+            margin-left: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+        }
+
+        /* Rule tags */
+        .rule-tag {
+            display: inline-block;
+            background: var(--accent-color);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            margin: 0.2rem;
+        }
+
+        .rule-tag.boolean { background: #10b981; }
+        .rule-tag.integer { background: #3b82f6; }
+        .rule-tag.string { background: #f59e0b; }
+        .rule-tag.enum { background: #8b5cf6; }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .nav-toggle {
+                display: block;
+            }
+
+            .docs-layout {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .sidebar {
+                position: static;
+                order: 2;
+            }
+
+            .content {
+                padding: 2rem;
+            }
+
+            .container {
+                padding: 80px 1rem 1rem;
+            }
+        }
+
+        /* Scroll behavior */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Section spacing */
+        .section {
+            margin-bottom: 4rem;
+        }
+
+        /* Highlight boxes */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(0, 255, 65, 0.1), rgba(124, 58, 237, 0.1));
+            border: 1px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        /* Search box */
+        .search-box {
+            position: relative;
+            margin-bottom: 2rem;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 1rem;
+            background: var(--code-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            color: var(--text-light);
+            font-size: 1rem;
+        }
+
+        .search-box input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-box i {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="index.html" class="nav-brand">
+                <i class="fas fa-cube"></i> Carpet PvP
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="docs.html" class="active">Documentation</a></li>
+                <li><a href="https://github.com/AndrewCTF/Carpet-PvP" target="_blank">GitHub</a></li>
+                <li><a href="https://modrinth.com/mod/carpet-pvp-(updates)" target="_blank">Download</a></li>
+            </ul>
+            <button class="nav-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="docs-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search documentation...">
+                    <i class="fas fa-search"></i>
+                </div>
+                
+                <h3><i class="fas fa-list"></i> Contents</h3>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#installation">Installation</a></li>
+                    <li><a href="#commands">Commands</a>
+                        <ul>
+                            <li><a href="#core-commands">Core Commands</a></li>
+                            <li><a href="#debug-commands">Debug Commands</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#rules">Rules & Settings</a>
+                        <ul>
+                            <li><a href="#command-rules">Command Rules</a></li>
+                            <li><a href="#performance-rules">Performance</a></li>
+                            <li><a href="#tnt-rules">TNT & Explosions</a></li>
+                            <li><a href="#block-rules">Block Mechanics</a></li>
+                            <li><a href="#creative-rules">Creative Mode</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#features">Features</a>
+                        <ul>
+                            <li><a href="#hopper-counters">Hopper Counters</a></li>
+                            <li><a href="#fake-players">Fake Players</a></li>
+                            <li><a href="#spawn-tracking">Spawn Tracking</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#scarpet">Scarpet Scripting</a></li>
+                    <li><a href="#examples">Examples</a></li>
+                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                </ul>
+            </aside>
+
+            <!-- Main content -->
+            <main class="content">
+                <h1><i class="fas fa-book"></i> Carpet PvP Documentation</h1>
+
+                <!-- Overview Section -->
+                <section id="overview" class="section">
+                    <h2><i class="fas fa-eye"></i> Overview</h2>
+                    <p>Carpet PvP is a server-side mod for Minecraft 1.21.5 built on Fabric that provides a wealth of features, commands, and configuration options for server administrators and players. It's based on the popular Carpet Mod and includes:</p>
+                    
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4><i class="fas fa-cogs"></i> 100+ Configurable Rules</h4>
+                            <p>Tweak game mechanics, performance, and behavior with extensive configuration options.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="fas fa-terminal"></i> Comprehensive Commands</h4>
+                            <p>Advanced debugging, monitoring, and player management tools.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="fas fa-code"></i> Scarpet Scripting</h4>
+                            <p>Custom automation and features with built-in scripting language.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="fas fa-tachometer-alt"></i> Performance Tools</h4>
+                            <p>Real-time profiling and optimization features.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Installation Section -->
+                <section id="installation" class="section">
+                    <h2><i class="fas fa-download"></i> Installation</h2>
+                    
+                    <h3>Requirements</h3>
+                    <ul>
+                        <li>Minecraft 1.21.5</li>
+                        <li>Fabric Loader 0.16.9+</li>
+                        <li>Fabric API 0.111.0+1.21.5</li>
+                    </ul>
+
+                    <h3>Modrinth Installation (Recommended)</h3>
+                    <div class="highlight-box">
+                        <h4><i class="fas fa-box"></i> Quick Install</h4>
+                        <ol>
+                            <li>Download from <a href="https://modrinth.com/mod/carpet-pvp-(updates)" target="_blank" style="color: var(--primary-color);">Modrinth</a></li>
+                            <li>Place the JAR file in your <code>mods</code> folder</li>
+                            <li>Ensure Fabric API is also installed</li>
+                            <li>Start your server</li>
+                        </ol>
+                    </div>
+
+                    <h3>Manual Installation</h3>
+                    <ol>
+                        <li>Download from <a href="https://github.com/AndrewCTF/Carpet-PvP/releases" target="_blank" style="color: var(--primary-color);">GitHub Releases</a></li>
+                        <li>Place in your server's <code>mods</code> folder</li>
+                        <li>Start the server</li>
+                    </ol>
+                </section>
+
+                <!-- Commands Section -->
+                <section id="commands" class="section">
+                    <h2><i class="fas fa-terminal"></i> Commands</h2>
+
+                    <h3 id="core-commands">Core Commands</h3>
+
+                    <h4><i class="fas fa-sliders-h"></i> /carpet - Main Configuration</h4>
+                    <p>Access and modify Carpet rules and settings.</p>
+                    <div class="command-box">
+                        <code>/carpet</code> - List all available rules
+                    </div>
+                    <div class="command-box">
+                        <code>/carpet &lt;rule&gt;</code> - Show current value and options
+                    </div>
+                    <div class="command-box">
+                        <code>/carpet &lt;rule&gt; &lt;value&gt;</code> - Set a rule to specific value
+                    </div>
+
+                    <h4><i class="fas fa-calculator"></i> /counter - Item Counting</h4>
+                    <p>Monitor item flow through hopper counters.</p>
+                    <div class="command-box">
+                        <code>/counter</code> - Show all counter channels
+                    </div>
+                    <div class="command-box">
+                        <code>/counter &lt;color&gt;</code> - Display specific color counter
+                    </div>
+                    <div class="command-box">
+                        <code>/counter &lt;color&gt; reset</code> - Reset specific counter
+                    </div>
+
+                    <h4><i class="fas fa-ghost"></i> /spawn - Mob Spawning Analysis</h4>
+                    <p>Track and analyze mob spawning patterns.</p>
+                    <div class="command-box">
+                        <code>/spawn tracking start [from] [to]</code> - Start tracking
+                    </div>
+                    <div class="command-box">
+                        <code>/spawn test [ticks] [counter]</code> - Run spawn rate test
+                    </div>
+                    <div class="command-box">
+                        <code>/spawn mobcaps</code> - Show current mob caps
+                    </div>
+
+                    <h4><i class="fas fa-user-plus"></i> /player - Fake Player Control</h4>
+                    <p>Control and spawn fake players for testing.</p>
+                    <div class="command-box">
+                        <code>/player &lt;name&gt; spawn</code> - Spawn fake player
+                    </div>
+                    <div class="command-box">
+                        <code>/player &lt;name&gt; &lt;action&gt;</code> - Perform action
+                    </div>
+                    <div class="command-box">
+                        <code>/player &lt;name&gt; kill</code> - Remove fake player
+                    </div>
+
+                    <h4><i class="fas fa-clipboard-list"></i> /log - Event Logging</h4>
+                    <p>Subscribe to various game event loggers.</p>
+                    <div class="command-box">
+                        <code>/log</code> - List available loggers
+                    </div>
+                    <div class="command-box">
+                        <code>/log &lt;logger&gt;</code> - Toggle subscription
+                    </div>
+
+                    <h3 id="debug-commands">Debug Commands</h3>
+
+                    <h4><i class="fas fa-info-circle"></i> /info - Block Information</h4>
+                    <div class="command-box">
+                        <code>/info block &lt;pos&gt;</code> - Get detailed block info
+                    </div>
+
+                    <h4><i class="fas fa-ruler"></i> /distance - Distance Measurement</h4>
+                    <div class="command-box">
+                        <code>/distance from [pos] to [pos]</code> - Measure distance
+                    </div>
+
+                    <h4><i class="fas fa-chart-line"></i> /profile - Performance Profiling</h4>
+                    <div class="command-box">
+                        <code>/profile health [ticks]</code> - Profile server health
+                    </div>
+
+                    <h4><i class="fas fa-clock"></i> /tick - Game Clock Control</h4>
+                    <div class="command-box">
+                        <code>/tick rate &lt;tps&gt;</code> - Set tick rate
+                    </div>
+                    <div class="command-box">
+                        <code>/tick warp &lt;ticks&gt;</code> - Fast-forward ticks
+                    </div>
+                </section>
+
+                <!-- Rules Section -->
+                <section id="rules" class="section">
+                    <h2><i class="fas fa-cogs"></i> Rules & Settings</h2>
+                    <p>Carpet PvP includes over 100 configurable rules organized by category:</p>
+
+                    <h3 id="command-rules">Command System Rules</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>commandSpawn</code></td>
+                                <td><span class="rule-tag string">String</span></td>
+                                <td>ops</td>
+                                <td>Enables /spawn command for spawn tracking</td>
+                            </tr>
+                            <tr>
+                                <td><code>commandTick</code></td>
+                                <td><span class="rule-tag string">String</span></td>
+                                <td>ops</td>
+                                <td>Enables /tick command to control game clocks</td>
+                            </tr>
+                            <tr>
+                                <td><code>commandProfile</code></td>
+                                <td><span class="rule-tag string">String</span></td>
+                                <td>true</td>
+                                <td>Enables /profile command for performance monitoring</td>
+                            </tr>
+                            <tr>
+                                <td><code>commandPlayer</code></td>
+                                <td><span class="rule-tag string">String</span></td>
+                                <td>ops</td>
+                                <td>Enables /player command to control fake players</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 id="performance-rules">Performance & Optimization</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>optimizedTNT</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>TNT causes less lag when exploding in same spot</td>
+                            </tr>
+                            <tr>
+                                <td><code>lagFreeSpawning</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Spawning requires much less CPU and Memory</td>
+                            </tr>
+                            <tr>
+                                <td><code>fastRedstoneDust</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Lag optimizations for redstone dust</td>
+                            </tr>
+                            <tr>
+                                <td><code>maxEntityCollisions</code></td>
+                                <td><span class="rule-tag integer">Integer</span></td>
+                                <td>0</td>
+                                <td>Customizable maximal entity collision limits</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 id="tnt-rules">TNT & Explosions</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>explosionNoBlockDamage</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Explosions won't destroy blocks</td>
+                            </tr>
+                            <tr>
+                                <td><code>mergeTNT</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Merges stationary primed TNT entities</td>
+                            </tr>
+                            <tr>
+                                <td><code>tntRandomRange</code></td>
+                                <td><span class="rule-tag integer">Double</span></td>
+                                <td>-1</td>
+                                <td>Sets TNT random explosion range to fixed value</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 id="block-rules">Block & Item Mechanics</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>hopperCounters</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Hoppers pointing to wool count items passing through</td>
+                            </tr>
+                            <tr>
+                                <td><code>stackableShulkerBoxes</code></td>
+                                <td><span class="rule-tag string">String</span></td>
+                                <td>false</td>
+                                <td>Empty shulker boxes can stack when thrown</td>
+                            </tr>
+                            <tr>
+                                <td><code>movableBlockEntities</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Pistons can push block entities like hoppers, chests</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 id="creative-rules">Creative Mode Features</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>creativeNoClip</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Creative No Clip - phase through walls</td>
+                            </tr>
+                            <tr>
+                                <td><code>creativeFlySpeed</code></td>
+                                <td><span class="rule-tag integer">Double</span></td>
+                                <td>1.0</td>
+                                <td>Creative flying speed multiplier</td>
+                            </tr>
+                            <tr>
+                                <td><code>antiCheatDisabled</code></td>
+                                <td><span class="rule-tag boolean">Boolean</span></td>
+                                <td>false</td>
+                                <td>Prevents rubberbanding when moving too fast</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- Features Section -->
+                <section id="features" class="section">
+                    <h2><i class="fas fa-star"></i> Key Features</h2>
+
+                    <h3 id="hopper-counters"><i class="fas fa-calculator"></i> Hopper Counters</h3>
+                    <div class="highlight-box">
+                        <h4>Setup Instructions</h4>
+                        <ol>
+                            <li>Enable rule: <code>/carpet hopperCounters true</code></li>
+                            <li>Place colored wool block</li>
+                            <li>Point hopper into the wool block</li>
+                            <li>Items passing through are counted and destroyed</li>
+                        </ol>
+                    </div>
+                    <p><strong>Features:</strong></p>
+                    <ul>
+                        <li>16 separate counter channels (one per dye color)</li>
+                        <li>Real-time rate monitoring</li>
+                        <li>Persistent across server restarts</li>
+                        <li>Survival-friendly with carpet interactions</li>
+                    </ul>
+
+                    <h3 id="fake-players"><i class="fas fa-user-robot"></i> Fake Players</h3>
+                    <p>Create and control fake players for testing and automation.</p>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4><i class="fas fa-robot"></i> Capabilities</h4>
+                            <ul>
+                                <li>Spawn persistent fake players</li>
+                                <li>Control movement and actions</li>
+                                <li>Simulate player interactions</li>
+                                <li>Test multiplayer mechanics</li>
+                            </ul>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="fas fa-gamepad"></i> Available Actions</h4>
+                            <ul>
+                                <li>use, attack, jump, sneak, sprint</li>
+                                <li>drop, dropStack, swapHands</li>
+                                <li>hotbar, inventory management</li>
+                                <li>look, turn, move directions</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h3 id="spawn-tracking"><i class="fas fa-chart-area"></i> Spawn Tracking</h3>
+                    <p>Comprehensive mob spawning analysis and monitoring.</p>
+                    <ul>
+                        <li><strong>Real-time tracking:</strong> Monitor spawning attempts live</li>
+                        <li><strong>Spawnable spot analysis:</strong> Find optimal locations</li>
+                        <li><strong>Mob cap monitoring:</strong> Track current and maximum mob counts</li>
+                        <li><strong>Rate testing:</strong> Measure spawning rates over time</li>
+                        <li><strong>Statistical analysis:</strong> Detailed spawning statistics</li>
+                    </ul>
+                </section>
+
+                <!-- Scarpet Section -->
+                <section id="scarpet" class="section">
+                    <h2><i class="fas fa-code"></i> Scarpet Scripting</h2>
+                    <p>Scarpet is Carpet's built-in scripting language for automation and custom features.</p>
+
+                    <h3>Basic Syntax</h3>
+                    <pre><code>// Simple expressions
+print('Hello World');
+
+// Variables
+x = 10;
+y = 20;
+result = x + y;
+
+// Functions
+square(n) -> n * n;
+print(square(5));</code></pre>
+
+                    <h3>World Interaction</h3>
+                    <pre><code>// Get block at position
+block = block(0, 64, 0);
+
+// Set block
+set(0, 64, 0, 'stone');
+
+// Scan area for specific blocks
+scan(pos1, pos2, block('air'));</code></pre>
+
+                    <h3>Event Handling</h3>
+                    <pre><code>// Player join event
+__on_player_joins(player) -> (
+    print(player + ' joined the server');
+);
+
+// Block placement
+__on_player_places_block(player, block_pos) -> (
+    print(player + ' placed block at ' + block_pos);
+);</code></pre>
+                </section>
+
+                <!-- Examples Section -->
+                <section id="examples" class="section">
+                    <h2><i class="fas fa-lightbulb"></i> Examples</h2>
+
+                    <h3>Setting Up Hopper Counters</h3>
+                    <pre><code>// Enable the feature
+/carpet hopperCounters true
+
+// Monitor white wool counter
+/counter white
+/counter white realtime</code></pre>
+
+                    <h3>Basic Spawn Farm Testing</h3>
+                    <pre><code>// Start tracking in area
+/spawn tracking start ~ ~-10 ~ ~ ~10 ~
+
+// Run 5-minute test
+/spawn test 6000 white
+
+// View results
+/spawn tracking
+/counter white</code></pre>
+
+                    <h3>Fake Player Automation</h3>
+                    <pre><code>// Spawn and control fake player
+/player TestBot spawn
+/player TestBot attack
+/player TestBot look north
+/player TestBot move forward
+
+// Clean up
+/player TestBot kill</code></pre>
+
+                    <h3>Performance Optimization</h3>
+                    <pre><code>// Enable key optimizations
+/carpet optimizedTNT true
+/carpet lagFreeSpawning true
+/carpet fastRedstoneDust true
+/carpet maxEntityCollisions 20
+
+// Monitor performance
+/log tps
+/profile health 200</code></pre>
+                </section>
+
+                <!-- Troubleshooting Section -->
+                <section id="troubleshooting" class="section">
+                    <h2><i class="fas fa-wrench"></i> Troubleshooting</h2>
+
+                    <h3>Common Issues</h3>
+                    
+                    <div class="highlight-box">
+                        <h4><i class="fas fa-exclamation-triangle"></i> Commands Not Working</h4>
+                        <ul>
+                            <li>Check rule status with <code>/carpet &lt;rule&gt;</code></li>
+                            <li>Verify permissions (ops level required for many commands)</li>
+                            <li>Double-check command syntax and arguments</li>
+                        </ul>
+                    </div>
+
+                    <div class="highlight-box">
+                        <h4><i class="fas fa-calculator"></i> Hopper Counters Not Counting</h4>
+                        <ul>
+                            <li>Enable rule: <code>/carpet hopperCounters true</code></li>
+                            <li>Ensure hopper points directly into wool block</li>
+                            <li>Verify items are actually flowing through hopper</li>
+                        </ul>
+                    </div>
+
+                    <div class="highlight-box">
+                        <h4><i class="fas fa-user-times"></i> Fake Players Not Spawning</h4>
+                        <ul>
+                            <li>Cannot spawn if real player with same name is online</li>
+                            <li>Check <code>/carpet commandPlayer</code> permission setting</li>
+                            <li>Some servers may limit fake player creation</li>
+                        </ul>
+                    </div>
+
+                    <h3>Performance Tips</h3>
+                    <ul>
+                        <li>Disable unnecessary rules that impact performance</li>
+                        <li>Limit complex Scarpet scripts and fake player actions</li>
+                        <li>Monitor chunk loading with creative players</li>
+                        <li>Use <code>/profile</code> command to identify bottlenecks</li>
+                    </ul>
+
+                    <h3>Getting Help</h3>
+                    <ul>
+                        <li>Use <code>/carpet &lt;rule&gt;</code> for detailed rule information</li>
+                        <li>Enable logging with <code>/carpet scriptsDebugging true</code></li>
+                        <li>Test features in creative mode first</li>
+                        <li>Check <a href="https://github.com/AndrewCTF/Carpet-PvP/issues" target="_blank" style="color: var(--primary-color);">GitHub Issues</a> for known problems</li>
+                    </ul>
+                </section>
+
+                <!-- Footer -->
+                <div style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border-glow); text-align: center; color: var(--text-muted);">
+                    <p>
+                        <strong>Carpet PvP</strong> - Enhanced Minecraft Server Mod<br>
+                        <a href="https://github.com/AndrewCTF/Carpet-PvP" target="_blank" style="color: var(--primary-color);">GitHub</a> | 
+                        <a href="https://modrinth.com/mod/carpet-pvp-(updates)" target="_blank" style="color: var(--primary-color);">Modrinth</a> | 
+                        <a href="index.html" style="color: var(--primary-color);">Home</a>
+                    </p>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // Search functionality
+        const searchInput = document.getElementById('searchInput');
+        const content = document.querySelector('.content');
+
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const sections = content.querySelectorAll('section, h2, h3, h4, p, li, td');
+            
+            if (searchTerm === '') {
+                sections.forEach(section => {
+                    section.style.display = '';
+                });
+                return;
+            }
+            
+            sections.forEach(section => {
+                const text = section.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    section.style.display = '';
+                    // Highlight matching text
+                    section.style.backgroundColor = 'rgba(0, 255, 65, 0.1)';
+                } else {
+                    section.style.display = 'none';
+                    section.style.backgroundColor = '';
+                }
+            });
+        });
+
+        // Sidebar active link highlighting
+        const sidebarLinks = document.querySelectorAll('.sidebar a');
+        const sections = document.querySelectorAll('section[id]');
+
+        function highlightActiveSection() {
+            let currentSection = '';
+            sections.forEach(section => {
+                const rect = section.getBoundingClientRect();
+                if (rect.top <= 100 && rect.bottom >= 100) {
+                    currentSection = section.id;
+                }
+            });
+
+            sidebarLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + currentSection) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        window.addEventListener('scroll', highlightActiveSection);
+        window.addEventListener('load', highlightActiveSection);
+
+        // Mobile nav toggle
+        const navToggle = document.querySelector('.nav-toggle');
+        const navLinks = document.querySelector('.nav-links');
+
+        navToggle.addEventListener('click', () => {
+            navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
+        });
+    </script>
+</body>
+</html>
