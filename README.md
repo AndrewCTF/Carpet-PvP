@@ -50,4 +50,4 @@ Requirements: Java 21, Gradle wrapper. Manual test steps:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=andrewctf/carpet-pvp&type=Date)](https://www.star-history.com/#andrewctf/carpet-pvp&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=andrewctf/carpet-pvp&type=Date)]()
