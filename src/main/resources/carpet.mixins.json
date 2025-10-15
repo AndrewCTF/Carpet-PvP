@@ -64,6 +64,7 @@
     "Player_shieldStunMixin",
     "Player_xpNoCooldownMixin",
     "ServerPlayer_actionPackMixin",
+  "ServerPlayer_scarpetEventMixin",
     "PlayerList_coreMixin",
     "PlayerList_fakePlayersMixin",
     "RedstoneWireBlock_fastMixin",

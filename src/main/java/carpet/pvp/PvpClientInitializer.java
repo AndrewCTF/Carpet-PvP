@@ -14,11 +14,15 @@ import net.minecraft.world.item.ItemStack;
 public class PvpClientInitializer implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        // Register S2C custom payload codec on client
-        PayloadTypeRegistry.playS2C().register(SwordBlockPayload.TYPE, SwordBlockPayload.STREAM_CODEC);
+        // Register S2C custom payload codec on client (guard against double-registration)
+        try {
+            PayloadTypeRegistry.playS2C().register(SwordBlockPayload.TYPE, SwordBlockPayload.STREAM_CODEC);
+        } catch (IllegalArgumentException ignored) {}
 
-        // Register C2S request payload codec on client
-        PayloadTypeRegistry.playC2S().register(SwordBlockRequestPayload.TYPE, SwordBlockRequestPayload.STREAM_CODEC);
+        // Register C2S request payload codec on client (guard against double-registration)
+        try {
+            PayloadTypeRegistry.playC2S().register(SwordBlockRequestPayload.TYPE, SwordBlockRequestPayload.STREAM_CODEC);
+        } catch (IllegalArgumentException ignored) {}
 
         // Handle incoming block-hit payloads
         ClientPlayNetworking.registerGlobalReceiver(SwordBlockPayload.TYPE, (payload, context) -> {

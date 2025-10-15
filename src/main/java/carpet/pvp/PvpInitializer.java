@@ -22,10 +22,18 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 public class PvpInitializer implements ModInitializer {
     @Override
     public void onInitialize() {
-        // Register S2C payload type for encoding on the server
-        PayloadTypeRegistry.playS2C().register(SwordBlockPayload.TYPE, SwordBlockPayload.STREAM_CODEC);
-        // Register C2S payload codec on the server
-        PayloadTypeRegistry.playC2S().register(SwordBlockRequestPayload.TYPE, SwordBlockRequestPayload.STREAM_CODEC);
+        // Register S2C payload type for encoding on the server (guard against double-registration)
+        try {
+            PayloadTypeRegistry.playS2C().register(SwordBlockPayload.TYPE, SwordBlockPayload.STREAM_CODEC);
+        } catch (IllegalArgumentException ignored) {
+            // already registered by another initializer or previous run - safe to ignore
+        }
+        // Register C2S payload codec on the server (guard against double-registration)
+        try {
+            PayloadTypeRegistry.playC2S().register(SwordBlockRequestPayload.TYPE, SwordBlockRequestPayload.STREAM_CODEC);
+        } catch (IllegalArgumentException ignored) {
+            // already registered
+        }
 
         // Handle client requests to open block window (right-click air)
         ServerPlayNetworking.registerGlobalReceiver(SwordBlockRequestPayload.TYPE, (payload, context) -> {

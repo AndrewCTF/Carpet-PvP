@@ -573,6 +573,16 @@ public class CarpetSettings
     @Rule(desc = "Allows listing fake players on the multiplayer screen", category = COMMAND)
     public static boolean allowListingFakePlayers = false;
 
+    @Rule(desc = "Allows fake players to perform critical hits", category = COMMAND)
+    public static boolean fakePlayers_allowCriticalHits = true;
+
+    @Rule(desc = "Damage multiplier for fake player critical hits", category = COMMAND, 
+          validate = Validators.NonNegativeNumber.class)
+    public static float fakePlayers_criticalHitMultiplier = 1.5f;
+
+    @Rule(desc = "Makes all fake player attacks critical hits (for testing)", category = COMMAND)
+    public static boolean fakePlayers_alwaysCrit = false;
+
     @Rule(desc = "Allows to track mobs AI via /track command", category = COMMAND)
     public static String commandTrackAI = "ops";
 

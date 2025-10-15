@@ -28,6 +28,7 @@ public abstract class LivingEntity_maxCollisionsMixin extends Entity
 
     @Shadow protected abstract void doPush(Entity entity_1);
 
+    @SuppressWarnings("deprecation")
     @Inject(method = "pushEntities", cancellable = true, at = @At("HEAD"))
     private void tickPushingReplacement(CallbackInfo ci) {
         if (CarpetSettings.maxEntityCollisions == 0)
