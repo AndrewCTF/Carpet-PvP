@@ -185,7 +185,8 @@
   "ServerGamePacketListenerimpl_connectionMixin",
   "Player_attackCooldown_18CombatMixin",
   "Player_attackResetTicker_18CombatMixin",
-  "Player_swordBlockStateMixin"
+  "Player_swordBlockStateMixin",
+  "ServerPlayer_scarpetEventMixin"
   ],
   "client": [
     "Minecraft_tickMixin",

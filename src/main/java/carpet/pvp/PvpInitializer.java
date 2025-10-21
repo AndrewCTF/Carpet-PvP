@@ -22,8 +22,6 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 public class PvpInitializer implements ModInitializer {
     @Override
     public void onInitialize() {
-        // Register S2C payload type for encoding on the server
-        PayloadTypeRegistry.playS2C().register(SwordBlockPayload.TYPE, SwordBlockPayload.STREAM_CODEC);
         // Register C2S payload codec on the server
         PayloadTypeRegistry.playC2S().register(SwordBlockRequestPayload.TYPE, SwordBlockRequestPayload.STREAM_CODEC);
 

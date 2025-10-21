@@ -17,9 +17,6 @@ public class PvpClientInitializer implements ClientModInitializer {
         // Register S2C custom payload codec on client
         PayloadTypeRegistry.playS2C().register(SwordBlockPayload.TYPE, SwordBlockPayload.STREAM_CODEC);
 
-        // Register C2S request payload codec on client
-        PayloadTypeRegistry.playC2S().register(SwordBlockRequestPayload.TYPE, SwordBlockRequestPayload.STREAM_CODEC);
-
         // Handle incoming block-hit payloads
         ClientPlayNetworking.registerGlobalReceiver(SwordBlockPayload.TYPE, (payload, context) -> {
             var client = context.client();
