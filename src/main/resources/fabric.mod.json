@@ -23,7 +23,10 @@
     ],
     "server": [
       "carpet.CarpetServer::onGameStarted",
-      "carpet.utils.CarpetRulePrinter",
+      "carpet.utils.CarpetRulePrinter"
+    ],
+    "main": [
+      "carpet.CarpetServer::onGameStarted",
       "carpet.pvp.PvpInitializer"
     ]
   },
