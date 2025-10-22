@@ -28,10 +28,6 @@ Discord: [Carpet PvP Support](https://discord.gg/PAbydjFxKs)
 ## Contributing
 
 Contribute to Carpet PvP so that we can improve and make this mod better.
-
-## Contributers
-- @AndrewCTF (Owner)
-- @Horrifi0
   
 ## Build
 
