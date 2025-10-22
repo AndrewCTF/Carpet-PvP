@@ -47,12 +47,20 @@ public class PvpInitializer implements ModInitializer {
         // Register a block attack callback (left-click on blocks)
         AttackBlockCallback.EVENT.register((player, level, hand, pos, direction) -> {
             var state = level.getBlockState(pos);
-            // Example: punish empty-hand hits on tool-required blocks
-            if (!player.isSpectator() && player.getMainHandItem().isEmpty() && state.requiresCorrectToolForDrops()) {
-                if (!level.isClientSide) {
-                    player.hurt(((ServerLevel) level).damageSources().generic(), 1.0F);
+            // Only consider blocks that require a correct tool for drops; respect settings
+            if (!CarpetSettings.punishWrongToolHits) return InteractionResult.PASS;
+            if (state.requiresCorrectToolForDrops() && !player.isSpectator()) {
+                ItemStack main = player.getMainHandItem();
+                boolean lacksTool = main.isEmpty() || !main.isCorrectToolForDrops(state);
+                if (lacksTool && !player.isCreative()) {
+                    if (!level.isClientSide) {
+                        // apply 1 damage using the server damage sources without using deprecated API
+                        if (player instanceof net.minecraft.world.entity.LivingEntity le) {
+                            le.hurt(((ServerLevel) level).damageSources().generic(), 1.0F);
+                        }
+                    }
+                    return InteractionResult.SUCCESS; // consume
                 }
-                return InteractionResult.SUCCESS; // consume
             }
             return InteractionResult.PASS; // let vanilla and other handlers run
         });

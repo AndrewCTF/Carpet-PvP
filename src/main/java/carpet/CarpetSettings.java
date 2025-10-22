@@ -473,6 +473,18 @@ public class CarpetSettings
     )
     public static String commandScript = "true";
 
+        @Rule(
+            desc = "Allow Scarpet scripts to intercept item use events (PLAYER_USES_ITEM / PLAYER_FINISHED_USING_ITEM)",
+            category = {SCARPET}
+        )
+        public static boolean scarpetItemUseEvents = true;
+
+        @Rule(
+            desc = "When enabled, players without correct tools will be damaged when hitting tool-required blocks (can be disabled)",
+            category = {SURVIVAL}
+        )
+        public static boolean punishWrongToolHits = true;
+
     private static class ModulePermissionLevel extends Validator<String> {
         @Override public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String string) {
             int permissionLevel = switch (newValue) {
