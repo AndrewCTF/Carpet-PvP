@@ -524,6 +524,20 @@ public class CarpetSettings
     )
     public static boolean scriptsOptimization = true;
 
+        @Rule(
+            desc = "Enable Scarpet interception of item-use events",
+            extra = "When enabled, Scarpet PLAYER_USES_ITEM / PLAYER_RELEASED_ITEM / PLAYER_FINISHED_USING_ITEM events will be fired and may override vanilla behavior",
+            category = SCARPET
+        )
+        public static boolean scarpetItemUseEvents = true;
+
+        @Rule(
+            desc = "Punish hitting blocks with wrong tools",
+            extra = "When enabled, players using incorrect tools on blocks that require specific tools may receive a small damage while the action is cancelled",
+            category = SURVIVAL
+        )
+        public static boolean punishWrongToolHits = true;
+
     private static class ScarpetAppStore extends Validator<String> {
         @Override
         public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String stringInput) {

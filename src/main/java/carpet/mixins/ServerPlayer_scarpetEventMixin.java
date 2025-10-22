@@ -10,6 +10,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stat;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
+import carpet.CarpetSettings;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -43,25 +45,22 @@ public abstract class ServerPlayer_scarpetEventMixin implements ServerPlayerInte
 
     @Shadow public boolean wonGame;
 
-    @Redirect(method = "completeUsingItem", at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/player/Player;completeUsingItem()V"
-    ))
-    private void finishedUsingItem(Player playerEntity)
+    @Inject(method = "completeUsingItem", at = @At("HEAD"), cancellable = true)
+    private void finishedUsingItem(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci)
     {
-        if (PLAYER_FINISHED_USING_ITEM.isNeeded())
+        // Only intercept if scarpet item use events are enabled and the event is needed
+        if (CarpetSettings.scarpetItemUseEvents && PLAYER_FINISHED_USING_ITEM.isNeeded())
         {
-            InteractionHand hand = playerEntity.getUsedItemHand();
-            if(!PLAYER_FINISHED_USING_ITEM.onItemAction((ServerPlayer) (Object)this, hand, playerEntity.getUseItem())) {
-                // do vanilla
-                playerEntity.releaseUsingItem(); // fall back to public API
+            Player self = (Player) (Object) this;
+            InteractionHand hand = self.getUsedItemHand();
+            ItemStack stack = self.getUseItem();
+            // If Scarpet handled the event, cancel vanilla completion so Scarpet can override it
+            if (PLAYER_FINISHED_USING_ITEM.onItemAction((ServerPlayer) (Object) this, hand, stack))
+            {
+                ci.cancel();
             }
         }
-        else
-        {
-            // do vanilla
-            playerEntity.releaseUsingItem(); // fall back to public API
-        }
+        // otherwise let vanilla completeUsingItem run normally
     }
 
     @Inject(method = "awardStat", at = @At("HEAD"))

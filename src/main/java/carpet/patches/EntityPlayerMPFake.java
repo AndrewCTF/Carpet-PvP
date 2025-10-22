@@ -450,7 +450,6 @@ public class EntityPlayerMPFake extends ServerPlayer
         kill(this.getCombatTracker().getDeathMessage());
         EntityPlayerMPFake.executor.schedule(this::respawn, 1L, TimeUnit.MILLISECONDS);
         this.setHealth(20);
-        this.foodData = new FoodData();
         giveExperienceLevels(-(experienceLevel + 1));
         kill(this.getCombatTracker().getDeathMessage());
         this.teleportTo(spawnPos.x, spawnPos.y, spawnPos.z);
@@ -500,7 +499,6 @@ public class EntityPlayerMPFake extends ServerPlayer
         try {
             LOGGER.debug("Respawning fake player {}", getName().getString());
             this.setHealth(20);
-            this.foodData = new FoodData();
             this.teleportTo(spawnPos.x, spawnPos.y, spawnPos.z);
             
             // Ensure equipment synchronization after respawn
