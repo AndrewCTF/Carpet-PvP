@@ -1602,21 +1602,32 @@ public class EntityValue extends Value
         put("hunger", (e, v) -> {
             if (e instanceof Player p)
             {
-                p.getFoodData().setFoodLevel((int) NumericValue.asNumber(v).getLong());
+                int old = p.getFoodData().getFoodLevel();
+                int nv = (int) NumericValue.asNumber(v).getLong();
+                carpet.script.CarpetScriptServer.LOG.info("[scarpet-debug] modify hunger called for {}: old={} new={}", p.getScoreboardName(), old, nv);
+                p.getFoodData().setFoodLevel(nv);
             }
         });
 
         put("exhaustion", (e, v) -> {
             if (e instanceof Player p)
             {
-                ((FoodDataInterface)p.getFoodData()).setExhaustion(NumericValue.asNumber(v).getFloat());
+                float old = ((FoodDataInterface)p.getFoodData()).getCMExhaustionLevel();
+                float nv = NumericValue.asNumber(v).getFloat();
+                carpet.script.CarpetScriptServer.LOG.info("[scarpet-debug] modify exhaustion called for {}: old={} new={}", p.getScoreboardName(), old, nv);
+                ((FoodDataInterface)p.getFoodData()).setExhaustion(nv);
             }
         });
 
         put("add_exhaustion", (e, v) -> {
             if (e instanceof Player p)
             {
-                p.getFoodData().addExhaustion(NumericValue.asNumber(v).getFloat());
+                float delta = NumericValue.asNumber(v).getFloat();
+                float before = ((FoodDataInterface)p.getFoodData()).getCMExhaustionLevel();
+                carpet.script.CarpetScriptServer.LOG.info("[scarpet-debug] add_exhaustion called for {}: before={} delta={}", p.getScoreboardName(), before, delta);
+                p.getFoodData().addExhaustion(delta);
+                float after = ((FoodDataInterface)p.getFoodData()).getCMExhaustionLevel();
+                carpet.script.CarpetScriptServer.LOG.info("[scarpet-debug] add_exhaustion applied for {}: after={}", p.getScoreboardName(), after);
             }
         });
 
@@ -1659,7 +1670,10 @@ public class EntityValue extends Value
         put("saturation", (e, v) -> {
             if (e instanceof Player p)
             {
-                p.getFoodData().setSaturation(NumericValue.asNumber(v, "saturation").getFloat());
+                float old = p.getFoodData().getSaturationLevel();
+                float nv = NumericValue.asNumber(v, "saturation").getFloat();
+                carpet.script.CarpetScriptServer.LOG.info("[scarpet-debug] modify saturation called for {}: old={} new={}", p.getScoreboardName(), old, nv);
+                p.getFoodData().setSaturation(nv);
             }
         });
 

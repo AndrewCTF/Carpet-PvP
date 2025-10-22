@@ -33,3 +33,23 @@ WIKI.md
 
 # Crush workspace
 .crush/
+
+# Server
+server.properties
+eula.txt
+ops.txt
+whitelist.txt
+banned-players.txt
+banned-ips.txt
+logs/
+crash-reports/
+world/
+world_nether/
+world_the_end/
+*.log
+hs_err_pid*.log
+debug.log
+crash-reports/
+crash-reports/*.log
+latest.log
+debug.log
