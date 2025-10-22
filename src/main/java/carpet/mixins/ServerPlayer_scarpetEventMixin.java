@@ -12,7 +12,6 @@ import net.minecraft.stats.Stat;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
@@ -21,7 +20,8 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import carpet.CarpetSettings;
+ 
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -39,28 +39,22 @@ public abstract class ServerPlayer_scarpetEventMixin implements ServerPlayerInte
     private boolean isInvalidReference = false;
 
 
-    //@Shadow protected abstract void completeUsingItem();
+    @Shadow protected abstract void completeUsingItem();
 
     @Shadow public boolean wonGame;
 
-    @Redirect(method = "completeUsingItem", at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/player/Player;completeUsingItem()V"
-    ))
-    private void finishedUsingItem(Player playerEntity)
+    @Inject(method = "completeUsingItem", at = @At("HEAD"), cancellable = true)
+    private void finishedUsingItem(CallbackInfo ci)
     {
-        if (PLAYER_FINISHED_USING_ITEM.isNeeded())
+        if (CarpetSettings.scarpetItemUseEvents && PLAYER_FINISHED_USING_ITEM.isNeeded())
         {
-            InteractionHand hand = playerEntity.getUsedItemHand();
-            if(!PLAYER_FINISHED_USING_ITEM.onItemAction((ServerPlayer) (Object)this, hand, playerEntity.getUseItem())) {
-                // do vanilla
-                playerEntity.releaseUsingItem(); // fall back to public API
+            ServerPlayer player = (ServerPlayer)(Object)this;
+            InteractionHand hand = player.getUsedItemHand();
+            // If the event handled the item action, cancel vanilla completion so the event is authoritative.
+            if (PLAYER_FINISHED_USING_ITEM.onItemAction(player, hand, player.getUseItem()))
+            {
+                ci.cancel();
             }
-        }
-        else
-        {
-            // do vanilla
-            playerEntity.releaseUsingItem(); // fall back to public API
         }
     }
 
