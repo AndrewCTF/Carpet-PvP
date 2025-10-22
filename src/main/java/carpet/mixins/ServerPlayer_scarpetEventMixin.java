@@ -10,6 +10,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stat;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
+import carpet.CarpetSettings;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -44,18 +46,21 @@ public abstract class ServerPlayer_scarpetEventMixin implements ServerPlayerInte
     @Shadow public boolean wonGame;
 
     @Inject(method = "completeUsingItem", at = @At("HEAD"), cancellable = true)
-    private void finishedUsingItem(CallbackInfo ci)
+    private void finishedUsingItem(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci)
     {
+        // Only intercept if scarpet item use events are enabled and the event is needed
         if (CarpetSettings.scarpetItemUseEvents && PLAYER_FINISHED_USING_ITEM.isNeeded())
         {
-            ServerPlayer player = (ServerPlayer)(Object)this;
-            InteractionHand hand = player.getUsedItemHand();
-            // If the event handled the item action, cancel vanilla completion so the event is authoritative.
-            if (PLAYER_FINISHED_USING_ITEM.onItemAction(player, hand, player.getUseItem()))
+            Player self = (Player) (Object) this;
+            InteractionHand hand = self.getUsedItemHand();
+            ItemStack stack = self.getUseItem();
+            // If Scarpet handled the event, cancel vanilla completion so Scarpet can override it
+            if (PLAYER_FINISHED_USING_ITEM.onItemAction((ServerPlayer) (Object) this, hand, stack))
             {
                 ci.cancel();
             }
         }
+        // otherwise let vanilla completeUsingItem run normally
     }
 
     @Inject(method = "awardStat", at = @At("HEAD"))

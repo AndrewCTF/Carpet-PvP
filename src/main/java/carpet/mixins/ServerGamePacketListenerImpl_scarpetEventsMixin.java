@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import carpet.CarpetSettings;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_CLICKS_BLOCK;
@@ -136,7 +137,7 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     ))
     private void onStopUsing(ServerPlayer serverPlayerEntity)
     {
-        if (PLAYER_RELEASED_ITEM.isNeeded())
+        if (carpet.CarpetSettings.scarpetItemUseEvents && PLAYER_RELEASED_ITEM.isNeeded())
         {
             InteractionHand hand = serverPlayerEntity.getUsedItemHand();
             ItemStack stack = serverPlayerEntity.getUseItem().copy();
@@ -171,7 +172,7 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     ))
     private void onItemClicked(ServerboundUseItemPacket playerInteractItemC2SPacket_1, CallbackInfo ci)
     {
-        if (PLAYER_USES_ITEM.isNeeded())
+        if (carpet.CarpetSettings.scarpetItemUseEvents && PLAYER_USES_ITEM.isNeeded())
         {
             InteractionHand hand = playerInteractItemC2SPacket_1.getHand();
             if(PLAYER_USES_ITEM.onItemAction(player, hand, player.getItemInHand(hand).copy())) {
