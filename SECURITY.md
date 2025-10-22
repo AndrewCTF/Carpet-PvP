@@ -5,7 +5,7 @@ Supported version will regularly receive updates, whereas unsupported version wi
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 12.1.x  | ✅                 |
+| 12.2.x  | ✅                 |
 | 12.1    | :x:                |
 | 11.3.x  | :x:                |
 | 11.2.x  | :x:                |
