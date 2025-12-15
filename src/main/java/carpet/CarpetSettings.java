@@ -535,21 +535,6 @@ public class CarpetSettings
             category = SCARPET
     )
     public static boolean scriptsOptimization = true;
-
-        @Rule(
-            desc = "Enable Scarpet interception of item-use events",
-            extra = "When enabled, Scarpet PLAYER_USES_ITEM / PLAYER_RELEASED_ITEM / PLAYER_FINISHED_USING_ITEM events will be fired and may override vanilla behavior",
-            category = SCARPET
-        )
-        public static boolean scarpetItemUseEvents = true;
-
-        @Rule(
-            desc = "Punish hitting blocks with wrong tools",
-            extra = "When enabled, players using incorrect tools on blocks that require specific tools may receive a small damage while the action is cancelled",
-            category = SURVIVAL
-        )
-        public static boolean punishWrongToolHits = true;
-
     private static class ScarpetAppStore extends Validator<String> {
         @Override
         public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String stringInput) {
@@ -733,7 +718,7 @@ public class CarpetSettings
 
             if (server.isDedicatedServer())
             {
-                int vd = (newValue >= 2)?newValue:((ServerInterface) server).getProperties().viewDistance;
+                int vd = (newValue >= 2) ? newValue : ((ServerInterface) server).getProperties().viewDistance().get();
                 if (vd != server.getPlayerList().getViewDistance())
                     server.getPlayerList().setViewDistance(vd);
                 return newValue;
@@ -774,7 +759,7 @@ public class CarpetSettings
 
             if (server.isDedicatedServer())
             {
-                int vd = (newValue >= 2)?newValue:((DedicatedServer) server).getProperties().simulationDistance;
+                int vd = (newValue >= 2) ? newValue : ((DedicatedServer) server).getProperties().simulationDistance().get();
                 if (vd != server.getPlayerList().getSimulationDistance())
                     server.getPlayerList().setSimulationDistance(vd);
                 return newValue;
@@ -1031,7 +1016,7 @@ public class CarpetSettings
                     {
                         double from = worldBorder.getSize();
                         double to = worldBorder.getLerpTarget();
-                        long time = worldBorder.getLerpRemainingTime();
+                        long time = worldBorder.getLerpTime();
                         worldBorder.lerpSizeBetween(from, to, time);
                     }
                 }
