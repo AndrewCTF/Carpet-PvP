@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.Shadow;
 public abstract class Level_movableBEMixin implements LevelInterface, LevelAccessor
 {
     @Shadow
-    @Final
+    @Shadow
     public abstract boolean isClientSide();
 
     @Shadow
