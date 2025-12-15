@@ -325,7 +325,7 @@ public class CarpetProfiler
         {
             if (++total > 10) break;
             Pair<Level,Object> section = sectionEntry.getKey();
-            boolean cli = section.getKey().isClientSide;
+            boolean cli = section.getKey().isClientSide();
             Messenger.m(currentRequester, String.format(
                     "%s - %s: ", cli?"gi":"w",
                     sectionName(section)),

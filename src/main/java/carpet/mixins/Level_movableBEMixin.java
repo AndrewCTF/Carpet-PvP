@@ -23,7 +23,7 @@ public abstract class Level_movableBEMixin implements LevelInterface, LevelAcces
 {
     @Shadow
     @Final
-    public boolean isClientSide;
+    public abstract boolean isClientSide();
 
     @Shadow
     public abstract LevelChunk getChunkAt(BlockPos blockPos_1);
@@ -46,7 +46,7 @@ public abstract class Level_movableBEMixin implements LevelInterface, LevelAcces
     @Override
     public boolean setBlockStateWithBlockEntity(BlockPos blockPos_1, BlockState blockState_1, BlockEntity newBlockEntity, int int_1)
     {
-        if (isOutsideBuildHeight(blockPos_1) || !this.isClientSide && isDebug()) return false;
+        if (isOutsideBuildHeight(blockPos_1) || !this.isClientSide() && isDebug()) return false;
         LevelChunk worldChunk_1 = this.getChunkAt(blockPos_1);
         Block block_1 = blockState_1.getBlock();
 
@@ -78,12 +78,12 @@ public abstract class Level_movableBEMixin implements LevelInterface, LevelAcces
                 this.setBlocksDirty(blockPos_1, blockState_2, blockState_3);
             }
 
-            if ((int_1 & 2) != 0 && (!this.isClientSide || (int_1 & 4) == 0) && (this.isClientSide || worldChunk_1.getFullStatus() != null && worldChunk_1.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING)))
+            if ((int_1 & 2) != 0 && (!this.isClientSide() || (int_1 & 4) == 0) && (this.isClientSide() || worldChunk_1.getFullStatus() != null && worldChunk_1.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING)))
             {
                 this.sendBlockUpdated(blockPos_1, blockState_2, blockState_1, int_1);
             }
 
-            if (!this.isClientSide && (int_1 & 1) != 0)
+            if (!this.isClientSide() && (int_1 & 1) != 0)
             {
                 this.updateNeighborsAt(blockPos_1, blockState_2.getBlock());
                 if (blockState_1.hasAnalogOutputSignal())
