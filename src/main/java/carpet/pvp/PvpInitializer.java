@@ -53,7 +53,7 @@ public class PvpInitializer implements ModInitializer {
                 ItemStack main = player.getMainHandItem();
                 boolean lacksTool = main.isEmpty() || !main.isCorrectToolForDrops(state);
                 if (lacksTool && !player.isCreative()) {
-                    if (!level.isClientSide) {
+                    if (!level.isClientSide()) {
                         // apply 1 damage using the server damage sources without using deprecated API
                         if (player instanceof net.minecraft.world.entity.LivingEntity le) {
                             le.hurt(((ServerLevel) level).damageSources().generic(), 1.0F);
