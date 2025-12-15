@@ -22,7 +22,7 @@ import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
-import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.server.players.ProfileResolver;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.damagesource.DamageSource;
@@ -82,14 +82,8 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         //prolly half of that crap is not necessary, but it works
         ServerLevel worldIn = server.getLevel(dimensionId);
-        GameProfileCache.setUsesAuthentication(false);
-        GameProfile gameprofile;
-        try {
-            gameprofile = server.getProfileCache().get(username).orElse(null); //findByName  .orElse(null)
-        }
-        finally {
-            GameProfileCache.setUsesAuthentication(server.isDedicatedServer() && server.usesAuthentication());
-        }
+        ProfileResolver profileResolver = server.services().profileResolver();
+        GameProfile gameprofile = profileResolver.fetchByName(username).orElse(null);
         if (gameprofile == null)
         {
             if (!CarpetSettings.allowSpawningOfflinePlayers)
