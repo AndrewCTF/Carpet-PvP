@@ -69,7 +69,8 @@ public abstract class LivingEntity_maxCollisionsMixin extends Entity
 
                 if (candidates > maxEntityCramming - 1) {
                     float _amount = 6.0F;
-                    ((LivingEntity)(Object)this).hurt(damageSources().cramming(), _amount);
+                    // use server-aware damage hook to avoid deprecated path
+                    ((LivingEntity)(Object)this).hurtServer(serverLevel, damageSources().cramming(), _amount);
                 }
             }
             if (CarpetSettings.maxEntityCollisions > 0 && entities.size() > CarpetSettings.maxEntityCollisions)

@@ -412,47 +412,49 @@ public class ValueConversions
         }
     }
 
-    private static final Int2ObjectMap<SlotParam> slotIdsToSlotParams = new Int2ObjectOpenHashMap<>()
-    {{
+    private static final Int2ObjectMap<SlotParam> slotIdsToSlotParams = new Int2ObjectOpenHashMap<>();
+
+    static
+    {
         int n;
         //covers blocks, player hotbar and inventory, and all default inventories
         for (n = 0; n < 54; ++n)
         {
-            put(n, new SlotParam(null, n));
+            slotIdsToSlotParams.put(n, new SlotParam(null, n));
         }
         for (n = 0; n < 27; ++n)
         {
-            put(200 + n, new SlotParam("enderchest", n));
+            slotIdsToSlotParams.put(200 + n, new SlotParam("enderchest", n));
         }
 
         // villager
         for (n = 0; n < 8; ++n)
         {
-            put(300 + n, new SlotParam(null, n));
+            slotIdsToSlotParams.put(300 + n, new SlotParam(null, n));
         }
 
         // horse, llamas, donkeys, etc.
         // two first slots are for saddle and armour
         for (n = 0; n < 15; ++n)
         {
-            put(500 + n, new SlotParam(null, n + 2));
+            slotIdsToSlotParams.put(500 + n, new SlotParam(null, n + 2));
         }
         // weapon main hand
-        put(98, new SlotParam("equipment", 0));
+        slotIdsToSlotParams.put(98, new SlotParam("equipment", 0));
         // offhand
-        put(99, new SlotParam("equipment", 5));
+        slotIdsToSlotParams.put(99, new SlotParam("equipment", 5));
         // feet, legs, chest, head
         for (n = 0; n < 4; ++n)
         {
-            put(100 + n, new SlotParam("equipment", n + 1));
+            slotIdsToSlotParams.put(100 + n, new SlotParam("equipment", n + 1));
         }
         //horse defaults saddle
-        put(400, new SlotParam(null, 0));
+        slotIdsToSlotParams.put(400, new SlotParam(null, 0));
         // armor
-        put(401, new SlotParam(null, 1));
+        slotIdsToSlotParams.put(401, new SlotParam(null, 1));
         // chest itself on the donkey is wierd - use NBT to alter that.
         //hashMap.put("horse.chest", 499);
-    }};
+    }
 
     public static Value ofVanillaSlotResult(int itemSlot)
     {
