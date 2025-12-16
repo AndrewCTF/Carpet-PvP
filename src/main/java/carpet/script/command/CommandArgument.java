@@ -731,7 +731,7 @@ public abstract class CommandArgument
         @Override
         protected Value getValueFromContext(CommandContext<CommandSourceStack> context, String param) throws CommandSyntaxException
         {
-            Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, param);
+            Collection<NameAndId> profiles = GameProfileArgument.getGameProfiles(context, param);
             if (!single)
             {
                 return ListValue.wrap(profiles.stream().map(p -> StringValue.of(p.name())));
