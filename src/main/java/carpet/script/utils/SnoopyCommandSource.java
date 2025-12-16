@@ -68,12 +68,12 @@ public class SnoopyCommandSource extends CommandSourceStack
 
     public SnoopyCommandSource(ServerPlayer player, Component[] error, List<Component> output, int [] result)
     {
+        super(player.commandSource(), player.position(), player.getRotationVector(),
+            (ServerLevel) player.level(),
+            ((ServerLevel) player.level()).getServer().getProfilePermissions(player.nameAndId()), player.getName().getString(), player.getDisplayName(),
+            ((ServerLevel) player.level()).getServer(), player);
         ServerLevel serverLevel = (ServerLevel) player.level();
         MinecraftServer server = serverLevel.getServer();
-        super(player.commandSource(), player.position(), player.getRotationVector(),
-                serverLevel,
-                server.getProfilePermissions(player.nameAndId()), player.getName().getString(), player.getDisplayName(),
-                server, player);
         this.output = player.commandSource();
         this.position = player.position();
         this.world = serverLevel;
