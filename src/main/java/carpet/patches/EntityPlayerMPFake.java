@@ -11,6 +11,7 @@ import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
@@ -38,6 +39,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.util.Mth;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.utils.Messenger;
 import org.slf4j.Logger;
@@ -192,6 +194,36 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         super(server, worldIn, profile, cli);
         isAShadow = shadow;
+    }
+
+    @Override
+    public void forceSetRotation(float yaw, boolean relativeYaw, float pitch, boolean relativePitch)
+    {
+        float nextYaw = relativeYaw ? (this.getYRot() + yaw) : yaw;
+        float nextPitch = relativePitch ? (this.getXRot() + pitch) : pitch;
+
+        nextYaw = nextYaw % 360.0F;
+        nextPitch = Mth.clamp(nextPitch, -90.0F, 90.0F);
+
+        this.setYRot(nextYaw);
+        this.setXRot(nextPitch);
+
+        // keep rendering state consistent
+        this.setYHeadRot(nextYaw);
+        this.setYBodyRot(nextYaw);
+        this.yHeadRotO = this.yHeadRot;
+        this.yRotO = this.getYRot();
+        this.xRotO = this.getXRot();
+
+        if (this.level() instanceof ServerLevel serverLevel)
+        {
+            byte yawByte = (byte) Mth.floor(this.getYRot() * 256.0F / 360.0F);
+            byte pitchByte = (byte) Mth.floor(this.getXRot() * 256.0F / 360.0F);
+            byte headYawByte = (byte) Mth.floor(this.getYHeadRot() * 256.0F / 360.0F);
+
+            serverLevel.getChunkSource().sendToTrackingPlayers(this, new ClientboundMoveEntityPacket.Rot(this.getId(), yawByte, pitchByte, this.onGround()));
+            serverLevel.getChunkSource().sendToTrackingPlayers(this, new ClientboundRotateHeadPacket(this, headYawByte));
+        }
     }
 
     @Override
