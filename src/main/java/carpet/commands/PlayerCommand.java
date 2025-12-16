@@ -377,12 +377,12 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r Cannot shadow fake players");
             return 0;
         }
-        if (player.serverLevel().getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
+        if (((ServerLevel) player.level()).getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
             Messenger.m(context.getSource(), "r Cannot shadow single-player server owner");
             return 0;
         }
  
-        EntityPlayerMPFake.createShadow(player.serverLevel().getServer(), player);
+        EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
         return 1;
     }
 

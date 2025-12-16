@@ -68,17 +68,19 @@ public class SnoopyCommandSource extends CommandSourceStack
 
     public SnoopyCommandSource(ServerPlayer player, Component[] error, List<Component> output, int [] result)
     {
+        ServerLevel serverLevel = (ServerLevel) player.level();
+        MinecraftServer server = serverLevel.getServer();
         super(player.commandSource(), player.position(), player.getRotationVector(),
-            player.level() instanceof final ServerLevel serverLevel ? serverLevel : null,
-            player.serverLevel().getServer().getProfilePermissions(player.nameAndId()), player.getName().getString(), player.getDisplayName(),
-            player.serverLevel().getServer(), player);
+                serverLevel,
+                server.getProfilePermissions(player.nameAndId()), player.getName().getString(), player.getDisplayName(),
+                server, player);
         this.output = player.commandSource();
         this.position = player.position();
-        this.world = player.level() instanceof final ServerLevel serverLevel ? serverLevel : null;
-        this.level = player.serverLevel().getServer().getProfilePermissions(player.nameAndId());
+        this.world = serverLevel;
+        this.level = server.getProfilePermissions(player.nameAndId());
         this.simpleName = player.getName().getString();
         this.name = player.getDisplayName();
-        this.server = player.serverLevel().getServer();
+        this.server = server;
         this.entity = player;
         this.resultConsumer = (b, i) -> result[0] = i;
         this.entityAnchor = EntityAnchorArgument.Anchor.FEET;
@@ -86,7 +88,7 @@ public class SnoopyCommandSource extends CommandSourceStack
         this.error = error;
         this.chatOutput = output;
         this.signingContext = CommandSigningContext.ANONYMOUS;
-        this.taskChainer = TaskChainer.immediate(player.serverLevel().getServer());
+        this.taskChainer = TaskChainer.immediate(server);
     }
 
     private SnoopyCommandSource(CommandSource output, Vec3 pos, Vec2 rot, ServerLevel world, int level, String simpleName, Component name, MinecraftServer server, @Nullable Entity entity, CommandResultCallback consumer, EntityAnchorArgument.Anchor entityAnchor, CommandSigningContext context, TaskChainer chainer,

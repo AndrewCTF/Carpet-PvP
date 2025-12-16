@@ -145,7 +145,7 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     public static EntityPlayerMPFake createShadow(MinecraftServer server, ServerPlayer player)
     {
-        player.serverLevel().getServer().getPlayerList().remove(player);
+        ((ServerLevel) player.level()).getServer().getPlayerList().remove(player);
         player.connection.disconnect(Component.translatable("multiplayer.disconnect.duplicate_login"));
         ServerLevel worldIn = (ServerLevel) player.level();
         GameProfile gameprofile = player.getGameProfile();
@@ -610,7 +610,7 @@ public class EntityPlayerMPFake extends ServerPlayer
                 if(!CarpetSettings.shieldStunning) {
                     this.invulnerableTime = 20;
                 }
-                String ign = this.getGameProfile().getName();
+                String ign = this.getGameProfile().name();
                 MinecraftServer srv = this.level().getServer();
                 CommandSourceStack commandSource = srv.createCommandSourceStack().withSuppressedOutput();
                 ParseResults<CommandSourceStack> parseResults
