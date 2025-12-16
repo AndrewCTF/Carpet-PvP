@@ -1,6 +1,7 @@
 {
   "required": true,
   "package": "carpet.mixins",
+  "refmap": "carpet.refmap.json",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
     "BarrierBlock_updateSuppressionBlockMixin",
@@ -16,7 +17,6 @@
     "Commands_giveCommandMixin",
     "ServerGamePacketListenerImplMixin",
 
-    "PerfCommand_permissionMixin",
     "FillCommandMixin",
     "CloneCommands_fillUpdatesMixin",
     "SetBlockCommand_fillUpdatesMixin",
@@ -36,7 +36,6 @@
     "MinecraftServer_coreMixin",
 
     "MinecraftServer_tickspeedMixin",
-    "Level_tickMixin",
     "ServerLevel_tickMixin",
     "BoundTickingBlockEntity_profilerMixin",
     "ServerChunkCache_profilerMixin",
@@ -85,7 +84,6 @@
     "StructurePiece_scarpetPlopMixin",
     "PieceGeneratorSupplier_plopMixin",
     "ServerPlayerGameMode_scarpetEventsMixin",
-    "Player_parrotMixin",
     "SaplingBlock_desertShrubsMixin",
     "EntityMixin",
     "Guardian_renewableSpongesMixin",
@@ -179,14 +177,7 @@
     "ChestBlock_customStickyMixin",
     "PistonStructureResolver_customStickyMixin",
 
-    "DefaultRedstoneWireEvaluator_redstoneMixin",
-
-  "CustomPacketPayload_networkStuffMixin",
-  "ServerGamePacketListenerimpl_connectionMixin",
-  "Player_attackCooldown_18CombatMixin",
-  "Player_attackResetTicker_18CombatMixin",
-  "Player_swordBlockStateMixin",
-  "ServerPlayer_scarpetEventMixin"
+    "DefaultRedstoneWireEvaluator_redstoneMixin"
   ],
   "client": [
     "Minecraft_tickMixin",
@@ -200,11 +191,10 @@
     "LevelRenderer_fogOffMixin",
     "LevelRenderer_creativeNoClipMixin",
     "ClientPacketListener_customPacketsMixin",
-    "DebugRenderer_scarpetRenderMixin",
+    
     "LevelRenderer_scarpetRenderMixin",
 
-
-  "ClientCommonPacketListenerImpl_customPacketMixin"
+    "ClientCommonPacketListenerImpl_customPacketMixin"
   ],
   "injectors": {
     "defaultRequire": 1
