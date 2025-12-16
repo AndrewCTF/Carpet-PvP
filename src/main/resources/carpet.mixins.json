@@ -192,8 +192,6 @@
     "LevelRenderer_creativeNoClipMixin",
     "ClientPacketListener_customPacketsMixin",
     
-    "LevelRenderer_scarpetRenderMixin",
-
     "ClientCommonPacketListenerImpl_customPacketMixin"
   ],
   "injectors": {
