@@ -716,18 +716,15 @@ public class CarpetSettings
             }
             MinecraftServer server = source.getServer();
 
-            if (server.isDedicatedServer())
-            {
-                int vd = (newValue >= 2) ? newValue : ((ServerInterface) server).getProperties().viewDistance().get();
-                if (vd != server.getPlayerList().getViewDistance())
-                    server.getPlayerList().setViewDistance(vd);
-                return newValue;
-            }
-            else
+            if (!server.isDedicatedServer())
             {
                 Messenger.m(source, "r view distance can only be changed on a server");
                 return 0;
             }
+            int vd = (newValue >= 2) ? newValue : server.getPlayerList().getViewDistance();
+            if (vd != server.getPlayerList().getViewDistance())
+                server.getPlayerList().setViewDistance(vd);
+            return newValue;
         }
         @Override
         public String description() { return "You must choose a value from 0 (use server settings) to 32";}
@@ -757,18 +754,15 @@ public class CarpetSettings
             }
             MinecraftServer server = source.getServer();
 
-            if (server.isDedicatedServer())
-            {
-                int vd = (newValue >= 2) ? newValue : ((DedicatedServer) server).getProperties().simulationDistance().get();
-                if (vd != server.getPlayerList().getSimulationDistance())
-                    server.getPlayerList().setSimulationDistance(vd);
-                return newValue;
-            }
-            else
+            if (!server.isDedicatedServer())
             {
                 Messenger.m(source, "r simulation distance can only be changed on a server");
                 return 0;
             }
+            int vd = (newValue >= 2) ? newValue : server.getPlayerList().getSimulationDistance();
+            if (vd != server.getPlayerList().getSimulationDistance())
+                server.getPlayerList().setSimulationDistance(vd);
+            return newValue;
         }
         @Override
         public String description() { return "You must choose a value from 0 (use server settings) to 32";}

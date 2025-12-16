@@ -110,6 +110,12 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
         return this.to;
     }
 
+    @Override
+    public long getLerpTime()
+    {
+        return (long)Math.max(0, this.tickDuration - this.ticks);
+    }
+
     @NotNull
     @Override
     public BorderStatus getStatus()
@@ -141,12 +147,7 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
             // So if the tick speed has changed we need to tell the client
             for (BorderChangeListener listener : this.border.getListeners())
             {
-                // We do not want to update DelegateBorderChangeListener
-                // This updates borders in other dimensions
-                if (!(listener instanceof BorderChangeListener.DelegateBorderChangeListener))
-                {
-                    listener.onBorderSizeLerping(this.border, this.from, this.to, this.realDuration);
-                }
+                listener.onLerpSize(this.border, this.from, this.to, this.realDuration);
             }
         }
 

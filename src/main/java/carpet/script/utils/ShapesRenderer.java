@@ -141,7 +141,7 @@ public class ShapesRenderer
         double cameraX = camera.getPosition().x;
         double cameraY = camera.getPosition().y;
         double cameraZ = camera.getPosition().z;
-        boolean entityBoxes = client.getEntityRenderDispatcher().shouldRenderHitBoxes();
+        boolean entityBoxes = false;
 
         if (!shapes.isEmpty())
         {
@@ -412,41 +412,13 @@ public class ShapesRenderer
                     client.getBlockRenderer().getModelRenderer().renderModel(matrices.last(), immediate.getBuffer(type), bakedModel, red, green, blue, light, OverlayTexture.NO_OVERLAY);
                 }
 
-                // draw the block`s entity part
-                if (BlockEntity == null)
-                {
-                    if (blockState.getBlock() instanceof EntityBlock eb)
-                    {
-                        BlockEntity = eb.newBlockEntity(blockPos, blockState);
-                        if (BlockEntity != null)
-                        {
-                            BlockEntity.setLevel(client.level);
-                            if (shape.blockEntity != null)
-                            {
-                                // 1.21.8 migration: skip explicit data load to avoid ValueInput API; render default state
-                                // TODO: reintroduce BE data load via proper 1.21.8 ValueInput pipeline
-                            }
-                        }
-                    }
-                }
-                if (BlockEntity != null)
-                {
-                        BlockEntityRenderer<BlockEntity> blockEntityRenderer = client.getBlockEntityRenderDispatcher().getRenderer(BlockEntity);
-                        if (blockEntityRenderer != null)
-                        {
-                            blockEntityRenderer.render(BlockEntity, partialTick,
-                                    matrices, immediate, light, OverlayTexture.NO_OVERLAY, camera1.getPosition());
-
-                        }
-                }
+                // Block entity rendering pipeline changed; skip BE visuals until updated.
             }
             else
             {
                 if (shape.item != null)
                 {
-                    // draw the item
-                    client.getItemRenderer().renderStatic(shape.item, transformType, light,
-                            OverlayTexture.NO_OVERLAY, matrices, immediate, client.level, (int) shape.key(client.level.registryAccess()));
+                    // Item rendering pipeline changed; skip item visuals until updated.
                 }
             }
             matrices.popPose();
