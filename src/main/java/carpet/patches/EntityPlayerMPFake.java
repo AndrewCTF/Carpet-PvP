@@ -145,7 +145,7 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     public static EntityPlayerMPFake createShadow(MinecraftServer server, ServerPlayer player)
     {
-        player.server.getPlayerList().remove(player);
+        player.serverLevel().getServer().getPlayerList().remove(player);
         player.connection.disconnect(Component.translatable("multiplayer.disconnect.duplicate_login"));
         ServerLevel worldIn = (ServerLevel) player.level();
         GameProfile gameprofile = player.getGameProfile();
