@@ -100,6 +100,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.commands.BossBarCommands;
 import net.minecraft.server.commands.LootCommand;
 import net.minecraft.world.entity.Entity;
