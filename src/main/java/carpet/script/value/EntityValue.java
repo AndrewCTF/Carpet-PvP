@@ -137,7 +137,7 @@ public class EntityValue extends Value
     {
         if (entity instanceof ServerPlayer serverPlayer && Vanilla.ServerPlayer_isInvalidEntityObject(serverPlayer))
         {
-            ServerPlayer newPlayer = entity.getServer().getPlayerList().getPlayer(entity.getUUID());
+            ServerPlayer newPlayer = entity.level().getServer().getPlayerList().getPlayer(entity.getUUID());
             if (newPlayer != null)
             {
                 entity = newPlayer;
@@ -461,14 +461,14 @@ public class EntityValue extends Value
         put("scoreboard_tags", (e, a) -> ListValue.wrap(e.getTags().stream().map(StringValue::new)));
         put("entity_tags", (e, a) -> {
             EntityType<?> type = e.getType();
-            return ListValue.wrap(e.getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).getTags().filter(entry -> entry.stream().anyMatch(h -> h.value() == type)).map(entry -> ValueConversions.of(entry)));
+            return ListValue.wrap(e.level().getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).getTags().filter(entry -> entry.stream().anyMatch(h -> h.value() == type)).map(entry -> ValueConversions.of(entry)));
         });
         // deprecated
         put("has_tag", (e, a) -> BooleanValue.of(e.getTags().contains(a.getString())));
 
         put("has_scoreboard_tag", (e, a) -> BooleanValue.of(e.getTags().contains(a.getString())));
         put("has_entity_tag", (e, a) -> {
-            Optional<HolderSet.Named<EntityType<?>>> tag = e.getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).get(TagKey.create(Registries.ENTITY_TYPE, InputValidator.identifierOf(a.getString())));
+            Optional<HolderSet.Named<EntityType<?>>> tag = e.level().getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).get(TagKey.create(Registries.ENTITY_TYPE, InputValidator.identifierOf(a.getString())));
             if (tag.isEmpty())
             {
                 return Value.NULL;
@@ -508,7 +508,7 @@ public class EntityValue extends Value
         put("despawn_timer", (e, a) -> e instanceof LivingEntity le ? new NumericValue(le.getNoActionTime()) : Value.NULL);
         put("blue_skull", (e, a) -> e instanceof WitherSkull w ? BooleanValue.of(w.isDangerous()) : Value.NULL);
         put("offering_flower", (e, a) -> e instanceof IronGolem ig ? BooleanValue.of(ig.getOfferFlowerTick() > 0) : Value.NULL);
-        put("item", (e, a) -> e instanceof ItemEntity ie ? ValueConversions.of(ie.getItem(), e.getServer().registryAccess()) : e instanceof ItemFrame frame ? ValueConversions.of(frame.getItem(), e.getServer().registryAccess()) : Value.NULL);
+        put("item", (e, a) -> e instanceof ItemEntity ie ? ValueConversions.of(ie.getItem(), e.level().getServer().registryAccess()) : e instanceof ItemFrame frame ? ValueConversions.of(frame.getItem(), e.level().getServer().registryAccess()) : Value.NULL);
         put("count", (e, a) -> (e instanceof ItemEntity ie) ? new NumericValue(ie.getItem().getCount()) : Value.NULL);
         put("pickup_delay", (e, a) -> (e instanceof ItemEntity ie) ? new NumericValue(Vanilla.ItemEntity_getPickupDelay(ie)) : Value.NULL);
         put("portal_cooldown", (e, a) -> new NumericValue(Vanilla.Entity_getPublicNetherPortalCooldown(e)));
@@ -539,9 +539,9 @@ public class EntityValue extends Value
                 }
                 ServerPlayer.RespawnConfig spec = spe.getRespawnConfig();
                 return ListValue.of(
-                        ValueConversions.of(spec.pos()),
-                        ValueConversions.of(spec.dimension()),
-                        new NumericValue(spec.angle()),
+                        ValueConversions.of(spec.respawnData().pos()),
+                        ValueConversions.of(spec.respawnData().dimension()),
+                        new NumericValue(spec.respawnData().yaw()),
                         BooleanValue.of(spec.forced())
                 );
             }
@@ -635,7 +635,7 @@ public class EntityValue extends Value
                 {
                     return new StringValue("singleplayer");
                 }
-                boolean isowner = server.isSingleplayerOwner(p.getGameProfile());
+                boolean isowner = server.isSingleplayerOwner(new net.minecraft.server.players.NameAndId(p.getGameProfile()));
                 if (isowner)
                 {
                     return new StringValue("lan_host");
@@ -700,7 +700,7 @@ public class EntityValue extends Value
             }
             if (e instanceof LivingEntity le)
             {
-                return ValueConversions.of(le.getItemBySlot(where), e.getServer().registryAccess());
+                return ValueConversions.of(le.getItemBySlot(where), e.level().getServer().registryAccess());
             }
             return Value.NULL;
         });
@@ -925,7 +925,7 @@ public class EntityValue extends Value
             }
             else
             {
-                ((ServerLevel) e.level()).getChunkSource().broadcastAndSend(e, ClientboundEntityPositionSyncPacket.of(e));
+                ((ServerLevel) e.level()).getChunkSource().sendToTrackingPlayers(e, ClientboundEntityPositionSyncPacket.of(e));
             }
         }
     }
@@ -1221,7 +1221,7 @@ public class EntityValue extends Value
         put("mount", (e, v) -> {
             if (v instanceof EntityValue ev)
             {
-                e.startRiding(ev.getEntity(), true);
+                e.startRiding(ev.getEntity(), true, false);
             }
             if (e instanceof ServerPlayer sp)
             {
@@ -1380,7 +1380,7 @@ public class EntityValue extends Value
                 if (params.size() > blockLocator.offset)
                 {
                     Value worldValue = params.get(blockLocator.offset);
-                    world = ValueConversions.dimFromValue(worldValue, spe.getServer()).dimension();
+                    world = ValueConversions.dimFromValue(worldValue, ((ServerLevel) spe.level()).getServer()).dimension();
                     if (params.size() > blockLocator.offset + 1)
                     {
                         angle = NumericValue.asNumber(params.get(blockLocator.offset + 1), "angle").getFloat();
@@ -1390,7 +1390,7 @@ public class EntityValue extends Value
                         }
                     }
                 }
-                spe.setRespawnPosition(new ServerPlayer.RespawnConfig(world, pos, angle, forced), false);
+                spe.setRespawnPosition(new ServerPlayer.RespawnConfig(net.minecraft.world.level.storage.LevelData.RespawnData.of(world, pos, angle, 0f), forced), false);
             }
             else if (a instanceof BlockValue bv)
             {
@@ -1398,7 +1398,7 @@ public class EntityValue extends Value
                 {
                     throw new InternalExpressionException("block for spawn modification should be localised in the world");
                 }
-                spe.setRespawnPosition(new ServerPlayer.RespawnConfig(bv.getWorld().dimension(), bv.getPos(), e.getYRot(), true), false); // yaw
+                spe.setRespawnPosition(new ServerPlayer.RespawnConfig(net.minecraft.world.level.storage.LevelData.RespawnData.of(bv.getWorld().dimension(), bv.getPos(), e.getYRot(), 0f), true), false); // yaw
             }
             else if (a.isNull())
             {

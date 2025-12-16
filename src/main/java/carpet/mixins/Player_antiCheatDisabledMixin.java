@@ -1,6 +1,7 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -32,9 +33,9 @@ public abstract class Player_antiCheatDisabledMixin extends LivingEntity
     @Inject(method = "tryToStartFallFlying", at = @At("HEAD"), cancellable = true)
     private void allowDeploys(CallbackInfoReturnable<Boolean> cir)
     {
-        if (CarpetSettings.antiCheatDisabled && (Object)this instanceof ServerPlayer sp && sp.getServer().isDedicatedServer())
+        if (CarpetSettings.antiCheatDisabled && (Object)this instanceof ServerPlayer sp && ((ServerLevel) sp.level()).getServer().isDedicatedServer())
         {
-            ItemStack itemStack_1 = equipment.get(EquipmentSlot.CHEST);
+            ItemStack itemStack_1 = getItemBySlot(EquipmentSlot.CHEST);
             if (itemStack_1.getItem() == Items.ELYTRA && !itemStack_1.nextDamageWillBreak()) {
                 startFallFlying();
                 cir.setReturnValue(true);

@@ -46,6 +46,7 @@ import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -254,7 +255,7 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     {
         if (PLAYER_CHOOSES_RECIPE.isNeeded())
         {
-            RecipeManager.ServerDisplayInfo displayInfo = player.getServer().getRecipeManager().getRecipeFromDisplay(packet.recipe());
+            RecipeManager.ServerDisplayInfo displayInfo = ((ServerLevel) player.level()).getServer().getRecipeManager().getRecipeFromDisplay(packet.recipe());
             if (displayInfo == null) {
                 return;
             }
@@ -265,7 +266,7 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     @Inject(method = "handleSetCarriedItem", at = @At("HEAD"))
     private void onUpdatedSelectedSLot(ServerboundSetCarriedItemPacket packet, CallbackInfo ci)
     {
-        if (PLAYER_SWITCHES_SLOT.isNeeded() && player.getServer() != null && player.getServer().isSameThread())
+        if (PLAYER_SWITCHES_SLOT.isNeeded() && ((ServerLevel) player.level()).getServer() != null && ((ServerLevel) player.level()).getServer().isSameThread())
         {
             PLAYER_SWITCHES_SLOT.onSlotSwitch(player, player.getInventory().getSelectedSlot(), packet.getSlot());
         }

@@ -69,16 +69,18 @@ public class SnoopyCommandSource extends CommandSourceStack
     public SnoopyCommandSource(ServerPlayer player, Component[] error, List<Component> output, int [] result)
     {
         super(player.commandSource(), player.position(), player.getRotationVector(),
-                player.level() instanceof final ServerLevel serverLevel ? serverLevel : null,
-                player.level().getServer().getProfilePermissions(player.getGameProfile()), player.getName().getString(), player.getDisplayName(),
-                player.level().getServer(), player);
+            (ServerLevel) player.level(),
+            ((ServerLevel) player.level()).getServer().getProfilePermissions(player.nameAndId()), player.getName().getString(), player.getDisplayName(),
+            ((ServerLevel) player.level()).getServer(), player);
+        ServerLevel serverLevel = (ServerLevel) player.level();
+        MinecraftServer server = serverLevel.getServer();
         this.output = player.commandSource();
         this.position = player.position();
-        this.world = player.level() instanceof final ServerLevel serverLevel ? serverLevel : null;
-        this.level = player.level().getServer().getProfilePermissions(player.getGameProfile());
+        this.world = serverLevel;
+        this.level = server.getProfilePermissions(player.nameAndId());
         this.simpleName = player.getName().getString();
         this.name = player.getDisplayName();
-        this.server = player.level().getServer();
+        this.server = server;
         this.entity = player;
         this.resultConsumer = (b, i) -> result[0] = i;
         this.entityAnchor = EntityAnchorArgument.Anchor.FEET;
@@ -86,7 +88,7 @@ public class SnoopyCommandSource extends CommandSourceStack
         this.error = error;
         this.chatOutput = output;
         this.signingContext = CommandSigningContext.ANONYMOUS;
-        this.taskChainer = TaskChainer.immediate(player.level().getServer());
+        this.taskChainer = TaskChainer.immediate(server);
     }
 
     private SnoopyCommandSource(CommandSource output, Vec3 pos, Vec2 rot, ServerLevel world, int level, String simpleName, Component name, MinecraftServer server, @Nullable Entity entity, CommandResultCallback consumer, EntityAnchorArgument.Anchor entityAnchor, CommandSigningContext context, TaskChainer chainer,

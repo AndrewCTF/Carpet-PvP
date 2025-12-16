@@ -14,8 +14,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.ServerInterface;
-import net.minecraft.server.dedicated.DedicatedServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -535,21 +533,6 @@ public class CarpetSettings
             category = SCARPET
     )
     public static boolean scriptsOptimization = true;
-
-        @Rule(
-            desc = "Enable Scarpet interception of item-use events",
-            extra = "When enabled, Scarpet PLAYER_USES_ITEM / PLAYER_RELEASED_ITEM / PLAYER_FINISHED_USING_ITEM events will be fired and may override vanilla behavior",
-            category = SCARPET
-        )
-        public static boolean scarpetItemUseEvents = true;
-
-        @Rule(
-            desc = "Punish hitting blocks with wrong tools",
-            extra = "When enabled, players using incorrect tools on blocks that require specific tools may receive a small damage while the action is cancelled",
-            category = SURVIVAL
-        )
-        public static boolean punishWrongToolHits = true;
-
     private static class ScarpetAppStore extends Validator<String> {
         @Override
         public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String stringInput) {
@@ -731,18 +714,15 @@ public class CarpetSettings
             }
             MinecraftServer server = source.getServer();
 
-            if (server.isDedicatedServer())
-            {
-                int vd = (newValue >= 2)?newValue:((ServerInterface) server).getProperties().viewDistance;
-                if (vd != server.getPlayerList().getViewDistance())
-                    server.getPlayerList().setViewDistance(vd);
-                return newValue;
-            }
-            else
+            if (!server.isDedicatedServer())
             {
                 Messenger.m(source, "r view distance can only be changed on a server");
                 return 0;
             }
+            int vd = (newValue >= 2) ? newValue : server.getPlayerList().getViewDistance();
+            if (vd != server.getPlayerList().getViewDistance())
+                server.getPlayerList().setViewDistance(vd);
+            return newValue;
         }
         @Override
         public String description() { return "You must choose a value from 0 (use server settings) to 32";}
@@ -772,18 +752,15 @@ public class CarpetSettings
             }
             MinecraftServer server = source.getServer();
 
-            if (server.isDedicatedServer())
-            {
-                int vd = (newValue >= 2)?newValue:((DedicatedServer) server).getProperties().simulationDistance;
-                if (vd != server.getPlayerList().getSimulationDistance())
-                    server.getPlayerList().setSimulationDistance(vd);
-                return newValue;
-            }
-            else
+            if (!server.isDedicatedServer())
             {
                 Messenger.m(source, "r simulation distance can only be changed on a server");
                 return 0;
             }
+            int vd = (newValue >= 2) ? newValue : server.getPlayerList().getSimulationDistance();
+            if (vd != server.getPlayerList().getSimulationDistance())
+                server.getPlayerList().setSimulationDistance(vd);
+            return newValue;
         }
         @Override
         public String description() { return "You must choose a value from 0 (use server settings) to 32";}
@@ -1031,7 +1008,7 @@ public class CarpetSettings
                     {
                         double from = worldBorder.getSize();
                         double to = worldBorder.getLerpTarget();
-                        long time = worldBorder.getLerpRemainingTime();
+                        long time = worldBorder.getLerpTime();
                         worldBorder.lerpSizeBetween(from, to, time);
                     }
                 }

@@ -34,7 +34,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -173,6 +175,11 @@ public class PlayerCommand
         return server.getPlayerList().getPlayerByName(playerName);
     }
 
+    private static NameAndId nameAndId(GameProfile profile)
+    {
+        return new NameAndId(profile.id(), profile.name());
+    }
+
     private static boolean cantManipulate(CommandContext<CommandSourceStack> context)
     {
         Player player = getPlayer(context);
@@ -188,7 +195,7 @@ public class PlayerCommand
             return false;
         }
 
-        if (!source.getServer().getPlayerList().isOp(sender.getGameProfile()))
+        if (!source.getServer().getPlayerList().isOp(nameAndId(sender.getGameProfile())))
         {
             if (sender != player && !(player instanceof EntityPlayerMPFake))
             {
@@ -224,7 +231,7 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is already logged on");
             return true;
         }
-        GameProfile profile = server.getProfileCache().get(playerName).orElse(null);
+        GameProfile profile = server.services().profileResolver().fetchByName(playerName).orElse(null);
         if (profile == null)
         {
             if (!CarpetSettings.allowSpawningOfflinePlayers)
@@ -236,12 +243,12 @@ public class PlayerCommand
                 profile = new GameProfile(UUIDUtil.createOfflinePlayerUUID(playerName), playerName);
             }
         }
-        if (manager.getBans().isBanned(profile))
+        if (manager.getBans().isBanned(nameAndId(profile)))
         {
             Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is banned on this server");
             return true;
         }
-        if (manager.isUsingWhitelist() && manager.isWhiteListed(profile) && !context.getSource().hasPermission(2))
+        if (manager.isUsingWhitelist() && manager.isWhiteListed(nameAndId(profile)) && !context.getSource().hasPermission(2))
         {
             Messenger.m(context.getSource(), "r Whitelisted players can only be spawned by operators");
             return true;
@@ -371,12 +378,12 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r Cannot shadow fake players");
             return 0;
         }
-        if (player.getServer().isSingleplayerOwner(player.getGameProfile())) {
+        if (((ServerLevel) player.level()).getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
             Messenger.m(context.getSource(), "r Cannot shadow single-player server owner");
             return 0;
         }
  
-        EntityPlayerMPFake.createShadow(player.level().getServer(), player);
+        EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
         return 1;
     }
 

@@ -100,6 +100,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.commands.BossBarCommands;
 import net.minecraft.server.commands.LootCommand;
 import net.minecraft.world.entity.Entity;
@@ -731,10 +732,10 @@ public abstract class CommandArgument
         @Override
         protected Value getValueFromContext(CommandContext<CommandSourceStack> context, String param) throws CommandSyntaxException
         {
-            Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, param);
+            Collection<NameAndId> profiles = GameProfileArgument.getGameProfiles(context, param);
             if (!single)
             {
-                return ListValue.wrap(profiles.stream().map(p -> StringValue.of(p.getName())));
+                return ListValue.wrap(profiles.stream().map(p -> StringValue.of(p.name())));
             }
             int size = profiles.size();
             if (size == 0)
@@ -743,7 +744,7 @@ public abstract class CommandArgument
             }
             if (size == 1)
             {
-                return StringValue.of(profiles.iterator().next().getName());
+                return StringValue.of(profiles.iterator().next().name());
             }
             throw new SimpleCommandExceptionType(Component.literal("Multiple game profiles returned while only one was requested" + " for custom type " + suffix)).create();
         }

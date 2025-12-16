@@ -30,7 +30,6 @@ import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -57,17 +56,21 @@ public class ShapesRenderer
     private final Minecraft client;
 
     private final Map<String, BiFunction<Minecraft, ShapeDispatcher.ExpiringShape, RenderedShape<? extends ShapeDispatcher.ExpiringShape>>> renderedShapes
-            = new HashMap<>()
-    {{
-        put("line", RenderedLine::new);
-        put("box", RenderedBox::new);
-        put("sphere", RenderedSphere::new);
-        put("cylinder", RenderedCylinder::new);
-        put("label", RenderedText::new);
-        put("polygon", RenderedPolyface::new);
-        put("block", (c, s) -> new RenderedSprite(c, s, false));
-        put("item", (c, s) -> new RenderedSprite(c, s, true));
-    }};
+            = createRenderedShapesMap();
+
+    private static Map<String, BiFunction<Minecraft, ShapeDispatcher.ExpiringShape, RenderedShape<? extends ShapeDispatcher.ExpiringShape>>> createRenderedShapesMap()
+    {
+        Map<String, BiFunction<Minecraft, ShapeDispatcher.ExpiringShape, RenderedShape<? extends ShapeDispatcher.ExpiringShape>>> map = new HashMap<>();
+        map.put("line", RenderedLine::new);
+        map.put("box", RenderedBox::new);
+        map.put("sphere", RenderedSphere::new);
+        map.put("cylinder", RenderedCylinder::new);
+        map.put("label", RenderedText::new);
+        map.put("polygon", RenderedPolyface::new);
+        map.put("block", (c, s) -> new RenderedSprite(c, s, false));
+        map.put("item", (c, s) -> new RenderedSprite(c, s, true));
+        return map;
+    }
 
     public static void rotatePoseStackByShapeDirection(PoseStack poseStack, ShapeDirection shapeDirection, Camera camera, Vec3 objectPos)
     {
@@ -141,7 +144,7 @@ public class ShapesRenderer
         double cameraX = camera.getPosition().x;
         double cameraY = camera.getPosition().y;
         double cameraZ = camera.getPosition().z;
-        boolean entityBoxes = client.getEntityRenderDispatcher().shouldRenderHitBoxes();
+        boolean entityBoxes = false;
 
         if (!shapes.isEmpty())
         {
@@ -412,41 +415,13 @@ public class ShapesRenderer
                     client.getBlockRenderer().getModelRenderer().renderModel(matrices.last(), immediate.getBuffer(type), bakedModel, red, green, blue, light, OverlayTexture.NO_OVERLAY);
                 }
 
-                // draw the block`s entity part
-                if (BlockEntity == null)
-                {
-                    if (blockState.getBlock() instanceof EntityBlock eb)
-                    {
-                        BlockEntity = eb.newBlockEntity(blockPos, blockState);
-                        if (BlockEntity != null)
-                        {
-                            BlockEntity.setLevel(client.level);
-                            if (shape.blockEntity != null)
-                            {
-                                // 1.21.8 migration: skip explicit data load to avoid ValueInput API; render default state
-                                // TODO: reintroduce BE data load via proper 1.21.8 ValueInput pipeline
-                            }
-                        }
-                    }
-                }
-                if (BlockEntity != null)
-                {
-                        BlockEntityRenderer<BlockEntity> blockEntityRenderer = client.getBlockEntityRenderDispatcher().getRenderer(BlockEntity);
-                        if (blockEntityRenderer != null)
-                        {
-                            blockEntityRenderer.render(BlockEntity, partialTick,
-                                    matrices, immediate, light, OverlayTexture.NO_OVERLAY, camera1.getPosition());
-
-                        }
-                }
+                // Block entity rendering pipeline changed; skip BE visuals until updated.
             }
             else
             {
                 if (shape.item != null)
                 {
-                    // draw the item
-                    client.getItemRenderer().renderStatic(shape.item, transformType, light,
-                            OverlayTexture.NO_OVERLAY, matrices, immediate, client.level, (int) shape.key(client.level.registryAccess()));
+                    // Item rendering pipeline changed; skip item visuals until updated.
                 }
             }
             matrices.popPose();

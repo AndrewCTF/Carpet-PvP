@@ -62,6 +62,7 @@ import net.minecraft.world.level.levelgen.DensityFunctions;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.util.random.WeightedList;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureType;
 import org.apache.commons.lang3.mutable.MutableBoolean;
@@ -1088,12 +1089,22 @@ public class WorldAccess
                     return theAttacker;
                 }
             };
-            explosion.explode();
+            int blockCount = explosion.explode();
             ParticleOptions explosionParticle = explosion.isSmall() ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
+            final float explosionPower = powah;
             cc.level().players().forEach(spe -> {
                 if (spe.distanceToSqr(pos) < 4096.0D)
                 {
-                    spe.connection.send(new ClientboundExplodePacket(pos, Optional.ofNullable(explosion.getHitPlayers().get(spe)), explosionParticle, SoundEvents.GENERIC_EXPLODE));
+                    Optional<Vec3> knockback = Optional.ofNullable(explosion.getHitPlayers().get(spe));
+                    spe.connection.send(new ClientboundExplodePacket(
+                            pos,
+                            explosionPower,
+                            blockCount,
+                            knockback,
+                            explosionParticle,
+                            SoundEvents.GENERIC_EXPLODE,
+                            WeightedList.of()
+                    ));
                 }
             });
             return Value.TRUE;
@@ -1744,7 +1755,6 @@ public class WorldAccess
             case "erosion" -> router.erosion();
             case "depth" -> router.depth();
             case "ridges" -> router.ridges();
-            case "initial_density_without_jaggedness" -> router.initialDensityWithoutJaggedness();
             case "final_density" -> router.finalDensity();
             case "vein_toggle" -> router.veinToggle();
             case "vein_ridged" -> router.veinRidged();
@@ -1776,7 +1786,6 @@ public class WorldAccess
                         case "erosion" -> router.erosion();
                         case "depth" -> router.depth();
                         case "ridges" -> router.ridges();
-                        case "initial_density_without_jaggedness" -> router.initialDensityWithoutJaggedness();
                         case "final_density" -> router.finalDensity();
                         case "vein_toggle" -> router.veinToggle();
                         case "vein_ridged" -> router.veinRidged();

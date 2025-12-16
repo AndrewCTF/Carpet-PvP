@@ -85,13 +85,13 @@ public class ServerNetworkHandler
         List<Component> output = new ArrayList<>();
         Component[] error = {null};
         int[] returnValue = {0};
-        if (player.getServer() == null)
+        if (player.level().getServer() == null)
         {
             error[0] = Component.literal("No Server");
         }
         else
         {
-            player.getServer().getCommands().performPrefixedCommand(
+            player.level().getServer().getCommands().performPrefixedCommand(
                     new SnoopyCommandSource(player, error, output, returnValue), command
             );
         }

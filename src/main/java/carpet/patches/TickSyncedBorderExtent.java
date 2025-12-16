@@ -1,10 +1,6 @@
 package carpet.patches;
 
-import carpet.CarpetServer;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.ServerTickRateManager;
 import net.minecraft.util.Mth;
-import net.minecraft.util.TimeUtil;
 import net.minecraft.world.level.border.BorderChangeListener;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
@@ -81,33 +77,15 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
     }
 
     @Override
-    public long getLerpRemainingTime()
-    {
-        // Rough estimation
-        MinecraftServer server = CarpetServer.minecraft_server;
-        double ms;
-        if (server == null)
-        {
-            // can this even happen?
-            ms = 50.0;
-        }
-        else
-        {
-             ms = ((double)server.getAverageTickTimeNanos())/ TimeUtil.NANOSECONDS_PER_MILLISECOND;
-             ServerTickRateManager trm = server.tickRateManager();
-             if (!trm.isSprinting())
-             {
-                 ms = Math.max(ms, trm.millisecondsPerTick());
-             }
-        }
-        double tps = 1_000.0D / ms;
-        return (long) ((this.tickDuration - this.ticks) / tps * 1_000);
-    }
-
-    @Override
     public double getLerpTarget()
     {
         return this.to;
+    }
+
+    @Override
+    public long getLerpTime()
+    {
+        return (long)Math.max(0, this.tickDuration - this.ticks);
     }
 
     @NotNull
@@ -141,12 +119,7 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
             // So if the tick speed has changed we need to tell the client
             for (BorderChangeListener listener : this.border.getListeners())
             {
-                // We do not want to update DelegateBorderChangeListener
-                // This updates borders in other dimensions
-                if (!(listener instanceof BorderChangeListener.DelegateBorderChangeListener))
-                {
-                    listener.onBorderSizeLerping(this.border, this.from, this.to, this.realDuration);
-                }
+                listener.onLerpSize(this.border, this.from, this.to, this.realDuration);
             }
         }
 
