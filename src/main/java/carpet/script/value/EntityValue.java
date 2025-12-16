@@ -1380,7 +1380,7 @@ public class EntityValue extends Value
                 if (params.size() > blockLocator.offset)
                 {
                     Value worldValue = params.get(blockLocator.offset);
-                    world = ValueConversions.dimFromValue(worldValue, spe.serverLevel().getServer()).dimension();
+                    world = ValueConversions.dimFromValue(worldValue, ((ServerLevel) spe.level()).getServer()).dimension();
                     if (params.size() > blockLocator.offset + 1)
                     {
                         angle = NumericValue.asNumber(params.get(blockLocator.offset + 1), "angle").getFloat();
