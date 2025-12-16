@@ -11,6 +11,8 @@ import carpet.script.utils.Tracer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.level.ServerLevel;
@@ -134,16 +136,44 @@ public class EntityPlayerActionPack
 
     public EntityPlayerActionPack look(float yaw, float pitch)
     {
-        player.setYRot(yaw % 360); //setYaw
-        player.setXRot(Mth.clamp(pitch, -90, 90)); // setPitch
-        // maybe player.moveTo(player.getX(), player.getY(), player.getZ(), yaw, Mth.clamp(pitch,-90.0F, 90.0F));
+        float clampedPitch = Mth.clamp(pitch, -90, 90);
+        float wrappedYaw = yaw % 360;
+
+        player.setYRot(wrappedYaw);
+        player.setXRot(clampedPitch);
+
+        // Keep head/body in sync so clients render the direction correctly.
+        player.setYHeadRot(wrappedYaw);
+        player.setYBodyRot(wrappedYaw);
+
+        syncFakePlayerRotation();
         return this;
     }
 
     public EntityPlayerActionPack lookAt(Vec3 position)
     {
         player.lookAt(EntityAnchorArgument.Anchor.EYES, position);
+        syncFakePlayerRotation();
         return this;
+    }
+
+    private void syncFakePlayerRotation()
+    {
+        if (!(player instanceof EntityPlayerMPFake))
+        {
+            return;
+        }
+        if (!(player.level() instanceof ServerLevel level))
+        {
+            return;
+        }
+
+        byte yawByte = (byte) Mth.floor(player.getYRot() * 256.0F / 360.0F);
+        byte pitchByte = (byte) Mth.floor(player.getXRot() * 256.0F / 360.0F);
+        byte headYawByte = (byte) Mth.floor(player.getYHeadRot() * 256.0F / 360.0F);
+
+        level.getChunkSource().sendToTrackingPlayers(player, new ClientboundMoveEntityPacket.Rot(player.getId(), yawByte, pitchByte, player.onGround()));
+        level.getChunkSource().sendToTrackingPlayers(player, new ClientboundRotateHeadPacket(player, headYawByte));
     }
 
     public EntityPlayerActionPack turn(float yaw, float pitch)

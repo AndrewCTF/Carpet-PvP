@@ -57,3 +57,4 @@ debug.log
 compile-debug.txt
 compile-log.txt
 compile-stack.txt
+rotatecommand-javap.txt
