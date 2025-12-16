@@ -89,12 +89,13 @@ public class ValueConversions
         return ListValue.of(StringValue.of(Colors.mapColourName.get(color)), ofRGB(color.col));
     }
 
-    public static <T extends Number> Value of(MinMaxBounds<T> range)
+    public static Value of(MinMaxBounds<?> range)
     {
-        return ListValue.of(
-                range.min().map(NumericValue::of).orElse(Value.NULL),
-                range.max().map(NumericValue::of).orElse(Value.NULL)
-        );
+        Optional<? extends Number> minVal = range.min();
+        Optional<? extends Number> maxVal = range.max();
+        Value minValue = minVal.isPresent() ? NumericValue.of(minVal.get()) : Value.NULL;
+        Value maxValue = maxVal.isPresent() ? NumericValue.of(maxVal.get()) : Value.NULL;
+        return ListValue.of(minValue, maxValue);
     }
 
     public static Value of(ItemStack stack, RegistryAccess regs)
