@@ -1091,13 +1091,14 @@ public class WorldAccess
             };
             int blockCount = explosion.explode();
             ParticleOptions explosionParticle = explosion.isSmall() ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
+            final float explosionPower = powah;
             cc.level().players().forEach(spe -> {
                 if (spe.distanceToSqr(pos) < 4096.0D)
                 {
                     Optional<Vec3> knockback = Optional.ofNullable(explosion.getHitPlayers().get(spe));
                     spe.connection.send(new ClientboundExplodePacket(
                             pos,
-                            powah,
+                            explosionPower,
                             blockCount,
                             knockback,
                             explosionParticle,
