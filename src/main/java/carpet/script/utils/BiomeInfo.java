@@ -21,18 +21,21 @@ import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 
 public class BiomeInfo
 {
-    public static final Map<String, BiFunction<ServerLevel, Biome, Value>> biomeFeatures = new HashMap<>()
-    {{
-        put("tags", (w, b) -> ListValue.wrap(w.registryAccess().lookupOrThrow(Registries.BIOME).getTags().filter(p -> p.stream().anyMatch(h -> h.value() == b)).map(ValueConversions::of)));
-        put("temperature", (w, b) -> NumericValue.of(b.getBaseTemperature()));
-        put("fog_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getFogColor()));
-        put("foliage_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getFoliageColorOverride().orElse(4764952))); // client Biome.getDefaultFoliageColor
-        put("sky_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getSkyColor()));
-        put("water_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getWaterColor()));
-        put("water_fog_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getWaterFogColor()));
-        put("humidity", (w, b) -> NumericValue.of(Vanilla.Biome_getClimateSettings(b).downfall()));
-        put("precipitation", (w, b) -> StringValue.of(b.getPrecipitationAt(new BlockPos(0, w.getSeaLevel(), 0), w.getSeaLevel()).name().toLowerCase(Locale.ROOT)));
-        put("features", (w, b) -> {
+    public static final Map<String, BiFunction<ServerLevel, Biome, Value>> biomeFeatures = createBiomeFeatures();
+
+    private static Map<String, BiFunction<ServerLevel, Biome, Value>> createBiomeFeatures()
+    {
+        Map<String, BiFunction<ServerLevel, Biome, Value>> map = new HashMap<>();
+        map.put("tags", (w, b) -> ListValue.wrap(w.registryAccess().lookupOrThrow(Registries.BIOME).getTags().filter(p -> p.stream().anyMatch(h -> h.value() == b)).map(ValueConversions::of)));
+        map.put("temperature", (w, b) -> NumericValue.of(b.getBaseTemperature()));
+        map.put("fog_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getFogColor()));
+        map.put("foliage_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getFoliageColorOverride().orElse(4764952))); // client Biome.getDefaultFoliageColor
+        map.put("sky_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getSkyColor()));
+        map.put("water_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getWaterColor()));
+        map.put("water_fog_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getWaterFogColor()));
+        map.put("humidity", (w, b) -> NumericValue.of(Vanilla.Biome_getClimateSettings(b).downfall()));
+        map.put("precipitation", (w, b) -> StringValue.of(b.getPrecipitationAt(new BlockPos(0, w.getSeaLevel(), 0), w.getSeaLevel()).name().toLowerCase(Locale.ROOT)));
+        map.put("features", (w, b) -> {
             Registry<ConfiguredFeature<?, ?>> registry = w.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE);
             return ListValue.wrap(
                     b.getGenerationSettings().features().stream().map(step ->
@@ -42,5 +45,6 @@ public class BiomeInfo
                     )
             );
         });
-    }};
+        return map;
+    }
 }

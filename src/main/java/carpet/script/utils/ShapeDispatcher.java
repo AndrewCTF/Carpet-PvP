@@ -277,17 +277,21 @@ public class ShapeDispatcher
 
     public abstract static class ExpiringShape
     {
-        public static final Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> shapeProviders = new HashMap<>()
-        {{
-            put("line", creator(Line::new));
-            put("box", creator(Box::new));
-            put("sphere", creator(Sphere::new));
-            put("cylinder", creator(Cylinder::new));
-            put("label", creator(DisplayedText::new));
-            put("polygon", creator(Polyface::new));
-            put("block", creator(() -> new DisplayedSprite(false)));
-            put("item", creator(() -> new DisplayedSprite(true)));
-        }};
+        public static final Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> shapeProviders = createShapeProviders();
+
+        private static Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> createShapeProviders()
+        {
+            Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> map = new HashMap<>();
+            map.put("line", creator(Line::new));
+            map.put("box", creator(Box::new));
+            map.put("sphere", creator(Sphere::new));
+            map.put("cylinder", creator(Cylinder::new));
+            map.put("label", creator(DisplayedText::new));
+            map.put("polygon", creator(Polyface::new));
+            map.put("block", creator(() -> new DisplayedSprite(false)));
+            map.put("item", creator(() -> new DisplayedSprite(true)));
+            return map;
+        }
 
         private static BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape> creator(Supplier<ExpiringShape> shapeFactory)
         {
@@ -1449,17 +1453,20 @@ public class ShapeDispatcher
 
     public abstract static class Param
     {
-        public static final Map<String, Param> of = new HashMap<>()
-        {{
-            put("mode", new StringChoiceParam("mode", "polygon", "strip", "triangles"));
-            put("relative", new OptionalBoolListParam("relative"));
-            put("inner", new BoolParam("inner"));
-            put("shape", new ShapeParam());
-            put("dim", new DimensionParam());
-            put("duration", new NonNegativeIntParam("duration"));
-            put("color", new ColorParam("color"));
-            put("follow", new EntityParam("follow"));
-            put("variant", new StringChoiceParam("variant",
+        public static final Map<String, Param> of = createParamMap();
+
+        private static Map<String, Param> createParamMap()
+        {
+            Map<String, Param> map = new HashMap<>();
+            map.put("mode", new StringChoiceParam("mode", "polygon", "strip", "triangles"));
+            map.put("relative", new OptionalBoolListParam("relative"));
+            map.put("inner", new BoolParam("inner"));
+            map.put("shape", new ShapeParam());
+            map.put("dim", new DimensionParam());
+            map.put("duration", new NonNegativeIntParam("duration"));
+            map.put("color", new ColorParam("color"));
+            map.put("follow", new EntityParam("follow"));
+            map.put("variant", new StringChoiceParam("variant",
                     "NONE",
                     "THIRD_PERSON_LEFT_HAND",
                     "THIRD_PERSON_RIGHT_HAND",
@@ -1476,24 +1483,24 @@ public class ShapeDispatcher
                     return super.validate(o, s, new StringValue(v.getString().toUpperCase(Locale.ROOT)));
                 }
             });
-            put("snap", new StringChoiceParam("snap",
+            map.put("snap", new StringChoiceParam("snap",
                     "xyz", "xz", "yz", "xy", "x", "y", "z",
                     "dxdydz", "dxdz", "dydz", "dxdy", "dx", "dy", "dz",
                     "xdz", "dxz", "ydz", "dyz", "xdy", "dxy",
                     "xydz", "xdyz", "xdydz", "dxyz", "dxydz", "dxdyz"
             ));
-            put("line", new PositiveFloatParam("line"));
-            put("fill", new ColorParam("fill"));
+            map.put("line", new PositiveFloatParam("line"));
+            map.put("fill", new ColorParam("fill"));
 
-            put("from", new Vec3Param("from", false));
-            put("to", new Vec3Param("to", true));
-            put("center", new Vec3Param("center", false));
-            put("pos", new Vec3Param("pos", false));
-            put("radius", new PositiveFloatParam("radius"));
-            put("level", new PositiveIntParam("level"));
-            put("height", new FloatParam("height"));
-            put("width", new FloatParam("width"));
-            put("scale", new Vec3Param("scale", false)
+            map.put("from", new Vec3Param("from", false));
+            map.put("to", new Vec3Param("to", true));
+            map.put("center", new Vec3Param("center", false));
+            map.put("pos", new Vec3Param("pos", false));
+            map.put("radius", new PositiveFloatParam("radius"));
+            map.put("level", new PositiveIntParam("level"));
+            map.put("height", new FloatParam("height"));
+            map.put("width", new FloatParam("width"));
+            map.put("scale", new Vec3Param("scale", false)
             {
                 @Override
                 public Value validate(java.util.Map<String, Value> options, MinecraftServer server, Value value)
@@ -1506,27 +1513,28 @@ public class ShapeDispatcher
                 }
 
             });
-            put("axis", new StringChoiceParam("axis", "x", "y", "z"));
-            put("points", new PointsParam("points"));
-            put("text", new FormattedTextParam("text"));
-            put("value", new FormattedTextParam("value"));
-            put("size", new PositiveIntParam("size"));
-            put("align", new StringChoiceParam("align", "center", "left", "right"));
+            map.put("axis", new StringChoiceParam("axis", "x", "y", "z"));
+            map.put("points", new PointsParam("points"));
+            map.put("text", new FormattedTextParam("text"));
+            map.put("value", new FormattedTextParam("value"));
+            map.put("size", new PositiveIntParam("size"));
+            map.put("align", new StringChoiceParam("align", "center", "left", "right"));
 
-            put("block", new BlockParam("block"));
-            put("item", new ItemParam("item"));
-            put("blocklight", new NonNegativeIntParam("blocklight"));
-            put("skylight", new NonNegativeIntParam("skylight"));
-            put("indent", new FloatParam("indent"));
-            put("raise", new FloatParam("raise"));
-            put("tilt", new FloatParam("tilt"));
-            put("lean", new FloatParam("lean"));
-            put("turn", new FloatParam("turn"));
-            put("facing", new StringChoiceParam("facing", "player", "camera", "north", "south", "east", "west", "up", "down"));
-            put("doublesided", new BoolParam("doublesided"));
-            put("debug", new BoolParam("debug"));
+            map.put("block", new BlockParam("block"));
+            map.put("item", new ItemParam("item"));
+            map.put("blocklight", new NonNegativeIntParam("blocklight"));
+            map.put("skylight", new NonNegativeIntParam("skylight"));
+            map.put("indent", new FloatParam("indent"));
+            map.put("raise", new FloatParam("raise"));
+            map.put("tilt", new FloatParam("tilt"));
+            map.put("lean", new FloatParam("lean"));
+            map.put("turn", new FloatParam("turn"));
+            map.put("facing", new StringChoiceParam("facing", "player", "camera", "north", "south", "east", "west", "up", "down"));
+            map.put("doublesided", new BoolParam("doublesided"));
+            map.put("debug", new BoolParam("debug"));
+            return map;
+        }
 
-        }};
         protected String id;
 
         protected Param(String id)

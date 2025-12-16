@@ -7,6 +7,9 @@ plugins {
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
 }
 
 base {
@@ -55,6 +58,11 @@ tasks.withType(JavaCompile).configureEach {
 
 	// Minecraft 1.20.5 upwards uses Java 21.
 	it.options.release = 21
+
+	// Workaround for javac FunctionDescriptorLookupError bug in JDK 21.0.9
+	// Use forked compiler process
+	it.options.fork = true
+	it.options.forkOptions.jvmArgs += ["-Xss4m", "-Xmx2g"]
 }
 
 java {

@@ -56,17 +56,21 @@ public class ShapesRenderer
     private final Minecraft client;
 
     private final Map<String, BiFunction<Minecraft, ShapeDispatcher.ExpiringShape, RenderedShape<? extends ShapeDispatcher.ExpiringShape>>> renderedShapes
-            = new HashMap<>()
-    {{
-        put("line", RenderedLine::new);
-        put("box", RenderedBox::new);
-        put("sphere", RenderedSphere::new);
-        put("cylinder", RenderedCylinder::new);
-        put("label", RenderedText::new);
-        put("polygon", RenderedPolyface::new);
-        put("block", (c, s) -> new RenderedSprite(c, s, false));
-        put("item", (c, s) -> new RenderedSprite(c, s, true));
-    }};
+            = createRenderedShapesMap();
+
+    private static Map<String, BiFunction<Minecraft, ShapeDispatcher.ExpiringShape, RenderedShape<? extends ShapeDispatcher.ExpiringShape>>> createRenderedShapesMap()
+    {
+        Map<String, BiFunction<Minecraft, ShapeDispatcher.ExpiringShape, RenderedShape<? extends ShapeDispatcher.ExpiringShape>>> map = new HashMap<>();
+        map.put("line", RenderedLine::new);
+        map.put("box", RenderedBox::new);
+        map.put("sphere", RenderedSphere::new);
+        map.put("cylinder", RenderedCylinder::new);
+        map.put("label", RenderedText::new);
+        map.put("polygon", RenderedPolyface::new);
+        map.put("block", (c, s) -> new RenderedSprite(c, s, false));
+        map.put("item", (c, s) -> new RenderedSprite(c, s, true));
+        return map;
+    }
 
     public static void rotatePoseStackByShapeDirection(PoseStack poseStack, ShapeDirection shapeDirection, Camera camera, Vec3 objectPos)
     {

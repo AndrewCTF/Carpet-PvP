@@ -61,7 +61,7 @@ public class SystemInfo
             return StringValue.of(tlf);
         });
         options.put("world_dimensions", c -> ListValue.wrap(c.server().levelKeys().stream().map(k -> ValueConversions.of(k.location()))));
-        options.put("world_spawn_point", (CarpetContext c) -> ValueConversions.of(c.server().overworld().getSharedSpawnPos()));
+        options.put("world_spawn_point", (CarpetContext c) -> ValueConversions.of(c.server().getRespawnData().pos()));
 
         options.put("world_bottom", c -> new NumericValue(c.level().getMinY()));
 

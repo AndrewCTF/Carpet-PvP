@@ -23,21 +23,25 @@ import java.util.Map;
 
 public class Operators
 {
-    public static final Map<String, Integer> precedence = new HashMap<>()
-    {{
-        put("attribute~:", 80);
-        put("unary+-!...", 60);
-        put("exponent^", 40);
-        put("multiplication*/%", 30);
-        put("addition+-", 20);
-        put("compare>=><=<", 10);
-        put("equal==!=", 7);
-        put("and&&", 5);
-        put("or||", 4);
-        put("assign=<>", 3);
-        put("def->", 2);
-        put("nextop;", 1);
-    }};
+    public static final Map<String, Integer> precedence = createPrecedenceMap();
+
+    private static Map<String, Integer> createPrecedenceMap()
+    {
+        Map<String, Integer> map = new HashMap<>();
+        map.put("attribute~:", 80);
+        map.put("unary+-!...", 60);
+        map.put("exponent^", 40);
+        map.put("multiplication*/%", 30);
+        map.put("addition+-", 20);
+        map.put("compare>=><=<", 10);
+        map.put("equal==!=", 7);
+        map.put("and&&", 5);
+        map.put("or||", 4);
+        map.put("assign=<>", 3);
+        map.put("def->", 2);
+        map.put("nextop;", 1);
+        return map;
+    }
 
     public static void apply(Expression expression)
     {

@@ -54,3 +54,6 @@ crash-reports/*.log
 latest.log
 debug.log
 .github/copilot-instructions.md
+compile-debug.txt
+compile-log.txt
+compile-stack.txt
