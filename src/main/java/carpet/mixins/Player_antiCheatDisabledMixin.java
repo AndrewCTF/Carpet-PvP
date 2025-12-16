@@ -34,7 +34,7 @@ public abstract class Player_antiCheatDisabledMixin extends LivingEntity
     {
         if (CarpetSettings.antiCheatDisabled && (Object)this instanceof ServerPlayer sp && sp.serverLevel().getServer().isDedicatedServer())
         {
-            ItemStack itemStack_1 = equipment.get(EquipmentSlot.CHEST);
+            ItemStack itemStack_1 = getItemBySlot(EquipmentSlot.CHEST);
             if (itemStack_1.getItem() == Items.ELYTRA && !itemStack_1.nextDamageWillBreak()) {
                 startFallFlying();
                 cir.setReturnValue(true);

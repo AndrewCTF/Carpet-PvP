@@ -734,7 +734,7 @@ public abstract class CommandArgument
             Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, param);
             if (!single)
             {
-                return ListValue.wrap(profiles.stream().map(p -> StringValue.of(p.getName())));
+                return ListValue.wrap(profiles.stream().map(p -> StringValue.of(p.name())));
             }
             int size = profiles.size();
             if (size == 0)
@@ -743,7 +743,7 @@ public abstract class CommandArgument
             }
             if (size == 1)
             {
-                return StringValue.of(profiles.iterator().next().getName());
+                return StringValue.of(profiles.iterator().next().name());
             }
             throw new SimpleCommandExceptionType(Component.literal("Multiple game profiles returned while only one was requested" + " for custom type " + suffix)).create();
         }

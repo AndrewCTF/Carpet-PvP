@@ -149,7 +149,7 @@ public class CarpetServer
         ServerNetworkHandler.onPlayerLoggedOut(player);
         LoggerRegistry.playerDisconnected(player);
         extensions.forEach(e -> e.onPlayerLoggedOut(player));
-        MinecraftServer server = player.serverLevel().getServer();
+        MinecraftServer server = player.level().getServer();
         CarpetScriptServer runningScriptServer = (server == null) ? scriptServer : Vanilla.MinecraftServer_getScriptServer(server);
         if (runningScriptServer != null && !runningScriptServer.stopAll) {
             runningScriptServer.onPlayerLoggedOut(player, reason);

@@ -35,7 +35,6 @@ import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
@@ -98,10 +97,10 @@ public class EntityPlayerMPFake extends ServerPlayer
         // We need to mark this player as spawning so that we do not
         // try to spawn another player with the name while the profile
         // is being fetched - preventing multiple players spawning
-        String name = gameprofile.getName();
+        String name = gameprofile.name();
         spawning.add(name);
 
-        fetchGameProfile(name).whenCompleteAsync((p, t) -> {
+        fetchGameProfile(server, name).whenCompleteAsync((p, t) -> {
             // Always remove the name, even if exception occurs
             spawning.remove(name);
             if (t != null)
@@ -139,13 +138,14 @@ public class EntityPlayerMPFake extends ServerPlayer
         return true;
     }
 
-    private static CompletableFuture<Optional<GameProfile>> fetchGameProfile(final String name) {
-        return SkullBlockEntity.fetchGameProfile(name);
+    private static CompletableFuture<Optional<GameProfile>> fetchGameProfile(MinecraftServer server, String name) {
+        ProfileResolver resolver = server.services().profileResolver();
+        return CompletableFuture.supplyAsync(() -> resolver.fetchByName(name), server);
     }
 
     public static EntityPlayerMPFake createShadow(MinecraftServer server, ServerPlayer player)
     {
-        player.getServer().getPlayerList().remove(player);
+        player.server.getPlayerList().remove(player);
         player.connection.disconnect(Component.translatable("multiplayer.disconnect.duplicate_login"));
         ServerLevel worldIn = (ServerLevel) player.level();
         GameProfile gameprofile = player.getGameProfile();

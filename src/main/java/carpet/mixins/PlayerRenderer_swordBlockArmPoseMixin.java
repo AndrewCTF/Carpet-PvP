@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(PlayerRenderer.class)
 public class PlayerRenderer_swordBlockArmPoseMixin {
     @Inject(method = "getArmPose", at = @At("HEAD"), cancellable = true)
-    private static void carpet$forceBlockPose(AbstractClientPlayer player, HumanoidArm arm, CallbackInfoReturnable<HumanoidModel.ArmPose> cir) {
+    private void carpet$forceBlockPose(AbstractClientPlayer player, HumanoidArm arm, CallbackInfoReturnable<HumanoidModel.ArmPose> cir) {
     // Only intervene for our S2C visual window; do not force during actual use (vanilla handles that)
     if (!SwordBlockVisuals.isActive(player)) return;
     if (player.isUsingItem()) return;
