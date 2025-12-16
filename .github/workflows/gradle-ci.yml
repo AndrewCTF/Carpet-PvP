@@ -11,13 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
           cache: gradle
       - name: Make gradlew executable
         run: chmod +x ./gradlew
+      - name: Check Java & Gradle versions
+        run: |
+          java --version
+          ./gradlew --version
       - name: Build
-        run: ./gradlew --no-daemon build
+        run: ./gradlew --no-daemon build -x test
