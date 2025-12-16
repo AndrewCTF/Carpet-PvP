@@ -42,7 +42,6 @@
     "ChunkMap_profilerMixin",
     "ServerFunctionManager_profilerMixin",
     "WorldBorder_syncedWorldBorderMixin",
-    "ChunkMap_scarpetChunkCreationMixin",
     "LevelEntityGetterAdapter_scarpetMixin",
     "LivingEntity_getKBFix",
     "ChunkHolder_scarpetChunkCreationMixin",
