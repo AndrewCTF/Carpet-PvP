@@ -89,9 +89,6 @@ public abstract class ChunkMap_scarpetChunkCreationMixin implements ThreadedAnvi
     @Shadow
     protected abstract boolean promoteChunkMap();
 
-    @Shadow
-    protected abstract Iterable<ChunkHolder> getChunks();
-
 
     @Shadow
     protected abstract CompletableFuture<ChunkResult<List<ChunkAccess>>> getChunkRangeFuture(ChunkHolder chunkHolder, int i, IntFunction<ChunkStatus> intFunction);

@@ -22,7 +22,6 @@ import net.minecraft.world.level.Level;
 public abstract class Level_tickMixin implements LevelInterface
 {
     @Shadow @Final public boolean isClientSide;
-    @Shadow @Final protected NeighborUpdater neighborUpdater;
     CarpetProfiler.ProfilerToken currentSection;
     CarpetProfiler.ProfilerToken entitySection;
 
@@ -31,7 +30,7 @@ public abstract class Level_tickMixin implements LevelInterface
     @Override
     @Unique
     public NeighborUpdater getNeighborUpdater() {
-        return this.neighborUpdater;
+        return null;
     }
 
     @Override

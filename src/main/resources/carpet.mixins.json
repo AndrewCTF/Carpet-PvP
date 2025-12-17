@@ -170,6 +170,7 @@
     "ChunkMap_creativePlayersLoadChunksMixin",
     "SculkSensorBlockEntityVibrationConfig_sculkSensorRangeMixin",
     "CollectingNeighborUpdaterAccessor",
+    "Entity_invulnerableTimeAccessor",
 
     "BlockBehaviourBlockStateBase_mixin",
     "ChainBlock_customStickyMixin",
