@@ -81,6 +81,9 @@ public class EntityPlayerActionPack
     private double glideArrivalRadius = 1.0D;
 
     private Boolean glidePrevNoGravity;
+    private Boolean glidePrevAbilityFlying;
+    private int glideDeployDelayTicks;
+    private int glideDeployAttempts;
 
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
@@ -118,12 +121,35 @@ public class EntityPlayerActionPack
 
     public EntityPlayerActionPack setGlideEnabled(boolean enabled)
     {
+        boolean wasEnabled = glideEnabled;
         glideEnabled = enabled;
+        if (enabled && !wasEnabled)
+        {
+            glideDeployDelayTicks = 0;
+            glideDeployAttempts = 0;
+            if (glidePrevAbilityFlying == null)
+            {
+                glidePrevAbilityFlying = player.getAbilities().flying;
+            }
+            if (player.getAbilities().flying)
+            {
+                player.getAbilities().flying = false;
+                player.onUpdateAbilities();
+            }
+        }
         if (!enabled)
         {
             setGlideFrozen(false);
             glideMode = GlideMode.MANUAL;
             glideTargetPos = null;
+            glideDeployDelayTicks = 0;
+            glideDeployAttempts = 0;
+            if (glidePrevAbilityFlying != null)
+            {
+                player.getAbilities().flying = glidePrevAbilityFlying;
+                player.onUpdateAbilities();
+                glidePrevAbilityFlying = null;
+            }
         }
         return this;
     }
@@ -488,29 +514,32 @@ public class EntityPlayerActionPack
             return;
         }
 
-        // Ensure we actually enter fall-flying state (this is what makes the elytra render).
+        // Deploy elytra like a normal player would: jump, then "double tap" to deploy.
+        // Server-side, that corresponds to calling tryToStartFallFlying() once airborne.
         if (!player.isFallFlying())
         {
             if (player.onGround())
             {
-                // Simple takeoff: get airborne first.
                 player.jumpFromGround();
+                glideDeployDelayTicks = 1;
+                glideDeployAttempts = 0;
                 return;
             }
-
-            boolean started = player.tryToStartFallFlying();
-            if (!started)
+            if (glideDeployDelayTicks > 0)
             {
-                // Fake players don't send the client command packet, so the usual path may never trigger.
-                // Force the state so clients render the elytra pose.
-                player.startFallFlying();
+                glideDeployDelayTicks--;
+                return;
             }
-        }
-
-        if (!player.isFallFlying())
-        {
-            // Don't apply "glide" velocity until the entity is actually fall-flying.
-            return;
+            if (glideDeployAttempts < 20)
+            {
+                glideDeployAttempts++;
+                player.tryToStartFallFlying();
+            }
+            if (!player.isFallFlying())
+            {
+                // Don't apply glide velocity until elytra is actually deployed.
+                return;
+            }
         }
 
         if (glideFrozen)
