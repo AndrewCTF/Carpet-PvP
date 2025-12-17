@@ -86,9 +86,15 @@ public class EntityPlayerActionPack
 
     public EntityPlayerActionPack start(ActionType type, Action action)
     {
-        if(action.isContinuous){
-            Action curent = actions.get(type);
-            if(curent != null) return this;
+        if (action != null && action.isContinuous)
+        {
+            Action current = actions.get(type);
+            // Only ignore if we're already running a continuous action of the same type.
+            // If a one-shot or interval action is present, replace it.
+            if (current != null && current.isContinuous)
+            {
+                return this;
+            }
         }
 
         Action previous = actions.remove(type);
