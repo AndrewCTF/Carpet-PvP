@@ -623,8 +623,13 @@ public class EntityPlayerActionPack
                 }
                 else if (action == GlideArrivalAction.DESCEND)
                 {
-                    // Release control and let vanilla fall-flying physics carry the player down.
-                    setGlideEnabled(false);
+                    // Controlled descent: keep elytra deployed, but pitch down gently.
+                    // This prevents stalling (pitching up / no forward speed) which looks like "just falling".
+                    glideTargetPos = null;
+                    glideLandingTargetPos = null;
+                    glideMode = GlideMode.HEADING;
+                    glideTargetYaw = player.getYRot();
+                    glideTargetPitch = 20.0F;
                 }
                 else if (action == GlideArrivalAction.CIRCLE)
                 {

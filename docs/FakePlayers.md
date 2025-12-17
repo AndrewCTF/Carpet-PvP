@@ -229,7 +229,7 @@ On arrival, you can choose what happens next:
 
 - `/player <name> glide arrival stop` (default)
 - `/player <name> glide arrival freeze`
-- `/player <name> glide arrival descend` (releases control and lets vanilla elytra glide down)
+- `/player <name> glide arrival descend` (keeps elytra deployed and pitches down for a controlled descent; use a lower speed for a gentler glide)
 - `/player <name> glide arrival land` (default behavior for goto: reach target XZ then dive down and stop on ground)
 - `/player <name> glide arrival circle` (keep orbiting/holding the target instead of finishing)
 
