@@ -147,6 +147,10 @@ public class PlayerCommand
                         .executes(PlayerCommand::glideFreezeToggle)
                         .then(argument("value", BoolArgumentType.bool())
                                 .executes(PlayerCommand::glideFreezeSet)))
+            .then(literal("arrival")
+                .then(literal("stop").executes(PlayerCommand::glideArrivalStop))
+                .then(literal("freeze").executes(PlayerCommand::glideArrivalFreeze))
+                .then(literal("descend").executes(PlayerCommand::glideArrivalDescend)))
                 .then(literal("freezeAtTarget")
                         .then(argument("value", BoolArgumentType.bool())
                                 .executes(PlayerCommand::glideFreezeAtTargetSet)))
@@ -247,6 +251,36 @@ public class PlayerCommand
         return 1;
     }
 
+    private static int glideArrivalStop(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.STOP);
+        Messenger.m(context.getSource(), "g arrival action set to stop for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalFreeze(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.FREEZE);
+        Messenger.m(context.getSource(), "g arrival action set to freeze for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalDescend(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.DESCEND);
+        Messenger.m(context.getSource(), "g arrival action set to descend for ", player.getName());
+        return 1;
+    }
+
     private static int glideSpeed(CommandContext<CommandSourceStack> context)
     {
         if (cantBotManipulate(context)) return 0;
@@ -342,7 +376,8 @@ public class PlayerCommand
         Messenger.m(context.getSource(),
                 "g glide: enabled=", ap.isGlideEnabled() ? "true" : "false",
                 "g , frozen=", ap.isGlideFrozen() ? "true" : "false",
-                "g , speed=", String.format("%.3f", ap.getGlideSpeed())
+            "g , speed=", String.format("%.3f", ap.getGlideSpeed()),
+            "g , arrival=", ap.getGlideArrivalAction().name().toLowerCase()
         );
         return 1;
     }

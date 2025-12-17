@@ -63,6 +63,7 @@ public class EntityPlayerActionPack
     private boolean glideEnabled;
     private boolean glideFrozen;
     private boolean glideFreezeAtTarget;
+    private GlideArrivalAction glideArrivalAction = GlideArrivalAction.STOP;
     private GlideMode glideMode = GlideMode.MANUAL;
 
     private double glideSpeed = 1.6D; // blocks per tick
@@ -154,7 +155,20 @@ public class EntityPlayerActionPack
     public EntityPlayerActionPack setGlideFreezeAtTarget(boolean freezeAtTarget)
     {
         glideFreezeAtTarget = freezeAtTarget;
+        glideArrivalAction = freezeAtTarget ? GlideArrivalAction.FREEZE : GlideArrivalAction.STOP;
         return this;
+    }
+
+    public EntityPlayerActionPack setGlideArrivalAction(GlideArrivalAction action)
+    {
+        glideArrivalAction = action == null ? GlideArrivalAction.STOP : action;
+        glideFreezeAtTarget = glideArrivalAction == GlideArrivalAction.FREEZE;
+        return this;
+    }
+
+    public GlideArrivalAction getGlideArrivalAction()
+    {
+        return glideArrivalAction;
     }
 
     public EntityPlayerActionPack setGlideSpeed(double blocksPerTick)
@@ -467,8 +481,35 @@ public class EntityPlayerActionPack
         }
 
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
-        if (!chest.is(Items.ELYTRA))
+        if (!chest.is(Items.ELYTRA) || chest.nextDamageWillBreak())
         {
+            // Can't glide without a usable elytra.
+            setGlideEnabled(false);
+            return;
+        }
+
+        // Ensure we actually enter fall-flying state (this is what makes the elytra render).
+        if (!player.isFallFlying())
+        {
+            if (player.onGround())
+            {
+                // Simple takeoff: get airborne first.
+                player.jumpFromGround();
+                return;
+            }
+
+            boolean started = player.tryToStartFallFlying();
+            if (!started)
+            {
+                // Fake players don't send the client command packet, so the usual path may never trigger.
+                // Force the state so clients render the elytra pose.
+                player.startFallFlying();
+            }
+        }
+
+        if (!player.isFallFlying())
+        {
+            // Don't apply "glide" velocity until the entity is actually fall-flying.
             return;
         }
 
@@ -488,11 +529,6 @@ public class EntityPlayerActionPack
             glidePrevNoGravity = null;
         }
 
-        if (!player.isFallFlying())
-        {
-            player.tryToStartFallFlying();
-        }
-
         float desiredYaw = player.getYRot();
         float desiredPitch = player.getXRot();
 
@@ -508,9 +544,17 @@ public class EntityPlayerActionPack
             double distSq = player.position().distanceToSqr(glideTargetPos);
             if (distSq <= glideArrivalRadius * glideArrivalRadius)
             {
-                if (glideFreezeAtTarget)
+                GlideArrivalAction action = glideArrivalAction;
+                // Back-compat: if old flag was set, prefer freezing.
+                if (glideFreezeAtTarget) action = GlideArrivalAction.FREEZE;
+                if (action == GlideArrivalAction.FREEZE)
                 {
                     setGlideFrozen(true);
+                }
+                else if (action == GlideArrivalAction.DESCEND)
+                {
+                    // Release control and let vanilla fall-flying physics carry the player down.
+                    setGlideEnabled(false);
                 }
                 else
                 {
@@ -595,6 +639,13 @@ public class EntityPlayerActionPack
         MANUAL,
         HEADING,
         GOTO
+    }
+
+    public enum GlideArrivalAction
+    {
+        STOP,
+        FREEZE,
+        DESCEND
     }
 
     static HitResult getTarget(ServerPlayer player)

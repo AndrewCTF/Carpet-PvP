@@ -221,6 +221,12 @@ Examples:
 - `/player Bot glide goto 100 120 100`
 - `/player Bot glide goto 100 120 100 2.5`
 
+On arrival, you can choose what happens next:
+
+- `/player <name> glide arrival stop` (default)
+- `/player <name> glide arrival freeze`
+- `/player <name> glide arrival descend` (releases control and lets vanilla elytra glide down)
+
 #### Manual thrust input
 
 Manual thrust inputs are in the range `-1..1`:
