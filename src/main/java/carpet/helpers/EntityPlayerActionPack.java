@@ -55,6 +55,9 @@ public class EntityPlayerActionPack
 
     private boolean attackCritical;
 
+    private boolean critAwaitingGroundAfterHit;
+    private int critPostLandingDelay;
+
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
         player = playerIn;
@@ -81,6 +84,11 @@ public class EntityPlayerActionPack
     public EntityPlayerActionPack setAttackCritical(boolean critical)
     {
         attackCritical = critical;
+        if (!critical)
+        {
+            critAwaitingGroundAfterHit = false;
+            critPostLandingDelay = 0;
+        }
         return this;
     }
 
@@ -217,6 +225,8 @@ public class EntityPlayerActionPack
     {
         for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
         actions.clear();
+        critAwaitingGroundAfterHit = false;
+        critPostLandingDelay = 0;
         return stopMovement();
     }
 
@@ -435,6 +445,25 @@ public class EntityPlayerActionPack
 
                         if (ap.attackCritical)
                         {
+                            // After a successful crit hit, wait until we touch the ground,
+                            // then wait the configured interval on-ground before starting the next jump.
+                            if (ap.critAwaitingGroundAfterHit)
+                            {
+                                if (player.onGround())
+                                {
+                                    ap.critAwaitingGroundAfterHit = false;
+                                    ap.critPostLandingDelay = Math.max(0, action.interval);
+                                }
+                                return false;
+                            }
+                            if (ap.critPostLandingDelay > 0)
+                            {
+                                if (player.onGround())
+                                {
+                                    ap.critPostLandingDelay--;
+                                }
+                                return false;
+                            }
                             if (player.onGround())
                             {
                                 player.jumpFromGround();
@@ -461,6 +490,11 @@ public class EntityPlayerActionPack
                         player.swing(InteractionHand.MAIN_HAND);
                         player.resetAttackStrengthTicker();
                         player.resetLastActionTime();
+
+                        if (ap.attackCritical)
+                        {
+                            ap.critAwaitingGroundAfterHit = true;
+                        }
                         return true;
                     }
                     case BLOCK: {
@@ -694,10 +728,10 @@ public class EntityPlayerActionPack
                 }
 
                 boolean shouldCountThisAttempt = !requiresSuccessToCount || Boolean.TRUE.equals(cancel);
-                if (requiresSuccessToCount && !Boolean.TRUE.equals(cancel))
+                if (requiresSuccessToCount)
                 {
-                    // Retry as soon as possible when we're waiting on a future success.
-                    // This is important for e.g. critical attacks that need a jump tick first.
+                    // Keep evaluating every tick until the action decides it's complete.
+                    // (For critical attacks, we need per-tick updates to detect falling/landing reliably.)
                     next = 1;
                 }
                 if (shouldCountThisAttempt)
@@ -711,7 +745,7 @@ public class EntityPlayerActionPack
                     }
                 }
 
-                if (!requiresSuccessToCount || Boolean.TRUE.equals(cancel))
+                if (!requiresSuccessToCount)
                 {
                     next = interval;
                 }
