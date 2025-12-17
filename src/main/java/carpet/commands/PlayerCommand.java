@@ -171,9 +171,9 @@ public class PlayerCommand
                                         .executes(PlayerCommand::glideHeading))))
                 .then(literal("goto")
                         .then(argument("pos", Vec3Argument.vec3())
-                                .executes(PlayerCommand::glideGoto)
+                        .executes(PlayerCommand::glideGotoDefault)
                                 .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
-                                        .executes(PlayerCommand::glideGoto))))
+                            .executes(PlayerCommand::glideGotoWithRadius))))
                 .then(literal("status").executes(PlayerCommand::glideStatus));
     }
 
@@ -308,11 +308,24 @@ public class PlayerCommand
         return 1;
     }
 
-    private static int glideGoto(CommandContext<CommandSourceStack> context)
+    private static int glideGotoDefault(CommandContext<CommandSourceStack> context)
     {
         if (cantBotManipulate(context)) return 0;
         Vec3 pos = Vec3Argument.getVec3(context, "pos");
-        double radius = context.getArguments().containsKey("arrivalRadius") ? DoubleArgumentType.getDouble(context, "arrivalRadius") : 1.0D;
+        double radius = 1.0D;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideGoto(pos, radius);
+        Messenger.m(context.getSource(), "g glide goto set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideGotoWithRadius(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        Vec3 pos = Vec3Argument.getVec3(context, "pos");
+        double radius = DoubleArgumentType.getDouble(context, "arrivalRadius");
         ServerPlayer player = getPlayer(context);
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
         ap.setGlideEnabled(true);
