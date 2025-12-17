@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -71,6 +73,7 @@ public class PlayerCommand
                         .then(makeActionCommand("use", ActionType.USE))
                         .then(makeActionCommand("jump", ActionType.JUMP))
                         .then(makeAttackCommand())
+                    .then(makeGlideCommand())
                         .then(makeActionCommand("drop", ActionType.DROP_ITEM))
                         .then(makeDropCommand("drop", false))
                         .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
@@ -133,6 +136,215 @@ public class PlayerCommand
                         )
                 );
         dispatcher.register(command);
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeGlideCommand()
+    {
+        return literal("glide")
+                .then(literal("start").executes(PlayerCommand::glideStart))
+                .then(literal("stop").executes(PlayerCommand::glideStop))
+                .then(literal("freeze")
+                        .executes(PlayerCommand::glideFreezeToggle)
+                        .then(argument("value", BoolArgumentType.bool())
+                                .executes(PlayerCommand::glideFreezeSet)))
+                .then(literal("freezeAtTarget")
+                        .then(argument("value", BoolArgumentType.bool())
+                                .executes(PlayerCommand::glideFreezeAtTargetSet)))
+                .then(literal("speed")
+                        .then(argument("blocksPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                .executes(PlayerCommand::glideSpeed)))
+                .then(literal("rates")
+                        .then(argument("yawDegPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                .then(argument("pitchDegPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(PlayerCommand::glideRates))))
+                .then(literal("usePitch")
+                        .then(argument("value", BoolArgumentType.bool())
+                                .executes(PlayerCommand::glideUsePitch)))
+                .then(literal("input")
+                        .then(argument("forward", DoubleArgumentType.doubleArg(-1.0D, 1.0D))
+                                .then(argument("strafe", DoubleArgumentType.doubleArg(-1.0D, 1.0D))
+                                        .then(argument("up", DoubleArgumentType.doubleArg(-1.0D, 1.0D))
+                                                .executes(PlayerCommand::glideInput)))))
+                .then(literal("heading")
+                        .then(argument("yaw", DoubleArgumentType.doubleArg(-360.0D, 360.0D))
+                                .then(argument("pitch", DoubleArgumentType.doubleArg(-90.0D, 90.0D))
+                                        .executes(PlayerCommand::glideHeading))))
+                .then(literal("goto")
+                        .then(argument("pos", Vec3Argument.vec3())
+                        .executes(PlayerCommand::glideGotoDefault)
+                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                            .executes(PlayerCommand::glideGotoWithRadius))))
+                .then(literal("status").executes(PlayerCommand::glideStatus));
+    }
+
+    private static boolean cantBotManipulate(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return true;
+        if (!CarpetSettings.fakePlayerElytraGlide)
+        {
+            Messenger.m(context.getSource(), "r Elytra gliding controls are disabled. Enable the carpet rule 'fakePlayerElytraGlide' first.");
+            return true;
+        }
+        ServerPlayer player = getPlayer(context);
+        if (!(player instanceof EntityPlayerMPFake))
+        {
+            Messenger.m(context.getSource(), "r Glide controls are only supported for fake players.");
+            return true;
+        }
+        return false;
+    }
+
+    private static int glideStart(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        Messenger.m(context.getSource(), "g Elytra glide enabled for ", player.getName());
+        return 1;
+    }
+
+    private static int glideStop(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(false);
+        Messenger.m(context.getSource(), "g Elytra glide disabled for ", player.getName());
+        return 1;
+    }
+
+    private static int glideFreezeToggle(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        boolean next = !ap.isGlideFrozen();
+        ap.setGlideFrozen(next);
+        Messenger.m(context.getSource(), next ? "y Glide frozen for " : "g Glide unfrozen for ", player.getName());
+        return 1;
+    }
+
+    private static int glideFreezeSet(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideFrozen(value);
+        Messenger.m(context.getSource(), value ? "y Glide frozen for " : "g Glide unfrozen for ", player.getName());
+        return 1;
+    }
+
+    private static int glideFreezeAtTargetSet(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideFreezeAtTarget(value);
+        Messenger.m(context.getSource(), "g freezeAtTarget set to ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideSpeed(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        double speed = DoubleArgumentType.getDouble(context, "blocksPerTick");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideSpeed(speed);
+        Messenger.m(context.getSource(), "g speed set to ", String.format("%.3f", ap.getGlideSpeed()), "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideRates(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        float yawRate = (float) DoubleArgumentType.getDouble(context, "yawDegPerTick");
+        float pitchRate = (float) DoubleArgumentType.getDouble(context, "pitchDegPerTick");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideRates(yawRate, pitchRate);
+        Messenger.m(context.getSource(), "g rates set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideUsePitch(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideUsePitchForForward(value);
+        Messenger.m(context.getSource(), "g usePitch set to ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideInput(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        float forward = (float) DoubleArgumentType.getDouble(context, "forward");
+        float strafe = (float) DoubleArgumentType.getDouble(context, "strafe");
+        float up = (float) DoubleArgumentType.getDouble(context, "up");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideInput(forward, strafe, up);
+        Messenger.m(context.getSource(), "g glide input set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideHeading(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        float yaw = (float) DoubleArgumentType.getDouble(context, "yaw");
+        float pitch = (float) DoubleArgumentType.getDouble(context, "pitch");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideHeading(yaw, pitch);
+        Messenger.m(context.getSource(), "g glide heading set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideGotoDefault(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        Vec3 pos = Vec3Argument.getVec3(context, "pos");
+        double radius = 1.0D;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideGoto(pos, radius);
+        Messenger.m(context.getSource(), "g glide goto set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideGotoWithRadius(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        Vec3 pos = Vec3Argument.getVec3(context, "pos");
+        double radius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideGoto(pos, radius);
+        Messenger.m(context.getSource(), "g glide goto set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideStatus(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        Messenger.m(context.getSource(),
+                "g glide: enabled=", ap.isGlideEnabled() ? "true" : "false",
+                "g , frozen=", ap.isGlideFrozen() ? "true" : "false",
+                "g , speed=", String.format("%.3f", ap.getGlideSpeed())
+        );
+        return 1;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeActionCommand(String actionName, ActionType type)

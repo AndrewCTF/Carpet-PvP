@@ -27,7 +27,9 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.entity.vehicle.Minecart;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -57,6 +59,27 @@ public class EntityPlayerActionPack
 
     private boolean critAwaitingGroundAfterHit;
     private int critPostLandingDelay;
+
+    private boolean glideEnabled;
+    private boolean glideFrozen;
+    private boolean glideFreezeAtTarget;
+    private GlideMode glideMode = GlideMode.MANUAL;
+
+    private double glideSpeed = 1.6D; // blocks per tick
+    private float glideYawRate = 10.0F; // deg per tick
+    private float glidePitchRate = 10.0F; // deg per tick
+
+    private float glideInputForward = 1.0F;
+    private float glideInputStrafe = 0.0F;
+    private float glideInputUp = 0.0F;
+    private boolean glideUsePitchForForward = true;
+
+    private float glideTargetYaw;
+    private float glideTargetPitch;
+    private Vec3 glideTargetPos;
+    private double glideArrivalRadius = 1.0D;
+
+    private Boolean glidePrevNoGravity;
 
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
@@ -89,6 +112,99 @@ public class EntityPlayerActionPack
             critAwaitingGroundAfterHit = false;
             critPostLandingDelay = 0;
         }
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideEnabled(boolean enabled)
+    {
+        glideEnabled = enabled;
+        if (!enabled)
+        {
+            setGlideFrozen(false);
+            glideMode = GlideMode.MANUAL;
+            glideTargetPos = null;
+        }
+        return this;
+    }
+
+    public boolean isGlideEnabled()
+    {
+        return glideEnabled;
+    }
+
+    public EntityPlayerActionPack setGlideFrozen(boolean frozen)
+    {
+        glideFrozen = frozen;
+        if (!frozen)
+        {
+            if (glidePrevNoGravity != null)
+            {
+                player.setNoGravity(glidePrevNoGravity);
+                glidePrevNoGravity = null;
+            }
+        }
+        return this;
+    }
+
+    public boolean isGlideFrozen()
+    {
+        return glideFrozen;
+    }
+
+    public EntityPlayerActionPack setGlideFreezeAtTarget(boolean freezeAtTarget)
+    {
+        glideFreezeAtTarget = freezeAtTarget;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideSpeed(double blocksPerTick)
+    {
+        glideSpeed = Math.max(0.0D, blocksPerTick);
+        return this;
+    }
+
+    public double getGlideSpeed()
+    {
+        return glideSpeed;
+    }
+
+    public EntityPlayerActionPack setGlideRates(float maxYawDegPerTick, float maxPitchDegPerTick)
+    {
+        glideYawRate = Math.max(0.0F, maxYawDegPerTick);
+        glidePitchRate = Math.max(0.0F, maxPitchDegPerTick);
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideUsePitchForForward(boolean usePitch)
+    {
+        glideUsePitchForForward = usePitch;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideInput(float forwardIn, float strafeIn, float upIn)
+    {
+        glideInputForward = Mth.clamp(forwardIn, -1.0F, 1.0F);
+        glideInputStrafe = Mth.clamp(strafeIn, -1.0F, 1.0F);
+        glideInputUp = Mth.clamp(upIn, -1.0F, 1.0F);
+        glideMode = GlideMode.MANUAL;
+        glideTargetPos = null;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideHeading(float yaw, float pitch)
+    {
+        glideTargetYaw = yaw;
+        glideTargetPitch = pitch;
+        glideMode = GlideMode.HEADING;
+        glideTargetPos = null;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideGoto(Vec3 targetPos, double arrivalRadius)
+    {
+        glideTargetPos = targetPos;
+        glideArrivalRadius = Math.max(0.0D, arrivalRadius);
+        glideMode = GlideMode.GOTO;
         return this;
     }
 
@@ -227,6 +343,7 @@ public class EntityPlayerActionPack
         actions.clear();
         critAwaitingGroundAfterHit = false;
         critPostLandingDelay = 0;
+        setGlideEnabled(false);
         return stopMovement();
     }
 
@@ -300,15 +417,184 @@ public class EntityPlayerActionPack
                 }
             }
         }
+
+        tickGlide();
+
         float vel = sneaking?0.3F:1.0F;
         vel *= player.isUsingItem()?0.20F:1.0F;
         // The != 0.0F checks are needed given else real players can't control minecarts, however it works with fakes and else they don't stop immediately
-        if (forward != 0.0F || player instanceof EntityPlayerMPFake) {
-            player.zza = forward * vel;
+        if (glideEnabled)
+        {
+            player.zza = 0.0F;
+            player.xxa = 0.0F;
         }
-        if (strafing != 0.0F || player instanceof EntityPlayerMPFake) {
-            player.xxa = strafing * vel;
+        else
+        {
+            if (forward != 0.0F || player instanceof EntityPlayerMPFake) {
+                player.zza = forward * vel;
+            }
+            if (strafing != 0.0F || player instanceof EntityPlayerMPFake) {
+                player.xxa = strafing * vel;
+            }
         }
+    }
+
+    private void tickGlide()
+    {
+        if (!glideEnabled)
+        {
+            if (glidePrevNoGravity != null)
+            {
+                player.setNoGravity(glidePrevNoGravity);
+                glidePrevNoGravity = null;
+            }
+            return;
+        }
+        if (!CarpetSettings.fakePlayerElytraGlide)
+        {
+            setGlideEnabled(false);
+            return;
+        }
+        if (!(player instanceof EntityPlayerMPFake))
+        {
+            // Safety: only drive bots.
+            setGlideEnabled(false);
+            return;
+        }
+        if (player.isSpectator())
+        {
+            return;
+        }
+
+        ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
+        if (!chest.is(Items.ELYTRA))
+        {
+            return;
+        }
+
+        if (glideFrozen)
+        {
+            if (glidePrevNoGravity == null)
+            {
+                glidePrevNoGravity = player.isNoGravity();
+                player.setNoGravity(true);
+            }
+            player.setDeltaMovement(Vec3.ZERO);
+            return;
+        }
+        else if (glidePrevNoGravity != null)
+        {
+            player.setNoGravity(glidePrevNoGravity);
+            glidePrevNoGravity = null;
+        }
+
+        if (!player.isFallFlying())
+        {
+            player.tryToStartFallFlying();
+        }
+
+        float desiredYaw = player.getYRot();
+        float desiredPitch = player.getXRot();
+
+        if (glideMode == GlideMode.HEADING)
+        {
+            desiredYaw = glideTargetYaw;
+            desiredPitch = glideTargetPitch;
+        }
+        else if (glideMode == GlideMode.GOTO && glideTargetPos != null)
+        {
+            Vec3 from = player.getEyePosition(1.0F);
+            Vec3 to = glideTargetPos;
+            double distSq = player.position().distanceToSqr(glideTargetPos);
+            if (distSq <= glideArrivalRadius * glideArrivalRadius)
+            {
+                if (glideFreezeAtTarget)
+                {
+                    setGlideFrozen(true);
+                }
+                else
+                {
+                    setGlideEnabled(false);
+                }
+                return;
+            }
+            Vec2 rot = rotationsTowards(from, to);
+            desiredYaw = rot.x;
+            desiredPitch = rot.y;
+        }
+
+        float newYaw = stepYaw(player.getYRot(), desiredYaw, glideYawRate);
+        float newPitch = stepAngle(player.getXRot(), desiredPitch, glidePitchRate);
+        newPitch = Mth.clamp(newPitch, -90.0F, 90.0F);
+        look(newYaw, newPitch);
+
+        Vec3 thrust = computeThrust(newYaw, newPitch);
+        if (thrust.lengthSqr() < 1.0E-8D)
+        {
+            player.setDeltaMovement(Vec3.ZERO);
+            return;
+        }
+        Vec3 desiredVel = thrust.normalize().scale(glideSpeed);
+        player.setDeltaMovement(desiredVel);
+    }
+
+    private Vec3 computeThrust(float yawDeg, float pitchDeg)
+    {
+        float forwardPitch = glideUsePitchForForward ? pitchDeg : 0.0F;
+        Vec3 forwardVec = directionFromRotation(forwardPitch, yawDeg);
+        Vec3 strafeVec = directionFromRotation(0.0F, yawDeg - 90.0F);
+        Vec3 upVec = new Vec3(0.0D, 1.0D, 0.0D);
+
+        Vec3 thrust = forwardVec.scale(glideInputForward)
+                .add(strafeVec.scale(glideInputStrafe))
+                .add(upVec.scale(glideInputUp));
+
+        // In heading/goto modes, inputs act as modifiers; default forward=1 already.
+        return thrust;
+    }
+
+    private static Vec3 directionFromRotation(float pitchDeg, float yawDeg)
+    {
+        float yawRad = yawDeg * ((float)Math.PI / 180.0F);
+        float pitchRad = pitchDeg * ((float)Math.PI / 180.0F);
+        float f = Mth.cos(pitchRad);
+        return new Vec3(
+                -Mth.sin(yawRad) * f,
+                -Mth.sin(pitchRad),
+                Mth.cos(yawRad) * f
+        );
+    }
+
+    private static Vec2 rotationsTowards(Vec3 from, Vec3 to)
+    {
+        double dx = to.x - from.x;
+        double dy = to.y - from.y;
+        double dz = to.z - from.z;
+        double distXZ = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float)(Mth.atan2(dz, dx) * (180.0D / Math.PI)) - 90.0F;
+        float pitch = (float)(-(Mth.atan2(dy, distXZ) * (180.0D / Math.PI)));
+        return new Vec2(yaw, pitch);
+    }
+
+    private static float stepYaw(float current, float target, float maxStep)
+    {
+        float delta = Mth.wrapDegrees(target - current);
+        float step = Mth.clamp(delta, -maxStep, maxStep);
+        return current + step;
+    }
+
+    private static float stepAngle(float current, float target, float maxStep)
+    {
+        float delta = target - current;
+        float step = Mth.clamp(delta, -maxStep, maxStep);
+        return current + step;
+    }
+
+    private enum GlideMode
+    {
+        MANUAL,
+        HEADING,
+        GOTO
     }
 
     static HitResult getTarget(ServerPlayer player)

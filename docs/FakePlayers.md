@@ -154,6 +154,100 @@ Fake players act on what they are looking at (for attacking and right-click use)
 
 ---
 
+## Elytra gliding (precise controls)
+
+Carpet PvP can drive fake-player elytra flight with:
+- rate-limited yaw/pitch steering
+- a fixed velocity “throttle” (speed)
+- optional freeze/hover
+
+This is gated behind a rule (off by default):
+
+- `/carpet fakePlayerElytraGlide true`
+
+### Start / stop
+
+- `/player <name> glide start`
+- `/player <name> glide stop`
+
+### Freeze / hover
+
+Freeze forces the bot to hold position (zero velocity) and disables gravity while gliding.
+
+- `/player <name> glide freeze` (toggle)
+- `/player <name> glide freeze true`
+- `/player <name> glide freeze false`
+
+Freeze automatically when reaching a goto target:
+
+- `/player <name> glide freezeAtTarget true`
+
+### Speed (blocks/tick)
+
+`speed` is a direct velocity magnitude in blocks per tick ($20$ ticks per second).
+
+- `/player <name> glide speed <blocksPerTick>`
+
+Example:
+- `/player Bot glide speed 0.8`
+
+### Steering precision (deg/tick)
+
+Yaw/pitch changes are rate-limited per tick (smaller = more precise / less twitchy).
+
+- `/player <name> glide rates <yawDegPerTick> <pitchDegPerTick>`
+
+Example:
+- `/player Bot glide rates 2.0 1.0`
+
+### Modes
+
+#### Heading hold
+
+Steer to and hold a specific yaw/pitch.
+
+- `/player <name> glide heading <yaw> <pitch>`
+
+Example:
+- `/player Bot glide heading 90 -10`
+
+#### Goto position
+
+Fly toward a target position. Optional `arrivalRadius` (default is 1 block).
+
+- `/player <name> glide goto <x> <y> <z> [arrivalRadius]`
+
+Examples:
+- `/player Bot glide goto 100 120 100`
+- `/player Bot glide goto 100 120 100 2.5`
+
+#### Manual thrust input
+
+Manual thrust inputs are in the range `-1..1`:
+- `forward`: forward/back
+- `strafe`: left/right
+- `up`: up/down
+
+- `/player <name> glide input <forward> <strafe> <up>`
+
+Examples:
+- `/player Bot glide input 1 0 0`
+- `/player Bot glide input 0.8 0.2 0`
+- `/player Bot glide input 0 0 1`
+
+By default, forward thrust uses the bot’s pitch. You can disable that and make “forward” stay horizontal:
+
+- `/player <name> glide usePitch true|false`
+
+Example:
+- `/player Bot glide usePitch false`
+
+### Status
+
+- `/player <name> glide status`
+
+---
+
 ## Attacking (normal + crit)
 
 ### Normal attacks

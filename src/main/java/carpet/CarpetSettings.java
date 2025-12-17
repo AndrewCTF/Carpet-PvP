@@ -146,6 +146,9 @@ public class CarpetSettings
     public static String carpetCommandPermissionLevel = "ops";
 
 
+            @Rule(desc = "Allows fake players to use precise elytra gliding controls via /player <name> glide ...", category = {CREATIVE})
+            public static boolean fakePlayerElytraGlide = false;
+
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
 
