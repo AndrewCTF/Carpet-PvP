@@ -316,10 +316,17 @@ public class EntityPlayerActionPack
         double blockReach = player.gameMode.isCreative() ? 5 : 4.5f;
         double entityReach = player.gameMode.isCreative() ? 5 : 3f;
 
-        HitResult hit = Tracer.rayTrace(player, 1, blockReach, false);
-
-        if(hit.getType() == HitResult.Type.BLOCK) return hit;
-        return Tracer.rayTrace(player, 1, entityReach, false);
+        // Vanilla-like targeting with different reach for blocks vs entities:
+        // - find the nearest block up to blockReach
+        // - find the nearest entity up to entityReach, but do not allow selecting entities behind the block hit
+        BlockHitResult blockHit = Tracer.rayTraceBlocks(player, 1, blockReach, false);
+        double maxSqDist = entityReach * entityReach;
+        if (blockHit != null)
+        {
+            maxSqDist = Math.min(maxSqDist, blockHit.getLocation().distanceToSqr(player.getEyePosition(1)));
+        }
+        EntityHitResult entityHit = Tracer.rayTraceEntities(player, 1, entityReach, maxSqDist);
+        return entityHit == null ? blockHit : entityHit;
     }
 
     private void dropItemFromSlot(int slot, boolean dropAll)
