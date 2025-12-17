@@ -150,7 +150,9 @@ public class PlayerCommand
             .then(literal("arrival")
                 .then(literal("stop").executes(PlayerCommand::glideArrivalStop))
                 .then(literal("freeze").executes(PlayerCommand::glideArrivalFreeze))
-                .then(literal("descend").executes(PlayerCommand::glideArrivalDescend)))
+                .then(literal("descend").executes(PlayerCommand::glideArrivalDescend))
+                .then(literal("land").executes(PlayerCommand::glideArrivalLand))
+                .then(literal("circle").executes(PlayerCommand::glideArrivalCircle)))
                 .then(literal("freezeAtTarget")
                         .then(argument("value", BoolArgumentType.bool())
                                 .executes(PlayerCommand::glideFreezeAtTargetSet)))
@@ -278,6 +280,26 @@ public class PlayerCommand
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
         ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.DESCEND);
         Messenger.m(context.getSource(), "g arrival action set to descend for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalLand(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.LAND);
+        Messenger.m(context.getSource(), "g arrival action set to land for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalCircle(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.CIRCLE);
+        Messenger.m(context.getSource(), "g arrival action set to circle for ", player.getName());
         return 1;
     }
 

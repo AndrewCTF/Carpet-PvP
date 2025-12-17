@@ -170,6 +170,10 @@ This is gated behind a rule (off by default):
 - `/player <name> glide start`
 - `/player <name> glide stop`
 
+Notes:
+- Running `glide start` while the bot is on the ground will *arm* gliding but will not spam-jump.
+- `glide goto ...` will perform a takeoff jump and deploy elytra automatically.
+
 ### Freeze / hover
 
 Freeze forces the bot to hold position (zero velocity) and disables gravity while gliding.
@@ -226,6 +230,8 @@ On arrival, you can choose what happens next:
 - `/player <name> glide arrival stop` (default)
 - `/player <name> glide arrival freeze`
 - `/player <name> glide arrival descend` (releases control and lets vanilla elytra glide down)
+- `/player <name> glide arrival land` (default behavior for goto: reach target XZ then dive down and stop on ground)
+- `/player <name> glide arrival circle` (keep orbiting/holding the target instead of finishing)
 
 #### Manual thrust input
 
