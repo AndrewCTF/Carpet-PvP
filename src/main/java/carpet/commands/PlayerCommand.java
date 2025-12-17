@@ -3,6 +3,7 @@ package carpet.commands;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
+import carpet.helpers.pathfinding.ElytraAStarPathfinder;
 import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
@@ -176,9 +177,14 @@ public class PlayerCommand
                                 .then(argument("pitch", DoubleArgumentType.doubleArg(-90.0D, 90.0D))
                                         .executes(PlayerCommand::glideHeading))))
                 .then(literal("goto")
+                    .then(literal("smart")
                         .then(argument("pos", Vec3Argument.vec3())
+                            .executes(PlayerCommand::glideGotoSmartDefault)
+                            .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                .executes(PlayerCommand::glideGotoSmartWithRadius))))
+                    .then(argument("pos", Vec3Argument.vec3())
                         .executes(PlayerCommand::glideGotoDefault)
-                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                        .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
                             .executes(PlayerCommand::glideGotoWithRadius))))
                 .then(literal("status").executes(PlayerCommand::glideStatus));
     }
@@ -387,6 +393,52 @@ public class PlayerCommand
         ap.setGlideEnabled(true);
         ap.setGlideGoto(pos, radius);
         Messenger.m(context.getSource(), "g glide goto set for ", player.getName());
+        return 1;
+    }
+
+    private static int glideGotoSmartDefault(CommandContext<CommandSourceStack> context)
+    {
+        return glideGotoSmart(context, 1.0D);
+    }
+
+    private static int glideGotoSmartWithRadius(CommandContext<CommandSourceStack> context)
+    {
+        double radius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        return glideGotoSmart(context, radius);
+    }
+
+    private static int glideGotoSmart(CommandContext<CommandSourceStack> context, double radius)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        if (!(player.level() instanceof ServerLevel level)) return 0;
+
+        Vec3 goal = Vec3Argument.getVec3(context, "pos");
+        BlockPos startPos = BlockPos.containing(player.position());
+        BlockPos goalPos = BlockPos.containing(goal);
+
+        ElytraAStarPathfinder.Settings settings = ElytraAStarPathfinder.Settings.defaults();
+        ElytraAStarPathfinder pf = new ElytraAStarPathfinder();
+        List<BlockPos> raw = pf.findPath(level, startPos, goalPos, settings);
+        if (raw == null || raw.isEmpty())
+        {
+            Messenger.m(context.getSource(), "r No smart path found (range/terrain/chunks). Try a higher goal Y or move closer.");
+            return 0;
+        }
+
+        List<BlockPos> compressed = ElytraAStarPathfinder.compressWaypoints(raw, settings.waypointStride());
+        List<Vec3> waypoints = new java.util.ArrayList<>(compressed.size());
+        for (BlockPos p : compressed)
+        {
+            // Aim at block centers for smoother flight.
+            waypoints.add(new Vec3(p.getX() + 0.5D, p.getY() + 0.5D, p.getZ() + 0.5D));
+        }
+
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.LAND);
+        ap.setGlideGotoWaypoints(waypoints, goal, radius);
+        Messenger.m(context.getSource(), "g smart glide path set with ", String.valueOf(waypoints.size()), "g  waypoints for ", player.getName());
         return 1;
     }
 

@@ -225,6 +225,15 @@ Examples:
 - `/player Bot glide goto 100 120 100`
 - `/player Bot glide goto 100 120 100 2.5`
 
+#### Smart goto (A* pathfinding base)
+
+This variant runs a bounded A* search in “air space” and produces waypoints that route over terrain (and avoids planning into unloaded chunks).
+
+- `/player <name> glide goto smart <x> <y> <z> [arrivalRadius]`
+
+Notes:
+- If it fails, try giving a higher Y target (more air space) or move closer so chunks are loaded.
+
 On arrival, you can choose what happens next:
 
 - `/player <name> glide arrival stop` (default)

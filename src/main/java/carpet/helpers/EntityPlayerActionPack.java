@@ -6,6 +6,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import carpet.patches.EntityPlayerMPFake;
 import carpet.script.utils.Tracer;
@@ -81,6 +82,9 @@ public class EntityPlayerActionPack
     private Vec3 glideLandingTargetPos;
     private double glideArrivalRadius = 1.0D;
 
+    private List<Vec3> glideWaypoints;
+    private int glideWaypointIndex;
+
     private Boolean glidePrevNoGravity;
     private Boolean glidePrevAbilityFlying;
     private int glideDeployDelayTicks;
@@ -150,6 +154,8 @@ public class EntityPlayerActionPack
             glideMode = GlideMode.MANUAL;
             glideTargetPos = null;
             glideLandingTargetPos = null;
+            glideWaypoints = null;
+            glideWaypointIndex = 0;
             glideDeployDelayTicks = 0;
             glideDeployAttempts = 0;
             glideTakeoffTimeoutTicks = 0;
@@ -255,6 +261,25 @@ public class EntityPlayerActionPack
     {
         glideTargetPos = targetPos;
         glideLandingTargetPos = null;
+        glideWaypoints = null;
+        glideWaypointIndex = 0;
+        glideArrivalRadius = Math.max(0.0D, arrivalRadius);
+        glideMode = GlideMode.GOTO;
+        glideTakeoffRequested = true;
+        glideTakeoffTimeoutTicks = 40;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideGotoWaypoints(List<Vec3> waypoints, Vec3 finalLandingTarget, double arrivalRadius)
+    {
+        if (waypoints == null || waypoints.isEmpty())
+        {
+            return setGlideGoto(finalLandingTarget, arrivalRadius);
+        }
+        glideWaypoints = new ArrayList<>(waypoints);
+        glideWaypointIndex = 0;
+        glideTargetPos = glideWaypoints.get(0);
+        glideLandingTargetPos = finalLandingTarget;
         glideArrivalRadius = Math.max(0.0D, arrivalRadius);
         glideMode = GlideMode.GOTO;
         glideTakeoffRequested = true;
@@ -614,6 +639,22 @@ public class EntityPlayerActionPack
             double distSqXZ = dx * dx + dz * dz;
             if (distSqXZ <= glideArrivalRadius * glideArrivalRadius)
             {
+                if (glideWaypoints != null)
+                {
+                    // Advance to next waypoint.
+                    glideWaypointIndex++;
+                    if (glideWaypointIndex < glideWaypoints.size())
+                    {
+                        glideTargetPos = glideWaypoints.get(glideWaypointIndex);
+                        return;
+                    }
+                    // Done with air path; start landing onto the requested destination.
+                    glideWaypoints = null;
+                    glideTargetPos = null;
+                    glideMode = GlideMode.LANDING;
+                    return;
+                }
+
                 GlideArrivalAction action = glideArrivalAction;
                 // Back-compat: if old flag was set, prefer freezing.
                 if (glideFreezeAtTarget) action = GlideArrivalAction.FREEZE;
