@@ -18,10 +18,25 @@ public abstract class ServerPlayer_actionPackMixin implements ServerPlayerInterf
 {
     @Unique
     public EntityPlayerActionPack actionPack;
+
+    @Unique
+    private boolean isInvalidReference = false;
     @Override
     public EntityPlayerActionPack getActionPack()
     {
         return actionPack;
+    }
+
+    @Override
+    public void invalidateEntityObjectReference()
+    {
+        isInvalidReference = true;
+    }
+
+    @Override
+    public boolean isInvalidEntityObject()
+    {
+        return isInvalidReference;
     }
 
     @Inject(method = "<init>", at = @At(value = "RETURN"))
