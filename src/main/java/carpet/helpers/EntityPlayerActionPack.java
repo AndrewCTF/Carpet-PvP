@@ -529,11 +529,14 @@ public class EntityPlayerActionPack
                         return blockBroken;
                     }
                 }
-                if (!action.isContinuous)
+                // MISS (air): still swing to mimic holding attack.
+                // In modern combat, avoid spamming weak swings unless spam-click combat is enabled.
+                if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
                 {
-                    player.swing(InteractionHand.MAIN_HAND);
-                    player.resetLastActionTime();
+                    return false;
                 }
+                player.swing(InteractionHand.MAIN_HAND);
+                player.resetLastActionTime();
                 return false;
             }
 
