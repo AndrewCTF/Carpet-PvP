@@ -169,11 +169,11 @@ public class PlayerCommand
         LiteralArgumentBuilder<CommandSourceStack> crit = literal("crit")
                 .executes(manipulation(ap -> {
                     ap.setAttackCritical(true);
-                    ap.start(ActionType.ATTACK, Action.once());
+                    ap.start(ActionType.ATTACK, Action.onceUntilSuccess());
                 }))
                 .then(literal("once").executes(manipulation(ap -> {
                     ap.setAttackCritical(true);
-                    ap.start(ActionType.ATTACK, Action.once());
+                    ap.start(ActionType.ATTACK, Action.onceUntilSuccess());
                 })))
                 .then(literal("continuous").executes(manipulation(ap -> {
                     ap.setAttackCritical(true);
@@ -182,7 +182,7 @@ public class PlayerCommand
                 .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
                         .executes(c -> manipulate(c, ap -> {
                             ap.setAttackCritical(true);
-                            ap.start(ActionType.ATTACK, Action.interval(IntegerArgumentType.getInteger(c, "ticks")));
+                            ap.start(ActionType.ATTACK, Action.intervalUntilSuccess(IntegerArgumentType.getInteger(c, "ticks")));
                         }))));
 
         return base.then(crit);

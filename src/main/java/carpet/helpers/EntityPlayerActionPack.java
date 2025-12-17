@@ -621,34 +621,46 @@ public class EntityPlayerActionPack
         private int count;
         private int next;
         private final boolean isContinuous;
+        private final boolean requiresSuccessToCount;
 
-        private Action(int limit, int interval, int offset, boolean continuous)
+        private Action(int limit, int interval, int offset, boolean continuous, boolean requiresSuccessToCount)
         {
             this.limit = limit;
             this.interval = interval;
             this.offset = offset;
             next = interval + offset;
             isContinuous = continuous;
+            this.requiresSuccessToCount = requiresSuccessToCount;
         }
 
         public static Action once()
         {
-            return new Action(1, 1, 0, false);
+            return new Action(1, 1, 0, false, false);
+        }
+
+        public static Action onceUntilSuccess()
+        {
+            return new Action(1, 1, 0, false, true);
         }
 
         public static Action continuous()
         {
-            return new Action(-1, 1, 0, true);
+            return new Action(-1, 1, 0, true, false);
         }
 
         public static Action interval(int interval)
         {
-            return new Action(-1, interval, 0, false);
+            return new Action(-1, interval, 0, false, false);
+        }
+
+        public static Action intervalUntilSuccess(int interval)
+        {
+            return new Action(-1, interval, 0, false, true);
         }
 
         public static Action interval(int interval, int offset)
         {
-            return new Action(-1, interval, offset, false);
+            return new Action(-1, interval, offset, false, false);
         }
 
         Boolean tick(EntityPlayerActionPack actionPack, ActionType type)
@@ -671,14 +683,29 @@ public class EntityPlayerActionPack
                 {
                     cancel = type.execute(actionPack.player, this);
                 }
-                count++;
-                if (count == limit)
+
+                boolean shouldCountThisAttempt = !requiresSuccessToCount || Boolean.TRUE.equals(cancel);
+                if (requiresSuccessToCount && !Boolean.TRUE.equals(cancel))
                 {
-                    type.stop(actionPack.player, null);
-                    done = true;
-                    return cancel;
+                    // Retry as soon as possible when we're waiting on a future success.
+                    // This is important for e.g. critical attacks that need a jump tick first.
+                    next = 1;
                 }
-                next = interval;
+                if (shouldCountThisAttempt)
+                {
+                    count++;
+                    if (count == limit)
+                    {
+                        type.stop(actionPack.player, null);
+                        done = true;
+                        return cancel;
+                    }
+                }
+
+                if (!requiresSuccessToCount || Boolean.TRUE.equals(cancel))
+                {
+                    next = interval;
+                }
             }
             else
             {
@@ -697,6 +724,8 @@ public class EntityPlayerActionPack
             {
                 type.execute(actionPack.player, this);
             }
+
+            // retry() is only called in contexts where it should count as an attempt
             count++;
             if (count == limit)
             {
