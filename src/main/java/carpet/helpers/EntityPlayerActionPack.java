@@ -1,5 +1,6 @@
 package carpet.helpers;
 
+import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -52,6 +53,11 @@ public class EntityPlayerActionPack
 
     private int itemUseCooldown;
 
+    private boolean attackCritical;
+
+    private boolean critAwaitingGroundAfterHit;
+    private int critPostLandingDelay;
+
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
         player = playerIn;
@@ -71,13 +77,32 @@ public class EntityPlayerActionPack
         strafing = other.strafing;
 
         itemUseCooldown = other.itemUseCooldown;
+
+        attackCritical = other.attackCritical;
+    }
+
+    public EntityPlayerActionPack setAttackCritical(boolean critical)
+    {
+        attackCritical = critical;
+        if (!critical)
+        {
+            critAwaitingGroundAfterHit = false;
+            critPostLandingDelay = 0;
+        }
+        return this;
     }
 
     public EntityPlayerActionPack start(ActionType type, Action action)
     {
-        if(action.isContinuous){
-            Action curent = actions.get(type);
-            if(curent != null) return this;
+        if (action != null && action.isContinuous)
+        {
+            Action current = actions.get(type);
+            // Only ignore if we're already running a continuous action of the same type.
+            // If a one-shot or interval action is present, replace it.
+            if (current != null && current.isContinuous)
+            {
+                return this;
+            }
         }
 
         Action previous = actions.remove(type);
@@ -200,6 +225,8 @@ public class EntityPlayerActionPack
     {
         for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
         actions.clear();
+        critAwaitingGroundAfterHit = false;
+        critPostLandingDelay = 0;
         return stopMovement();
     }
 
@@ -289,10 +316,17 @@ public class EntityPlayerActionPack
         double blockReach = player.gameMode.isCreative() ? 5 : 4.5f;
         double entityReach = player.gameMode.isCreative() ? 5 : 3f;
 
-        HitResult hit = Tracer.rayTrace(player, 1, blockReach, false);
-
-        if(hit.getType() == HitResult.Type.BLOCK) return hit;
-        return Tracer.rayTrace(player, 1, entityReach, false);
+        // Vanilla-like targeting with different reach for blocks vs entities:
+        // - find the nearest block up to blockReach
+        // - find the nearest entity up to entityReach, but do not allow selecting entities behind the block hit
+        BlockHitResult blockHit = Tracer.rayTraceBlocks(player, 1, blockReach, false);
+        double maxSqDist = entityReach * entityReach;
+        if (blockHit != null)
+        {
+            maxSqDist = Math.min(maxSqDist, blockHit.getLocation().distanceToSqr(player.getEyePosition(1)));
+        }
+        EntityHitResult entityHit = Tracer.rayTraceEntities(player, 1, entityReach, maxSqDist);
+        return entityHit == null ? blockHit : entityHit;
     }
 
     private void dropItemFromSlot(int slot, boolean dropAll)
@@ -414,13 +448,60 @@ public class EntityPlayerActionPack
                 switch (hit.getType()) {
                     case ENTITY: {
                         EntityHitResult entityHit = (EntityHitResult) hit;
-                        if (!action.isContinuous)
+                        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+
+                        if (ap.attackCritical)
                         {
-                            player.attack(entityHit.getEntity());
-                            player.swing(InteractionHand.MAIN_HAND);
+                            // After a successful crit hit, wait until we touch the ground,
+                            // then wait the configured interval on-ground before starting the next jump.
+                            if (ap.critAwaitingGroundAfterHit)
+                            {
+                                if (player.onGround())
+                                {
+                                    ap.critAwaitingGroundAfterHit = false;
+                                    ap.critPostLandingDelay = Math.max(0, action.interval);
+                                }
+                                return false;
+                            }
+                            if (ap.critPostLandingDelay > 0)
+                            {
+                                if (player.onGround())
+                                {
+                                    ap.critPostLandingDelay--;
+                                }
+                                return false;
+                            }
+                            if (player.onGround())
+                            {
+                                player.jumpFromGround();
+                                player.resetLastActionTime();
+                                return false;
+                            }
+                            // Critical hits require falling (not rising)
+                            if (player.getDeltaMovement().y >= 0.0D)
+                            {
+                                return false;
+                            }
                         }
+
+                        if (!CarpetSettings.spamClickCombat)
+                        {
+                            // Prevent constant weak hits when spamming attacks in modern combat
+                            if (player.getAttackStrengthScale(0.5F) < 0.9F)
+                            {
+                                return false;
+                            }
+                        }
+
+                        player.attack(entityHit.getEntity());
+                        player.swing(InteractionHand.MAIN_HAND);
                         player.resetAttackStrengthTicker();
                         player.resetLastActionTime();
+
+                        if (ap.attackCritical)
+                        {
+                            ap.critAwaitingGroundAfterHit = true;
+                        }
                         return true;
                     }
                     case BLOCK: {
@@ -489,8 +570,13 @@ public class EntityPlayerActionPack
                         return blockBroken;
                     }
                 }
-                if(!action.isContinuous) player.swing(InteractionHand.MAIN_HAND);
-                player.resetAttackStrengthTicker();
+                // MISS (air): still swing to mimic holding attack.
+                // In modern combat, avoid spamming weak swings unless spam-click combat is enabled.
+                if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
+                {
+                    return false;
+                }
+                player.swing(InteractionHand.MAIN_HAND);
                 player.resetLastActionTime();
                 return false;
             }
@@ -585,34 +671,46 @@ public class EntityPlayerActionPack
         private int count;
         private int next;
         private final boolean isContinuous;
+        private final boolean requiresSuccessToCount;
 
-        private Action(int limit, int interval, int offset, boolean continuous)
+        private Action(int limit, int interval, int offset, boolean continuous, boolean requiresSuccessToCount)
         {
             this.limit = limit;
             this.interval = interval;
             this.offset = offset;
             next = interval + offset;
             isContinuous = continuous;
+            this.requiresSuccessToCount = requiresSuccessToCount;
         }
 
         public static Action once()
         {
-            return new Action(1, 1, 0, false);
+            return new Action(1, 1, 0, false, false);
+        }
+
+        public static Action onceUntilSuccess()
+        {
+            return new Action(1, 1, 0, false, true);
         }
 
         public static Action continuous()
         {
-            return new Action(-1, 1, 0, true);
+            return new Action(-1, 1, 0, true, false);
         }
 
         public static Action interval(int interval)
         {
-            return new Action(-1, interval, 0, false);
+            return new Action(-1, interval, 0, false, false);
+        }
+
+        public static Action intervalUntilSuccess(int interval)
+        {
+            return new Action(-1, interval, 0, false, true);
         }
 
         public static Action interval(int interval, int offset)
         {
-            return new Action(-1, interval, offset, false);
+            return new Action(-1, interval, offset, false, false);
         }
 
         Boolean tick(EntityPlayerActionPack actionPack, ActionType type)
@@ -635,14 +733,29 @@ public class EntityPlayerActionPack
                 {
                     cancel = type.execute(actionPack.player, this);
                 }
-                count++;
-                if (count == limit)
+
+                boolean shouldCountThisAttempt = !requiresSuccessToCount || Boolean.TRUE.equals(cancel);
+                if (requiresSuccessToCount)
                 {
-                    type.stop(actionPack.player, null);
-                    done = true;
-                    return cancel;
+                    // Keep evaluating every tick until the action decides it's complete.
+                    // (For critical attacks, we need per-tick updates to detect falling/landing reliably.)
+                    next = 1;
                 }
-                next = interval;
+                if (shouldCountThisAttempt)
+                {
+                    count++;
+                    if (count == limit)
+                    {
+                        type.stop(actionPack.player, null);
+                        done = true;
+                        return cancel;
+                    }
+                }
+
+                if (!requiresSuccessToCount)
+                {
+                    next = interval;
+                }
             }
             else
             {
@@ -661,6 +774,8 @@ public class EntityPlayerActionPack
             {
                 type.execute(actionPack.player, this);
             }
+
+            // retry() is only called in contexts where it should count as an attempt
             count++;
             if (count == limit)
             {

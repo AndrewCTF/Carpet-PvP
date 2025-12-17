@@ -27,7 +27,7 @@ Legend:
 
 ## /player
 - Permission: op
-- Summary: Spawn/manage fake players for testing.
+- Summary: Spawn/manage fake players for testing. See also: [FakePlayers.md](FakePlayers.md)
 - Usage:
   - /player <name> spawn [at <x> <y> <z>] [facing <yaw> <pitch>]
   - /player <name> kill
