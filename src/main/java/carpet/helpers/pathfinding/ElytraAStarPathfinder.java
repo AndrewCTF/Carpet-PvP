@@ -10,7 +10,6 @@ import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 
@@ -203,7 +202,7 @@ public final class ElytraAStarPathfinder
     private static boolean isAirNavigable(ServerLevel level, int x, int y, int z, Settings settings)
     {
         // Avoid chunk loads: only allow already-loaded chunks.
-        if (!level.hasChunk(ChunkPos.asLong(x >> 4, z >> 4)))
+        if (!level.hasChunk(x >> 4, z >> 4))
         {
             return false;
         }
