@@ -70,7 +70,7 @@ public class PlayerCommand
                         .then(literal("stop").executes(manipulation(EntityPlayerActionPack::stopAll)))
                         .then(makeActionCommand("use", ActionType.USE))
                         .then(makeActionCommand("jump", ActionType.JUMP))
-                        .then(makeActionCommand("attack", ActionType.ATTACK))
+                        .then(makeAttackCommand())
                         .then(makeActionCommand("drop", ActionType.DROP_ITEM))
                         .then(makeDropCommand("drop", false))
                         .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
@@ -143,6 +143,49 @@ public class PlayerCommand
                 .then(literal("continuous").executes(manipulation(ap -> ap.start(type, Action.continuous()))))
                 .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
                         .executes(c -> manipulate(c, ap -> ap.start(type, Action.interval(IntegerArgumentType.getInteger(c, "ticks")))))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeAttackCommand()
+    {
+        LiteralArgumentBuilder<CommandSourceStack> base = literal("attack")
+                .executes(manipulation(ap -> {
+                    ap.setAttackCritical(false);
+                    ap.start(ActionType.ATTACK, Action.once());
+                }))
+                .then(literal("once").executes(manipulation(ap -> {
+                    ap.setAttackCritical(false);
+                    ap.start(ActionType.ATTACK, Action.once());
+                })))
+                .then(literal("continuous").executes(manipulation(ap -> {
+                    ap.setAttackCritical(false);
+                    ap.start(ActionType.ATTACK, Action.continuous());
+                })))
+                .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            ap.setAttackCritical(false);
+                            ap.start(ActionType.ATTACK, Action.interval(IntegerArgumentType.getInteger(c, "ticks")));
+                        }))));
+
+        LiteralArgumentBuilder<CommandSourceStack> crit = literal("crit")
+                .executes(manipulation(ap -> {
+                    ap.setAttackCritical(true);
+                    ap.start(ActionType.ATTACK, Action.once());
+                }))
+                .then(literal("once").executes(manipulation(ap -> {
+                    ap.setAttackCritical(true);
+                    ap.start(ActionType.ATTACK, Action.once());
+                })))
+                .then(literal("continuous").executes(manipulation(ap -> {
+                    ap.setAttackCritical(true);
+                    ap.start(ActionType.ATTACK, Action.continuous());
+                })))
+                .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            ap.setAttackCritical(true);
+                            ap.start(ActionType.ATTACK, Action.interval(IntegerArgumentType.getInteger(c, "ticks")));
+                        }))));
+
+        return base.then(crit);
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeDropCommand(String actionName, boolean dropAll)

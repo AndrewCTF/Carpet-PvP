@@ -1,5 +1,6 @@
 package carpet.helpers;
 
+import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -52,6 +53,8 @@ public class EntityPlayerActionPack
 
     private int itemUseCooldown;
 
+    private boolean attackCritical;
+
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
         player = playerIn;
@@ -71,6 +74,14 @@ public class EntityPlayerActionPack
         strafing = other.strafing;
 
         itemUseCooldown = other.itemUseCooldown;
+
+        attackCritical = other.attackCritical;
+    }
+
+    public EntityPlayerActionPack setAttackCritical(boolean critical)
+    {
+        attackCritical = critical;
+        return this;
     }
 
     public EntityPlayerActionPack start(ActionType type, Action action)
@@ -414,11 +425,34 @@ public class EntityPlayerActionPack
                 switch (hit.getType()) {
                     case ENTITY: {
                         EntityHitResult entityHit = (EntityHitResult) hit;
-                        if (!action.isContinuous)
+                        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+
+                        if (ap.attackCritical)
                         {
-                            player.attack(entityHit.getEntity());
-                            player.swing(InteractionHand.MAIN_HAND);
+                            if (player.onGround())
+                            {
+                                player.jumpFromGround();
+                                player.resetLastActionTime();
+                                return false;
+                            }
+                            // Critical hits require falling (not rising)
+                            if (player.getDeltaMovement().y >= 0.0D)
+                            {
+                                return false;
+                            }
                         }
+
+                        if (!CarpetSettings.spamClickCombat)
+                        {
+                            // Prevent constant weak hits when spamming attacks in modern combat
+                            if (player.getAttackStrengthScale(0.5F) < 0.9F)
+                            {
+                                return false;
+                            }
+                        }
+
+                        player.attack(entityHit.getEntity());
+                        player.swing(InteractionHand.MAIN_HAND);
                         player.resetAttackStrengthTicker();
                         player.resetLastActionTime();
                         return true;
@@ -489,9 +523,11 @@ public class EntityPlayerActionPack
                         return blockBroken;
                     }
                 }
-                if(!action.isContinuous) player.swing(InteractionHand.MAIN_HAND);
-                player.resetAttackStrengthTicker();
-                player.resetLastActionTime();
+                if (!action.isContinuous)
+                {
+                    player.swing(InteractionHand.MAIN_HAND);
+                    player.resetLastActionTime();
+                }
                 return false;
             }
 
