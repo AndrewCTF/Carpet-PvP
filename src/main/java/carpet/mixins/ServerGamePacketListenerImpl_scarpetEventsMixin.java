@@ -259,7 +259,7 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
             if (displayInfo == null) {
                 return;
             }
-            if(PLAYER_CHOOSES_RECIPE.onRecipeSelected(player, displayInfo.parent().id().location(), packet.useMaxItems())) ci.cancel();
+            if(PLAYER_CHOOSES_RECIPE.onRecipeSelected(player, displayInfo.parent().id().identifier(), packet.useMaxItems())) ci.cancel();
         }
     }
 

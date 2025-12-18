@@ -15,6 +15,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -1015,7 +1016,7 @@ public class CarpetSettings
                         double from = worldBorder.getSize();
                         double to = worldBorder.getLerpTarget();
                         long time = worldBorder.getLerpTime();
-                        worldBorder.lerpSizeBetween(from, to, time);
+                        worldBorder.lerpSizeBetween(from, to, time, Util.getMillis());
                     }
                 }
             }

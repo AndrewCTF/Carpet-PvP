@@ -30,6 +30,7 @@ import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -84,7 +85,7 @@ public class ShapesRenderer
             case DOWN -> poseStack.mulPose(Axis.XP.rotationDegrees(-90));
             case CAMERA -> poseStack.mulPose(camera.rotation());
             case PLAYER -> {
-                Vec3 vector = objectPos.subtract(camera.getPosition());
+                Vec3 vector = objectPos.subtract(camera.position());
                 double x = vector.x;
                 double y = vector.y;
                 double z = vector.z;
@@ -141,9 +142,9 @@ public class ShapesRenderer
         Tesselator tesselator = Tesselator.getInstance();
 
         // render
-        double cameraX = camera.getPosition().x;
-        double cameraY = camera.getPosition().y;
-        double cameraZ = camera.getPosition().z;
+        double cameraX = camera.position().x;
+        double cameraY = camera.position().y;
+        double cameraZ = camera.position().z;
         boolean entityBoxes = false;
 
         if (!shapes.isEmpty())
@@ -156,7 +157,6 @@ public class ShapesRenderer
             matrixStack.mul(matrices.last().pose());
 
             // lines
-            RenderSystem.lineWidth(0.5F);
             shapes.get(dimensionType).values().forEach(s -> {
                 if ((!s.shape.debug || entityBoxes) && s.shouldRender(dimensionType))
                 {
@@ -164,14 +164,12 @@ public class ShapesRenderer
                 }
             });
             // faces
-            RenderSystem.lineWidth(0.1F);
             shapes.get(dimensionType).values().forEach(s -> {
                 if ((!s.shape.debug || entityBoxes) && s.shouldRender(dimensionType))
                 {
                     s.renderFaces(tesselator, cameraX, cameraY, cameraZ, partialTick);
                 }
             });
-            RenderSystem.lineWidth(1.0F);
             matrixStack.popMatrix();
 
         }
