@@ -149,6 +149,9 @@ public class CarpetSettings
             @Rule(desc = "Allows fake players to use precise elytra gliding controls via /player <name> glide ...", category = {CREATIVE})
             public static boolean fakePlayerElytraGlide = false;
 
+            @Rule(desc = "Allows fake players to use built-in navigation/pathfinding via /player <name> nav ...", category = {CREATIVE})
+            public static boolean fakePlayerNavigation = false;
+
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
 

@@ -10,6 +10,9 @@ import java.util.ArrayList;
 
 import carpet.patches.EntityPlayerMPFake;
 import carpet.script.utils.Tracer;
+import carpet.helpers.pathfinding.BotNavMode;
+import carpet.helpers.pathfinding.ElytraAStarPathfinder;
+import carpet.helpers.pathfinding.NavAStarPathfinder;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -19,6 +22,7 @@ import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -99,6 +103,25 @@ public class EntityPlayerActionPack
     private double glideLaunchSpeed = 0.6D;    // horizontal boost (blocks/tick)
     private int glideLaunchForwardTicks = 6;   // ticks of pre-deploy horizontal boost
     private int glideLaunchTicksRemaining = 0;
+
+    // --- Bot navigation (Baritone-like foundation) ---
+    private static final ElytraAStarPathfinder NAV_ELYTRA_PATHFINDER = new ElytraAStarPathfinder();
+    private static final NavAStarPathfinder NAV_ASTAR = new NavAStarPathfinder();
+
+    private boolean navEnabled = false;
+    private BotNavMode navMode = BotNavMode.AUTO;
+    private Vec3 navTargetPos = null;
+    private double navArrivalRadius = 1.0D;
+
+    private List<Vec3> navWaypoints = null;
+    private int navWaypointIndex = 0;
+    private int navRepathCooldownTicks = 0;
+    private boolean navNeedsRepath = false;
+
+    private double navLastDistanceToNext = Double.POSITIVE_INFINITY;
+    private int navNoProgressTicks = 0;
+    private int navJumpCooldownTicks = 0;
+    private boolean navWaterJumping = false;
 
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
@@ -456,7 +479,69 @@ public class EntityPlayerActionPack
         critAwaitingGroundAfterHit = false;
         critPostLandingDelay = 0;
         setGlideEnabled(false);
+        stopNavigation();
         return stopMovement();
+    }
+
+    public EntityPlayerActionPack stopNavigation()
+    {
+        navEnabled = false;
+        navMode = BotNavMode.AUTO;
+        navTargetPos = null;
+        navArrivalRadius = 1.0D;
+
+        navWaypoints = null;
+        navWaypointIndex = 0;
+        navRepathCooldownTicks = 0;
+        navNeedsRepath = false;
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        navJumpCooldownTicks = 0;
+
+        if (navWaterJumping)
+        {
+            player.setJumping(false);
+            navWaterJumping = false;
+        }
+
+        // If we were navigating via elytra, this also stops that controller.
+        setGlideEnabled(false);
+        return this;
+    }
+
+    public boolean isNavEnabled()
+    {
+        return navEnabled;
+    }
+
+    public BotNavMode getNavMode()
+    {
+        return navMode;
+    }
+
+    public Vec3 getNavTargetPos()
+    {
+        return navTargetPos;
+    }
+
+    public double getNavArrivalRadius()
+    {
+        return navArrivalRadius;
+    }
+
+    public EntityPlayerActionPack setNavGoto(Vec3 targetPos, BotNavMode mode, double arrivalRadius)
+    {
+        navEnabled = true;
+        navMode = mode == null ? BotNavMode.AUTO : mode;
+        navTargetPos = targetPos;
+        navArrivalRadius = Math.max(0.0D, arrivalRadius);
+        navWaypoints = null;
+        navWaypointIndex = 0;
+        navNeedsRepath = true;
+        navRepathCooldownTicks = 0;
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        return this;
     }
 
     public EntityPlayerActionPack mount(boolean onlyRideables)
@@ -529,6 +614,8 @@ public class EntityPlayerActionPack
                 }
             }
         }
+
+        tickNavigation();
 
         tickGlide();
 
@@ -773,6 +860,220 @@ public class EntityPlayerActionPack
         }
         Vec3 desiredVel = thrust.normalize().scale(glideSpeed);
         player.setDeltaMovement(desiredVel);
+    }
+
+    private void tickNavigation()
+    {
+        if (!navEnabled)
+        {
+            if (navWaterJumping)
+            {
+                player.setJumping(false);
+                navWaterJumping = false;
+            }
+            return;
+        }
+
+        if (!CarpetSettings.fakePlayerNavigation)
+        {
+            stopNavigation();
+            return;
+        }
+
+        if (!(player instanceof EntityPlayerMPFake))
+        {
+            stopNavigation();
+            return;
+        }
+
+        if (player.isSpectator())
+        {
+            return;
+        }
+
+        if (navRepathCooldownTicks > 0)
+        {
+            navRepathCooldownTicks--;
+        }
+        if (navJumpCooldownTicks > 0)
+        {
+            navJumpCooldownTicks--;
+        }
+
+        if (navTargetPos == null)
+        {
+            stopNavigation();
+            return;
+        }
+
+        if (player.position().distanceTo(navTargetPos) <= navArrivalRadius)
+        {
+            stopNavigation();
+            stopMovement();
+            return;
+        }
+
+        BotNavMode effectiveMode = navMode;
+        if (effectiveMode == BotNavMode.AUTO)
+        {
+            if (isInWaterish())
+            {
+                effectiveMode = BotNavMode.WATER;
+            }
+            else
+            {
+                ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
+                boolean canElytra = chest.is(Items.ELYTRA) && !chest.nextDamageWillBreak();
+                effectiveMode = (canElytra && CarpetSettings.fakePlayerElytraGlide) ? BotNavMode.AIR : BotNavMode.LAND;
+            }
+        }
+
+        if (effectiveMode == BotNavMode.AIR)
+        {
+            if (!CarpetSettings.fakePlayerElytraGlide)
+            {
+                stopNavigation();
+                return;
+            }
+
+            if (navNeedsRepath && navRepathCooldownTicks <= 0)
+            {
+                navNeedsRepath = false;
+                navRepathCooldownTicks = 20;
+
+                BlockPos start = player.blockPosition();
+                BlockPos goal = BlockPos.containing(navTargetPos);
+                ElytraAStarPathfinder.Settings settings = ElytraAStarPathfinder.Settings.defaults();
+                List<BlockPos> raw = NAV_ELYTRA_PATHFINDER.findPath((ServerLevel) player.level(), start, goal, settings);
+                if (raw == null)
+                {
+                    stopNavigation();
+                    return;
+                }
+                List<BlockPos> compressed = ElytraAStarPathfinder.compressWaypoints(raw, settings.waypointStride());
+                List<Vec3> waypoints = new ArrayList<>(compressed.size());
+                for (BlockPos p : compressed)
+                {
+                    waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
+                }
+
+                navWaypoints = waypoints;
+                navWaypointIndex = 0;
+                setGlideEnabled(true);
+                setGlideGotoWaypoints(waypoints, navTargetPos, navArrivalRadius);
+            }
+            return;
+        }
+
+        if (navNeedsRepath && navRepathCooldownTicks <= 0)
+        {
+            navNeedsRepath = false;
+            navRepathCooldownTicks = 20;
+
+            BlockPos start = player.blockPosition();
+            BlockPos goal = BlockPos.containing(navTargetPos);
+            NavAStarPathfinder.Settings settings = NavAStarPathfinder.Settings.defaults();
+            NavAStarPathfinder.Traversal traversal = (effectiveMode == BotNavMode.WATER) ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.LAND;
+            List<BlockPos> raw = NAV_ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, settings);
+            if (raw == null)
+            {
+                stopNavigation();
+                return;
+            }
+            List<BlockPos> compressed = NavAStarPathfinder.compressWaypoints(raw, 3);
+            List<Vec3> waypoints = new ArrayList<>(compressed.size());
+            for (BlockPos p : compressed)
+            {
+                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
+            }
+            navWaypoints = waypoints;
+            navWaypointIndex = 0;
+        }
+
+        if (glideEnabled)
+        {
+            setGlideEnabled(false);
+        }
+
+        if (navWaypoints == null || navWaypointIndex >= navWaypoints.size())
+        {
+            navNeedsRepath = true;
+            return;
+        }
+
+        Vec3 next = navWaypoints.get(navWaypointIndex);
+        double dist = player.position().distanceTo(next);
+        if (dist <= 0.85D)
+        {
+            navWaypointIndex++;
+            navNoProgressTicks = 0;
+            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+            if (navWaterJumping)
+            {
+                player.setJumping(false);
+                navWaterJumping = false;
+            }
+            return;
+        }
+
+        if (dist + 0.01D >= navLastDistanceToNext)
+        {
+            navNoProgressTicks++;
+        }
+        else
+        {
+            navNoProgressTicks = 0;
+        }
+        navLastDistanceToNext = dist;
+
+        if (navNoProgressTicks > 60)
+        {
+            navNoProgressTicks = 0;
+            navNeedsRepath = true;
+            return;
+        }
+
+        Vec2 rot = rotationsTowards(player.getEyePosition(1.0F), next);
+        look(stepYaw(player.getYRot(), rot.x, 40.0F), player.getXRot());
+
+        setSneaking(false);
+        setSprinting(true);
+        setForward(1.0F);
+        setStrafing(0.0F);
+
+        boolean wantUp = next.y > player.getY() + 0.2D;
+        if (effectiveMode == BotNavMode.WATER)
+        {
+            boolean inWater = isInWaterish();
+            if (inWater && wantUp)
+            {
+                player.setJumping(true);
+                navWaterJumping = true;
+            }
+            else if (navWaterJumping)
+            {
+                player.setJumping(false);
+                navWaterJumping = false;
+            }
+        }
+        else
+        {
+            if (wantUp && player.onGround() && navJumpCooldownTicks <= 0)
+            {
+                navJumpCooldownTicks = 8;
+                start(ActionType.JUMP, Action.once());
+            }
+        }
+    }
+
+    private boolean isInWaterish()
+    {
+        if (player.isInWater())
+        {
+            return true;
+        }
+        BlockPos feet = player.blockPosition();
+        return player.level().getFluidState(feet).is(FluidTags.WATER) || player.level().getFluidState(feet.above()).is(FluidTags.WATER);
     }
 
     private Vec3 computeThrust(float yawDeg, float pitchDeg)

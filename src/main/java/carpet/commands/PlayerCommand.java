@@ -4,6 +4,7 @@ import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
 import carpet.helpers.pathfinding.ElytraAStarPathfinder;
+import carpet.helpers.pathfinding.BotNavMode;
 import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
@@ -75,6 +76,7 @@ public class PlayerCommand
                         .then(makeActionCommand("jump", ActionType.JUMP))
                         .then(makeAttackCommand())
                     .then(makeGlideCommand())
+                    .then(makeNavCommand())
                         .then(makeActionCommand("drop", ActionType.DROP_ITEM))
                         .then(makeDropCommand("drop", false))
                         .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
@@ -200,6 +202,101 @@ public class PlayerCommand
                         .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
                             .executes(PlayerCommand::glideGotoWithRadius))))
                 .then(literal("status").executes(PlayerCommand::glideStatus));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeNavCommand()
+    {
+        return literal("nav")
+                .then(literal("stop").executes(PlayerCommand::navStop))
+                .then(literal("status").executes(PlayerCommand::navStatus))
+                .then(literal("goto")
+                        .then(argument("pos", Vec3Argument.vec3())
+                                .executes(c -> navGoto(c, BotNavMode.AUTO))
+                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(c -> navGoto(c, BotNavMode.AUTO)))
+                        )
+                        .then(literal("land").then(argument("pos", Vec3Argument.vec3())
+                                .executes(c -> navGoto(c, BotNavMode.LAND))
+                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(c -> navGoto(c, BotNavMode.LAND)))))
+                        .then(literal("water").then(argument("pos", Vec3Argument.vec3())
+                                .executes(c -> navGoto(c, BotNavMode.WATER))
+                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(c -> navGoto(c, BotNavMode.WATER)))))
+                        .then(literal("air").then(argument("pos", Vec3Argument.vec3())
+                                .executes(c -> navGoto(c, BotNavMode.AIR))
+                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(c -> navGoto(c, BotNavMode.AIR)))))
+                );
+    }
+
+    private static boolean cantNavManipulate(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return true;
+        if (!CarpetSettings.fakePlayerNavigation)
+        {
+            Messenger.m(context.getSource(), "r Navigation is disabled. Enable the carpet rule 'fakePlayerNavigation' first.");
+            return true;
+        }
+        ServerPlayer player = getPlayer(context);
+        if (!(player instanceof EntityPlayerMPFake))
+        {
+            Messenger.m(context.getSource(), "r Navigation is only supported for fake players.");
+            return true;
+        }
+        return false;
+    }
+
+    private static int navStop(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.stopNavigation();
+        Messenger.m(context.getSource(), "g Navigation stopped for ", player.getName());
+        return 1;
+    }
+
+    private static int navStatus(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        if (!ap.isNavEnabled())
+        {
+            Messenger.m(context.getSource(), "y Navigation: disabled for ", player.getName());
+            return 1;
+        }
+        Vec3 target = ap.getNavTargetPos();
+        Messenger.m(context.getSource(),
+                "g Navigation: enabled ",
+                "w mode=", "y ", ap.getNavMode().name().toLowerCase(),
+                "w  target=", (target == null ? "r <none>" : String.format("y %.1f %.1f %.1f", target.x, target.y, target.z)),
+                "w  radius=", String.format("y %.2f", ap.getNavArrivalRadius()),
+                "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int navGoto(CommandContext<CommandSourceStack> context, BotNavMode mode)
+    {
+        if (cantNavManipulate(context)) return 0;
+
+        Vec3 pos = Vec3Argument.getVec3(context, "pos");
+        double arrivalRadius = 1.0D;
+        try
+        {
+            arrivalRadius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        }
+        catch (IllegalArgumentException ignored)
+        {
+        }
+
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavGoto(pos, mode, arrivalRadius);
+
+        Messenger.m(context.getSource(), "g Navigation started for ", player.getName(), "w  mode=", "y ", mode.name().toLowerCase());
+        return 1;
     }
 
     private static boolean cantBotManipulate(CommandContext<CommandSourceStack> context)
