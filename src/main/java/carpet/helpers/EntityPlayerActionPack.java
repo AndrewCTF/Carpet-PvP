@@ -41,6 +41,7 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 public class EntityPlayerActionPack
 {
@@ -113,6 +114,16 @@ public class EntityPlayerActionPack
     private Vec3 navTargetPos = null;
     private double navArrivalRadius = 1.0D;
 
+    private enum NavAirArrival
+    {
+        LAND,
+        DROP
+    }
+
+    private NavAirArrival navAirArrival = NavAirArrival.LAND;
+    private Vec3 navAirRequestedTargetPos = null;
+
+    private List<BlockPos> navNodes = null;
     private List<Vec3> navWaypoints = null;
     private int navWaypointIndex = 0;
     private int navRepathCooldownTicks = 0;
@@ -490,6 +501,7 @@ public class EntityPlayerActionPack
         navTargetPos = null;
         navArrivalRadius = 1.0D;
 
+        navNodes = null;
         navWaypoints = null;
         navWaypointIndex = 0;
         navRepathCooldownTicks = 0;
@@ -535,6 +547,36 @@ public class EntityPlayerActionPack
         navMode = mode == null ? BotNavMode.AUTO : mode;
         navTargetPos = targetPos;
         navArrivalRadius = Math.max(0.0D, arrivalRadius);
+        navAirArrival = NavAirArrival.LAND;
+        navAirRequestedTargetPos = null;
+        navNodes = null;
+        navWaypoints = null;
+        navWaypointIndex = 0;
+        navNeedsRepath = true;
+        navRepathCooldownTicks = 0;
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        return this;
+    }
+
+    public EntityPlayerActionPack setNavGotoAir(Vec3 targetPos, double arrivalRadius, boolean landOnFloor)
+    {
+        navEnabled = true;
+        navMode = BotNavMode.AIR;
+        navArrivalRadius = Math.max(0.0D, arrivalRadius);
+        navAirRequestedTargetPos = targetPos;
+        navAirArrival = landOnFloor ? NavAirArrival.LAND : NavAirArrival.DROP;
+
+        if (landOnFloor)
+        {
+            navTargetPos = resolveLandingTarget(targetPos);
+        }
+        else
+        {
+            navTargetPos = targetPos;
+        }
+
+        navNodes = null;
         navWaypoints = null;
         navWaypointIndex = 0;
         navNeedsRepath = true;
@@ -792,10 +834,27 @@ public class EntityPlayerActionPack
                         glideTargetPos = glideWaypoints.get(glideWaypointIndex);
                         return;
                     }
-                    // Done with air path; start landing onto the requested destination.
+                    // Done with air path.
                     glideWaypoints = null;
                     glideTargetPos = null;
-                    glideMode = GlideMode.LANDING;
+                    if (glideLandingTargetPos != null)
+                    {
+                        // Start landing onto the requested destination.
+                        glideMode = GlideMode.LANDING;
+                        return;
+                    }
+
+                    // No landing target: treat as final arrival and apply arrival action.
+                    GlideArrivalAction action = glideArrivalAction;
+                    if (glideFreezeAtTarget) action = GlideArrivalAction.FREEZE;
+                    if (action == GlideArrivalAction.FREEZE)
+                    {
+                        setGlideFrozen(true);
+                    }
+                    else
+                    {
+                        setGlideEnabled(false);
+                    }
                     return;
                 }
 
@@ -906,13 +965,6 @@ public class EntityPlayerActionPack
             return;
         }
 
-        if (player.position().distanceTo(navTargetPos) <= navArrivalRadius)
-        {
-            stopNavigation();
-            stopMovement();
-            return;
-        }
-
         BotNavMode effectiveMode = navMode;
         if (effectiveMode == BotNavMode.AUTO)
         {
@@ -925,6 +977,40 @@ public class EntityPlayerActionPack
                 ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
                 boolean canElytra = chest.is(Items.ELYTRA) && !chest.nextDamageWillBreak();
                 effectiveMode = (canElytra && CarpetSettings.fakePlayerElytraGlide) ? BotNavMode.AIR : BotNavMode.LAND;
+            }
+        }
+
+        // Completion rules: air+LAND should keep running until we actually touch down.
+        if (effectiveMode != BotNavMode.AIR)
+        {
+            if (player.position().distanceTo(navTargetPos) <= navArrivalRadius)
+            {
+                stopNavigation();
+                stopMovement();
+                return;
+            }
+        }
+        else
+        {
+            if (navAirArrival == NavAirArrival.DROP)
+            {
+                if (player.position().distanceTo(navTargetPos) <= navArrivalRadius)
+                {
+                    // Stop gliding immediately; gravity takes over.
+                    stopNavigation();
+                    stopMovement();
+                    return;
+                }
+            }
+            else
+            {
+                // LAND: stop navigation when we have landed and glide controller has ended.
+                if (player.onGround() && !player.isFallFlying() && !glideEnabled)
+                {
+                    stopNavigation();
+                    stopMovement();
+                    return;
+                }
             }
         }
 
@@ -960,7 +1046,17 @@ public class EntityPlayerActionPack
                 navWaypoints = waypoints;
                 navWaypointIndex = 0;
                 setGlideEnabled(true);
-                setGlideGotoWaypoints(waypoints, navTargetPos, navArrivalRadius);
+                if (navAirArrival == NavAirArrival.DROP)
+                {
+                    // No landing behavior: stop gliding after last waypoint.
+                    setGlideArrivalAction(GlideArrivalAction.STOP);
+                    setGlideGotoWaypoints(waypoints, null, navArrivalRadius);
+                }
+                else
+                {
+                    setGlideArrivalAction(GlideArrivalAction.LAND);
+                    setGlideGotoWaypoints(waypoints, navTargetPos, navArrivalRadius);
+                }
             }
             return;
         }
@@ -973,16 +1069,19 @@ public class EntityPlayerActionPack
             BlockPos start = player.blockPosition();
             BlockPos goal = BlockPos.containing(navTargetPos);
             NavAStarPathfinder.Settings settings = NavAStarPathfinder.Settings.defaults();
-            NavAStarPathfinder.Traversal traversal = (effectiveMode == BotNavMode.WATER) ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.LAND;
+            NavAStarPathfinder.Traversal traversal = (effectiveMode == BotNavMode.WATER) ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
             List<BlockPos> raw = NAV_ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, settings);
             if (raw == null)
             {
                 stopNavigation();
                 return;
             }
-            List<BlockPos> compressed = NavAStarPathfinder.compressWaypoints(raw, 3);
-            List<Vec3> waypoints = new ArrayList<>(compressed.size());
-            for (BlockPos p : compressed)
+
+            // Keep node-to-node fidelity so the follower can detect jump edges.
+            navNodes = raw;
+
+            List<Vec3> waypoints = new ArrayList<>(raw.size());
+            for (BlockPos p : raw)
             {
                 waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
             }
@@ -1058,7 +1157,19 @@ public class EntityPlayerActionPack
         }
         else
         {
-            if (wantUp && player.onGround() && navJumpCooldownTicks <= 0)
+            boolean needsPlannedJump = false;
+            if (navNodes != null && navWaypointIndex < navNodes.size())
+            {
+                BlockPos cur = player.blockPosition();
+                BlockPos planned = navNodes.get(navWaypointIndex);
+                int dx = Math.abs(planned.getX() - cur.getX());
+                int dz = Math.abs(planned.getZ() - cur.getZ());
+                // A 2-block cardinal move is usually a planned gap-jump.
+                needsPlannedJump = (dx + dz) >= 2 && (dx == 0 || dz == 0);
+            }
+
+            boolean shouldJump = wantUp || (needsPlannedJump && dist <= 1.35D);
+            if (shouldJump && player.onGround() && navJumpCooldownTicks <= 0)
             {
                 navJumpCooldownTicks = 8;
                 start(ActionType.JUMP, Action.once());
@@ -1074,6 +1185,19 @@ public class EntityPlayerActionPack
         }
         BlockPos feet = player.blockPosition();
         return player.level().getFluidState(feet).is(FluidTags.WATER) || player.level().getFluidState(feet.above()).is(FluidTags.WATER);
+    }
+
+    private Vec3 resolveLandingTarget(Vec3 requested)
+    {
+        if (!(player.level() instanceof ServerLevel level))
+        {
+            return requested;
+        }
+        int x = Mth.floor(requested.x);
+        int z = Mth.floor(requested.z);
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
+        y = Mth.clamp(y, level.getMinY() + 1, level.getMaxY() - 2);
+        return new Vec3(x + 0.5D, y, z + 0.5D);
     }
 
     private Vec3 computeThrust(float yawDeg, float pitchDeg)

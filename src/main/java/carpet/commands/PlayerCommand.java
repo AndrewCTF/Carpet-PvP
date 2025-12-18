@@ -223,10 +223,22 @@ public class PlayerCommand
                                 .executes(c -> navGoto(c, BotNavMode.WATER))
                                 .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
                                         .executes(c -> navGoto(c, BotNavMode.WATER)))))
-                        .then(literal("air").then(argument("pos", Vec3Argument.vec3())
-                                .executes(c -> navGoto(c, BotNavMode.AIR))
-                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
-                                        .executes(c -> navGoto(c, BotNavMode.AIR)))))
+                .then(literal("air")
+                    // Default: land on the floor under the target XZ.
+                    .then(argument("pos", Vec3Argument.vec3())
+                        .executes(c -> navGotoAir(c, true))
+                        .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                            .executes(c -> navGotoAir(c, true))))
+                    .then(literal("land")
+                        .then(argument("pos", Vec3Argument.vec3())
+                            .executes(c -> navGotoAir(c, true))
+                            .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                .executes(c -> navGotoAir(c, true)))))
+                    .then(literal("drop")
+                        .then(argument("pos", Vec3Argument.vec3())
+                            .executes(c -> navGotoAir(c, false))
+                            .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                .executes(c -> navGotoAir(c, false))))))
                 );
     }
 
@@ -296,6 +308,28 @@ public class PlayerCommand
         ap.setNavGoto(pos, mode, arrivalRadius);
 
         Messenger.m(context.getSource(), "g Navigation started for ", player.getName(), "w  mode=", "y ", mode.name().toLowerCase());
+        return 1;
+    }
+
+    private static int navGotoAir(CommandContext<CommandSourceStack> context, boolean landOnFloor)
+    {
+        if (cantNavManipulate(context)) return 0;
+
+        Vec3 pos = Vec3Argument.getVec3(context, "pos");
+        double arrivalRadius = 1.0D;
+        try
+        {
+            arrivalRadius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        }
+        catch (IllegalArgumentException ignored)
+        {
+        }
+
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavGotoAir(pos, arrivalRadius, landOnFloor);
+
+        Messenger.m(context.getSource(), "g Air navigation started for ", player.getName(), "w  arrival=", "y ", landOnFloor ? "land" : "drop");
         return 1;
     }
 

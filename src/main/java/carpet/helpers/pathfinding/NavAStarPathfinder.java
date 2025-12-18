@@ -25,7 +25,8 @@ public final class NavAStarPathfinder
     public enum Traversal
     {
         LAND,
-        WATER
+        WATER,
+        AMPHIBIOUS
     }
 
     public record Settings(
@@ -35,7 +36,9 @@ public final class NavAStarPathfinder
             int maxRangeY,
             int maxFall,
             int maxStepUp,
-            boolean allowDiagonal
+            boolean allowDiagonal,
+            boolean allowJumps,
+            int maxJumpLength
     )
     {
         public static Settings defaults()
@@ -47,7 +50,9 @@ public final class NavAStarPathfinder
                     96,
                     4,
                     1,
-                    true
+                true,
+                true,
+                2
             );
         }
     }
@@ -139,9 +144,13 @@ public final class NavAStarPathfinder
                     {
                         nextPos = nextStandableLand(level, cur.x, cur.y, cur.z, nx, nz, settings);
                     }
-                    else
+                    else if (traversal == Traversal.WATER)
                     {
                         nextPos = nextSwimmable(level, cur.x, cur.y, cur.z, nx, nz, settings);
+                    }
+                    else
+                    {
+                        nextPos = nextAmphibious(level, cur.x, cur.y, cur.z, nx, nz, settings);
                     }
 
                     if (nextPos == null) continue;
@@ -170,9 +179,71 @@ public final class NavAStarPathfinder
                     open.add(next);
                 }
             }
+
+            // Jump links (land only): short parkour over 1-block gaps / small obstacles.
+            if ((traversal == Traversal.LAND || traversal == Traversal.AMPHIBIOUS) && settings.allowJumps() && settings.maxJumpLength() >= 2)
+            {
+                for (int[] dir : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}})
+                {
+                    int dx = dir[0];
+                    int dz = dir[1];
+                    for (int len = 2; len <= settings.maxJumpLength(); len++)
+                    {
+                        int nx = cur.x + dx * len;
+                        int nz = cur.z + dz * len;
+
+                        if (!withinBounds(nx, cur.y, nz, s, g, settings)) continue;
+                        if (!level.hasChunk(nx >> 4, nz >> 4)) continue;
+
+                        // Ensure intermediate chunks are loaded too.
+                        int mx = cur.x + dx;
+                        int mz = cur.z + dz;
+                        if (!level.hasChunk(mx >> 4, mz >> 4)) continue;
+
+                        BlockPos nextPos = nextStandableLand(level, cur.x, cur.y, cur.z, nx, nz, settings);
+                        if (nextPos == null) continue;
+
+                        if (!isJumpArcClear(level, cur.x, cur.y, cur.z, nextPos))
+                        {
+                            continue;
+                        }
+
+                        long nKey = nextPos.asLong();
+                        if (closed.contains(nKey)) continue;
+
+                        float jumpCost = stepCost(cur.x, cur.y, cur.z, nextPos) + 0.85F; // prefer walking when possible
+                        float ng = cur.g + jumpCost;
+
+                        Node prev = best.get(nKey);
+                        if (prev != null && ng >= prev.g) continue;
+
+                        float nf = ng + heuristic(nextPos, g);
+                        Node next = new Node(nKey, nextPos.getX(), nextPos.getY(), nextPos.getZ(), cur.key, ng, nf);
+                        best.put(nKey, next);
+                        open.add(next);
+                    }
+                }
+            }
         }
 
         return null;
+    }
+
+    private static boolean isJumpArcClear(ServerLevel level, int fromX, int fromY, int fromZ, BlockPos landing)
+    {
+        // Very conservative clearance check:
+        // require 2-3 blocks of empty space at the midpoint so we don't bonk on low ceilings.
+        int dx = Integer.signum(landing.getX() - fromX);
+        int dz = Integer.signum(landing.getZ() - fromZ);
+        int mx = fromX + dx;
+        int mz = fromZ + dz;
+
+        int baseY = Math.max(fromY, landing.getY());
+        BlockPos midFeet = new BlockPos(mx, baseY, mz);
+        if (!isPassable(level, midFeet)) return false;
+        if (!isPassable(level, midFeet.above())) return false;
+        if (!isPassable(level, midFeet.above(2))) return false;
+        return true;
     }
 
     public static List<BlockPos> compressWaypoints(List<BlockPos> raw, int stride)
@@ -230,6 +301,12 @@ public final class NavAStarPathfinder
             return s;
         }
 
+        if (traversal == Traversal.AMPHIBIOUS)
+        {
+            BlockPos s = findNearbyAmphibious(level, start);
+            return s;
+        }
+
         BlockPos s = findNearbyStandable(level, start);
         return s;
     }
@@ -243,7 +320,19 @@ public final class NavAStarPathfinder
             return findNearbySwimmable(level, goal);
         }
 
+        if (traversal == Traversal.AMPHIBIOUS)
+        {
+            return findNearbyAmphibious(level, goal);
+        }
+
         return findNearbyStandable(level, goal);
+    }
+
+    private static BlockPos findNearbyAmphibious(ServerLevel level, BlockPos around)
+    {
+        BlockPos water = findNearbySwimmable(level, around);
+        if (water != null) return water;
+        return findNearbyStandable(level, around);
     }
 
     private static BlockPos findNearbyStandable(ServerLevel level, BlockPos around)
@@ -315,6 +404,14 @@ public final class NavAStarPathfinder
         return null;
     }
 
+    private static BlockPos nextAmphibious(ServerLevel level, int fromX, int fromY, int fromZ, int toX, int toZ, Settings settings)
+    {
+        // Prefer staying on land when possible.
+        BlockPos land = nextStandableLand(level, fromX, fromY, fromZ, toX, toZ, settings);
+        if (land != null) return land;
+        return nextSwimmable(level, fromX, fromY, fromZ, toX, toZ, settings);
+    }
+
     private static boolean withinWorldY(ServerLevel level, int y)
     {
         return y >= level.getMinY() + 1 && y <= level.getMaxY() - 2;
@@ -327,6 +424,10 @@ public final class NavAStarPathfinder
         if (traversal == Traversal.WATER)
         {
             return isSwimmable(level, a) && isSwimmable(level, b);
+        }
+        if (traversal == Traversal.AMPHIBIOUS)
+        {
+            return isBodyPassable(level, a) && isBodyPassable(level, b);
         }
         return isBodyPassable(level, a) && isBodyPassable(level, b);
     }

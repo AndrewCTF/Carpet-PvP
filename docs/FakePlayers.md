@@ -188,12 +188,15 @@ Basic usage:
 - `/player <bot> nav goto <x y z>` (AUTO: chooses water if swimming, else air if elytra is usable + `fakePlayerElytraGlide`, else land)
 - `/player <bot> nav goto land <x y z> [arrivalRadius]`
 - `/player <bot> nav goto water <x y z> [arrivalRadius]`
-- `/player <bot> nav goto air <x y z> [arrivalRadius]` (delegates to the elytra glide controller + air A*)
+- `/player <bot> nav goto air <x y z> [arrivalRadius]` (default: land on the floor under target XZ)
+- `/player <bot> nav goto air land <x y z> [arrivalRadius]`
+- `/player <bot> nav goto air drop <x y z> [arrivalRadius]` (stop gliding at the target and fall)
 - `/player <bot> nav status`
 - `/player <bot> nav stop`
 
 Notes:
 
+- LAND navigation is **amphibious**: it can walk and swim through water when needed.
 - AIR navigation additionally requires `/carpet fakePlayerElytraGlide true` and a non-broken elytra equipped in the chest slot.
 - This is a foundation for deeper Baritone-like features (cost models, danger avoidance, better movement primitives, long-range planning).
 ### Freeze / hover
