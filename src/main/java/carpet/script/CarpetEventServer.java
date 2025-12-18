@@ -934,8 +934,8 @@ public class CarpetEventServer
                 // eligibility already checked in mixin
                 Value fromValue = ListValue.fromTriple(from.x, from.y, from.z);
                 Value toValue = (to == null) ? Value.NULL : ListValue.fromTriple(to.x, to.y, to.z);
-                Value fromDimStr = NBTSerializableValue.nameFromRegistryId(fromDim.location());
-                Value toDimStr = NBTSerializableValue.nameFromRegistryId(dimTo.location());
+                Value fromDimStr = NBTSerializableValue.nameFromRegistryId(fromDim.identifier());
+                Value toDimStr = NBTSerializableValue.nameFromRegistryId(dimTo.identifier());
 
                 handler.call(() -> Arrays.asList(new EntityValue(player), fromValue, fromDimStr, toValue, toDimStr), player::createCommandSourceStack);
             }

@@ -1236,7 +1236,7 @@ public class WorldAccess
             Registry<Block> blocks = cc.registry(Registries.BLOCK);
             if (lv.isEmpty())
             {
-                return ListValue.wrap(blocks.listElements().map(blockReference -> ValueConversions.of(blockReference.key().location())));
+                return ListValue.wrap(blocks.listElements().map(blockReference -> ValueConversions.of(blockReference.key().identifier())));
             }
             ResourceLocation tag = InputValidator.identifierOf(lv.get(0).getString());
             Optional<HolderSet.Named<Block>> tagset = blocks.get(TagKey.create(Registries.BLOCK, tag));
@@ -1267,7 +1267,7 @@ public class WorldAccess
             ServerLevel world = cc.level();
             if (lv.isEmpty())
             {
-                return ListValue.wrap(cc.registry(Registries.BIOME).listElements().map(biomeReference -> ValueConversions.of(biomeReference.key().location())));
+                return ListValue.wrap(cc.registry(Registries.BIOME).listElements().map(biomeReference -> ValueConversions.of(biomeReference.key().identifier())));
             }
 
             Biome biome;
