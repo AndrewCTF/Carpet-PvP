@@ -54,7 +54,7 @@ public class SpawnOverrides {
 
     public static WeightedList<MobSpawnSettings.SpawnerData> test(StructureManager structureFeatureManager, LongSet foo,
                                                                   MobCategory cat, Structure confExisting, BlockPos where) {
-        ResourceLocation resource = structureFeatureManager.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(confExisting);
+        Identifier resource = structureFeatureManager.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(confExisting);
         ResourceKey<Structure> key = ResourceKey.create(Registries.STRUCTURE, resource);
         final Pair<BooleanSupplier, StructureSpawnOverride> spawnData = carpetOverrides.get(Pair.of(cat, key));
         if (spawnData == null || !spawnData.getKey().getAsBoolean()) return null;

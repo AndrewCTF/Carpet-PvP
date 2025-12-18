@@ -1,6 +1,7 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import carpet.utils.CommandHelper;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.commands.PerfCommand;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,7 +18,7 @@ public class PerfCommand_permissionMixin
     {
         if (CarpetSettings.perfPermissionLevel >= 0)
         {
-            cir.setReturnValue(source.hasPermission(CarpetSettings.perfPermissionLevel));
+            cir.setReturnValue(CommandHelper.hasPermissionLevel(source, CarpetSettings.perfPermissionLevel));
         }
     }
 

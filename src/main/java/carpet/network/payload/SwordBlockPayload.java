@@ -7,7 +7,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
 public record SwordBlockPayload(int entityId, int ticks) implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("carpet", "sword_block");
+    public static final Identifier ID = Identifier.fromNamespaceAndPath("carpet", "sword_block");
     public static final Type<SwordBlockPayload> TYPE = new Type<>(ID);
 
     public static final StreamCodec<FriendlyByteBuf, SwordBlockPayload> STREAM_CODEC = CustomPacketPayload.codec(

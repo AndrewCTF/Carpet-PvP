@@ -104,7 +104,7 @@ public class EquipmentValidator {
         String trimmedName = itemName.trim();
         
         try {
-            ResourceLocation itemId = ResourceLocation.parse(trimmedName);
+            Identifier itemId = Identifier.parse(trimmedName);
             Registry<Item> itemRegistry = carpetContext.registry(Registries.ITEM);
             
             if (!itemRegistry.containsKey(itemId)) {

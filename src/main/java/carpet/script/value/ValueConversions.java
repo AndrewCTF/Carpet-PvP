@@ -168,7 +168,7 @@ public class ValueConversions
                 case "overworld", "over_world" -> server.getLevel(Level.OVERWORLD);
                 default -> {
                     ResourceKey<Level> dim = null;
-                    ResourceLocation id = ResourceLocation.parse(dimString);
+                    Identifier id = Identifier.parse(dimString);
                     // not using RegistryKey.of since that one creates on check
                     for (ResourceKey<Level> world : (server.levelKeys()))
                     {
@@ -203,7 +203,7 @@ public class ValueConversions
         return of(tagKey.key().location());
     }
 
-    public static Value of(@Nullable ResourceLocation id)
+    public static Value of(@Nullable Identifier id)
     {
         if (id == null) // should be Value.NULL
         {
@@ -212,7 +212,7 @@ public class ValueConversions
         return new StringValue(simplify(id));
     }
 
-    public static String simplify(ResourceLocation id)
+    public static String simplify(Identifier id)
     {
         if (id == null) // should be Value.NULL
         {
@@ -558,7 +558,7 @@ public class ValueConversions
         {
             return NumericValue.of(number);
         }
-        if (o instanceof final ResourceLocation resourceLocation)
+        if (o instanceof final Identifier resourceLocation)
         {
             return of(resourceLocation);
         }

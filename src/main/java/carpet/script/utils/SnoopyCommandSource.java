@@ -9,6 +9,7 @@ import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.util.TaskChainer;
@@ -151,13 +152,13 @@ public class SnoopyCommandSource extends CommandSourceStack
     //public ServerCommandSource withSilent() { return this; }
 
     @Override
-    public CommandSourceStack withPermission(int level)
+    public CommandSourceStack withPermission(PermissionSet permissions)
     {
         return this;
     }
 
     @Override
-    public CommandSourceStack withMaximumPermission(int level)
+    public CommandSourceStack withMaximumPermission(PermissionSet permissions)
     {
         return this;
     }

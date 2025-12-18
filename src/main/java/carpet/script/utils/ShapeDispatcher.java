@@ -120,7 +120,7 @@ public class ShapeDispatcher
             }
             params = ShapeDispatcher.parseParams(paramList);
         }
-        params.putIfAbsent("dim", new StringValue(world.dimension().location().toString()));
+        params.putIfAbsent("dim", new StringValue(world.dimension().identifier().toString()));
         params.putIfAbsent("duration", duration);
 
         if (params.containsKey("player"))
@@ -384,7 +384,7 @@ public class ShapeDispatcher
 
             key = 0;
             followEntity = -1;
-            shapeDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(options.get("dim").getString()));
+            shapeDimension = ResourceKey.create(Registries.DIMENSION, Identifier.parse(options.get("dim").getString()));
             if (options.containsKey("follow"))
             {
                 followEntity = NumericValue.asNumber(options.getOrDefault("follow", optional.get("follow"))).getInt();

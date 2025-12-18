@@ -126,7 +126,7 @@ public class CarpetSettings
 
     private static class CarpetPermissionLevel extends Validator<String> {
         @Override public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String string) {
-            if (source == null || source.hasPermission(4))
+            if (source == null || CommandHelper.hasPermissionLevel(source, 4))
                 return newValue;
             return null;
         }
@@ -497,7 +497,7 @@ public class CarpetSettings
                     case "0", "1", "2", "3", "4" -> Integer.parseInt(newValue);
                     default -> throw new IllegalArgumentException(); // already checked by previous validator
             	};
-            if (source != null && !source.hasPermission(permissionLevel))
+            if (source != null && !CommandHelper.hasPermissionLevel(source, permissionLevel))
                 return null;
             CarpetSettings.runPermissionLevel = permissionLevel;
             if (source != null)
@@ -916,7 +916,7 @@ public class CarpetSettings
         @Override
         public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String string) {
             if (source == null) return newValue; // closing or sync
-            Optional<Block> ignoredBlock = source.registryAccess().lookupOrThrow(Registries.BLOCK).getOptional(ResourceLocation.tryParse(newValue));
+            Optional<Block> ignoredBlock = source.registryAccess().lookupOrThrow(Registries.BLOCK).getOptional(Identifier.tryParse(newValue));
             if (!ignoredBlock.isPresent()) {
                 Messenger.m(source, "r Unknown block '" + newValue + "'.");
                 return null;

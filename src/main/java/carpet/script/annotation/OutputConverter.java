@@ -54,7 +54,7 @@ public final class OutputConverter<T>
         register(BlockPos.class, (v, r) -> ValueConversions.of(v));
         register(Vec3.class, (v, r) -> ValueConversions.of(v));
         register(ItemStack.class, (v, r) -> ValueConversions.of(v, r));
-        register(ResourceLocation.class, (v, r) -> ValueConversions.of(v));
+        register(Identifier.class, (v, r) -> ValueConversions.of(v));
         register(GlobalPos.class, (v, r) -> ValueConversions.of(v));
     }
 

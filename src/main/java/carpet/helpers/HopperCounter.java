@@ -370,7 +370,7 @@ public class HopperCounter
         Block block = null;
         final Registry<Item> itemRegistry = registryAccess.lookupOrThrow(Registries.ITEM);
         final Registry<Block> blockRegistry = registryAccess.lookupOrThrow(Registries.BLOCK);
-        ResourceLocation id = itemRegistry.getKey(item);
+        Identifier id = itemRegistry.getKey(item);
         if (item instanceof BlockItem blockItem)
         {
             block = blockItem.getBlock();
@@ -411,7 +411,7 @@ public class HopperCounter
             return WHITE;
         }
 
-        ResourceLocation id = registryAccess.lookupOrThrow(Registries.ITEM).getKey(item);
+        Identifier id = registryAccess.lookupOrThrow(Registries.ITEM).getKey(item);
         if (id == null)
         {
             return null;

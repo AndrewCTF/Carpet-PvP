@@ -19,11 +19,11 @@ public class InputValidator
         return simplified;
     }
 
-    public static ResourceLocation identifierOf(String string)
+    public static Identifier identifierOf(String string)
     {
         try
         {
-            return ResourceLocation.parse(string);
+            return Identifier.parse(string);
         }
         catch (IdentifierException iie)
         {

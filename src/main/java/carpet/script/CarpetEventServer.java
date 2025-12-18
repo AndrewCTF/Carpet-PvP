@@ -121,7 +121,7 @@ public class CarpetEventServer
                 return CallbackResult.FAIL; // already stopped
             }
             return scriptServer.events.runEventCall(
-                    sender.withPermission(Vanilla.MinecraftServer_getRunPermissionLevel(sender.getServer())),
+                    sender.withPermission(carpet.utils.CommandHelper.permissionSetForLevel(Vanilla.MinecraftServer_getRunPermissionLevel(sender.getServer()))),
                     host, optionalTarget, function, runtimeArgs);
         }
 
@@ -826,7 +826,7 @@ public class CarpetEventServer
         public static final Event PLAYER_CHOOSES_RECIPE = new Event("player_chooses_recipe", 3, false)
         {
             @Override
-            public boolean onRecipeSelected(ServerPlayer player, ResourceLocation recipe, boolean fullStack)
+                public boolean onRecipeSelected(ServerPlayer player, Identifier recipe, boolean fullStack)
             {
                 return handler.call(() ->
                         Arrays.asList(
@@ -979,12 +979,12 @@ public class CarpetEventServer
 
         public static final Event STATISTICS = new Event("statistic", 4, false)
         {
-            private <T> ResourceLocation getStatId(Stat<T> stat)
+            private <T> Identifier getStatId(Stat<T> stat)
             {
                 return stat.getType().getRegistry().getKey(stat.getValue());
             }
 
-            private final Set<ResourceLocation> skippedStats = Set.of(
+            private final Set<Identifier> skippedStats = Set.of(
                     Stats.TIME_SINCE_DEATH,
                     Stats.TIME_SINCE_REST,
                     Stats.PLAY_TIME,
@@ -994,7 +994,7 @@ public class CarpetEventServer
             @Override
             public void onPlayerStatistic(ServerPlayer player, Stat<?> stat, int amount)
             {
-                ResourceLocation id = getStatId(stat);
+                Identifier id = getStatId(stat);
                 if (skippedStats.contains(id))
                 {
                     return;
@@ -1106,7 +1106,7 @@ public class CarpetEventServer
                     {
                         handler.call(
                                 () -> Collections.singletonList(new EntityValue(entity)),
-                                () -> entity.level().getServer().createCommandSourceStack().withLevel((ServerLevel) entity.level()).withPermission(Vanilla.MinecraftServer_getRunPermissionLevel(entity.level().getServer()))
+                                () -> entity.level().getServer().createCommandSourceStack().withLevel((ServerLevel) entity.level()).withPermission(carpet.utils.CommandHelper.permissionSetForLevel(Vanilla.MinecraftServer_getRunPermissionLevel(entity.level().getServer())))
                         );
                     }
                 })).collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -1125,7 +1125,7 @@ public class CarpetEventServer
                     {
                         handler.call(
                                 () -> Arrays.asList(new EntityValue(entity), BooleanValue.of(created)),
-                                () -> entity.level().getServer().createCommandSourceStack().withLevel((ServerLevel) entity.level()).withPermission(Vanilla.MinecraftServer_getRunPermissionLevel(entity.level().getServer()))
+                                () -> entity.level().getServer().createCommandSourceStack().withLevel((ServerLevel) entity.level()).withPermission(carpet.utils.CommandHelper.permissionSetForLevel(Vanilla.MinecraftServer_getRunPermissionLevel(entity.level().getServer())))
                         );
                     }
                 }))
@@ -1294,7 +1294,7 @@ public class CarpetEventServer
             return false;
         }
 
-        public boolean onRecipeSelected(ServerPlayer player, ResourceLocation recipe, boolean fullStack)
+        public boolean onRecipeSelected(ServerPlayer player, Identifier recipe, boolean fullStack)
         {
             return false;
         }
@@ -1436,7 +1436,7 @@ public class CarpetEventServer
                 return CallbackResult.FAIL;
             }
         }
-        CommandSourceStack source = sender.withPermission(Vanilla.MinecraftServer_getRunPermissionLevel(sender.getServer()));
+        CommandSourceStack source = sender.withPermission(carpet.utils.CommandHelper.permissionSetForLevel(Vanilla.MinecraftServer_getRunPermissionLevel(sender.getServer())));
         CarpetScriptHost executingHost = appHost.retrieveForExecution(sender, target);
         if (executingHost == null)
         {

@@ -1,7 +1,6 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
-import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.LevelRenderer;
 //import net.minecraft.world.dimension.Dimension;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,10 +14,17 @@ public class LevelRenderer_fogOffMixin
             value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/DimensionSpecialEffects;isFoggyAt(II)Z"
     ))
-    private boolean isReallyThick(DimensionSpecialEffects skyProperties, int x, int z)
+    private boolean isReallyThick(Object skyProperties, int x, int z)
     {
         if (CarpetSettings.fogOff) return false;
-        return skyProperties.isFoggyAt(x, z);
+        try
+        {
+            return (boolean) skyProperties.getClass().getMethod("isFoggyAt", int.class, int.class).invoke(skyProperties, x, z);
+        }
+        catch (Throwable ignored)
+        {
+            return true;
+        }
     }
 
 }

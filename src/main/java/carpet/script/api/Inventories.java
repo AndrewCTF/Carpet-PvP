@@ -202,7 +202,7 @@ public class Inventories
         expression.addContextFunction("crafting_remaining_item", 1, (c, t, v) ->
         {
             String itemStr = v.get(0).getString();
-            ResourceLocation id = InputValidator.identifierOf(itemStr);
+            Identifier id = InputValidator.identifierOf(itemStr);
             CarpetContext cc = (CarpetContext) c;
             Registry<Item> registry = cc.registry(Registries.ITEM);
             Item item = registry.getOptional(id).orElseThrow(() -> new ThrowStatement(itemStr, Throwables.UNKNOWN_ITEM));

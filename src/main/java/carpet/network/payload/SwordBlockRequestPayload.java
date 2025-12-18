@@ -7,7 +7,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 
 public record SwordBlockRequestPayload(InteractionHand hand) implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("carpet", "sword_block_request");
+    public static final Identifier ID = Identifier.fromNamespaceAndPath("carpet", "sword_block_request");
     public static final Type<SwordBlockRequestPayload> TYPE = new Type<>(ID);
 
     public static final StreamCodec<FriendlyByteBuf, SwordBlockRequestPayload> STREAM_CODEC = CustomPacketPayload.codec(

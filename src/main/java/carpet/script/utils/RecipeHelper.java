@@ -16,7 +16,7 @@ import java.util.List;
 
 public class RecipeHelper
 {
-    public static List<Recipe<?>> getRecipesForOutput(RecipeManager recipeManager, RecipeType<?> type, ResourceLocation id, Level level)
+    public static List<Recipe<?>> getRecipesForOutput(RecipeManager recipeManager, RecipeType<?> type, Identifier id, Level level)
     {
         List<Recipe<?>> results = new ArrayList<>();
 
@@ -39,7 +39,7 @@ public class RecipeHelper
         return results;
     }
 
-    public static List<Recipe<?>> getRecipesForOutput(RecipeManager recipeManager, ResourceLocation id, Level level)
+    public static List<Recipe<?>> getRecipesForOutput(RecipeManager recipeManager, Identifier id, Level level)
     {
         List<Recipe<?>> results = new ArrayList<>();
 
