@@ -710,7 +710,7 @@ public class PlayerCommand
     private static Collection<String> getPlayerSuggestions(CommandSourceStack source)
     {
         //using s instead of @s because making it parse selectors properly was a pain in the ass
-        Set<String> players = new LinkedHashSet<>(List.of("Steve", "Alex", "TheobaldTheBot", "s"));
+        Set<String> players = new LinkedHashSet<>(List.of("Bot", "s"));
         players.addAll(source.getOnlinePlayerNames());
         return players;
     }
