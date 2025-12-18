@@ -170,6 +170,21 @@ This is gated behind a rule (off by default):
 - `/player <name> glide start`
 - `/player <name> glide stop`
 
+Notes:
+- Running `glide start` while the bot is on the ground will *arm* gliding but will not spam-jump.
+- `glide goto ...` will perform a takeoff jump and deploy elytra automatically.
+
+### Launch assist (takeoff tuning)
+
+Configure pre-deployment launch profile for consistent elytra takeoff:
+
+- `/player <name> glide launch assist true|false`
+- `/player <name> glide launch pitch <deg>` (suggest 15–25)
+- `/player <name> glide launch speed <blocksPerTick>` (suggest 0.5–0.8)
+- `/player <name> glide launch forwardTicks <ticks>` (0–20, suggest 5–8)
+
+Tip: enable `smart goto` and use a modest launch speed; the bot will aim toward the first waypoint before jumping.
+
 ### Freeze / hover
 
 Freeze forces the bot to hold position (zero velocity) and disables gravity while gliding.
@@ -220,6 +235,23 @@ Fly toward a target position. Optional `arrivalRadius` (default is 1 block).
 Examples:
 - `/player Bot glide goto 100 120 100`
 - `/player Bot glide goto 100 120 100 2.5`
+
+#### Smart goto (A* pathfinding base)
+
+This variant runs a bounded A* search in “air space” and produces waypoints that route over terrain (and avoids planning into unloaded chunks).
+
+- `/player <name> glide goto smart <x> <y> <z> [arrivalRadius]`
+
+Notes:
+- If it fails, try giving a higher Y target (more air space) or move closer so chunks are loaded.
+
+On arrival, you can choose what happens next:
+
+- `/player <name> glide arrival stop` (default)
+- `/player <name> glide arrival freeze`
+- `/player <name> glide arrival descend` (keeps elytra deployed and pitches down for a controlled descent; use a lower speed for a gentler glide)
+- `/player <name> glide arrival land` (default behavior for goto: reach target XZ then dive down and stop on ground)
+- `/player <name> glide arrival circle` (keep orbiting/holding the target instead of finishing)
 
 #### Manual thrust input
 

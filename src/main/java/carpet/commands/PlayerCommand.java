@@ -3,6 +3,7 @@ package carpet.commands;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
+import carpet.helpers.pathfinding.ElytraAStarPathfinder;
 import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
@@ -147,6 +148,25 @@ public class PlayerCommand
                         .executes(PlayerCommand::glideFreezeToggle)
                         .then(argument("value", BoolArgumentType.bool())
                                 .executes(PlayerCommand::glideFreezeSet)))
+            .then(literal("arrival")
+                .then(literal("stop").executes(PlayerCommand::glideArrivalStop))
+                .then(literal("freeze").executes(PlayerCommand::glideArrivalFreeze))
+                .then(literal("descend").executes(PlayerCommand::glideArrivalDescend))
+                .then(literal("land").executes(PlayerCommand::glideArrivalLand))
+                .then(literal("circle").executes(PlayerCommand::glideArrivalCircle)))
+            .then(literal("launch")
+                .then(literal("assist")
+                    .then(argument("value", BoolArgumentType.bool())
+                        .executes(PlayerCommand::glideLaunchAssist)))
+                .then(literal("pitch")
+                    .then(argument("deg", DoubleArgumentType.doubleArg(-45.0D, 45.0D))
+                        .executes(PlayerCommand::glideLaunchPitch)))
+                .then(literal("speed")
+                    .then(argument("blocksPerTick", DoubleArgumentType.doubleArg(0.0D))
+                        .executes(PlayerCommand::glideLaunchSpeed)))
+                .then(literal("forwardTicks")
+                    .then(argument("ticks", IntegerArgumentType.integer(0, 20))
+                        .executes(PlayerCommand::glideLaunchForwardTicks))))
                 .then(literal("freezeAtTarget")
                         .then(argument("value", BoolArgumentType.bool())
                                 .executes(PlayerCommand::glideFreezeAtTargetSet)))
@@ -170,9 +190,14 @@ public class PlayerCommand
                                 .then(argument("pitch", DoubleArgumentType.doubleArg(-90.0D, 90.0D))
                                         .executes(PlayerCommand::glideHeading))))
                 .then(literal("goto")
+                    .then(literal("smart")
                         .then(argument("pos", Vec3Argument.vec3())
+                            .executes(PlayerCommand::glideGotoSmartDefault)
+                            .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                .executes(PlayerCommand::glideGotoSmartWithRadius))))
+                    .then(argument("pos", Vec3Argument.vec3())
                         .executes(PlayerCommand::glideGotoDefault)
-                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                        .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
                             .executes(PlayerCommand::glideGotoWithRadius))))
                 .then(literal("status").executes(PlayerCommand::glideStatus));
     }
@@ -244,6 +269,100 @@ public class PlayerCommand
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
         ap.setGlideFreezeAtTarget(value);
         Messenger.m(context.getSource(), "g freezeAtTarget set to ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalStop(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.STOP);
+        Messenger.m(context.getSource(), "g arrival action set to stop for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalFreeze(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.FREEZE);
+        Messenger.m(context.getSource(), "g arrival action set to freeze for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalDescend(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.DESCEND);
+        Messenger.m(context.getSource(), "g arrival action set to descend for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalLand(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.LAND);
+        Messenger.m(context.getSource(), "g arrival action set to land for ", player.getName());
+        return 1;
+    }
+
+    private static int glideArrivalCircle(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.CIRCLE);
+        Messenger.m(context.getSource(), "g arrival action set to circle for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchAssist(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchAssistEnabled(value);
+        Messenger.m(context.getSource(), "g launch assist set to ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchPitch(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        float deg = (float) DoubleArgumentType.getDouble(context, "deg");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchPitch(deg);
+        Messenger.m(context.getSource(), "g launch pitch set to ", String.format("%.1f", deg), "g° for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchSpeed(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        double speed = DoubleArgumentType.getDouble(context, "blocksPerTick");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchSpeed(speed);
+        Messenger.m(context.getSource(), "g launch speed set to ", String.format("%.3f", speed), "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchForwardTicks(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        int ticks = IntegerArgumentType.getInteger(context, "ticks");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchForwardTicks(ticks);
+        Messenger.m(context.getSource(), "g launch forwardTicks set to ", String.valueOf(ticks), "g  for ", player.getName());
         return 1;
     }
 
@@ -334,6 +453,52 @@ public class PlayerCommand
         return 1;
     }
 
+    private static int glideGotoSmartDefault(CommandContext<CommandSourceStack> context)
+    {
+        return glideGotoSmart(context, 1.0D);
+    }
+
+    private static int glideGotoSmartWithRadius(CommandContext<CommandSourceStack> context)
+    {
+        double radius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        return glideGotoSmart(context, radius);
+    }
+
+    private static int glideGotoSmart(CommandContext<CommandSourceStack> context, double radius)
+    {
+        if (cantBotManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        if (!(player.level() instanceof ServerLevel level)) return 0;
+
+        Vec3 goal = Vec3Argument.getVec3(context, "pos");
+        BlockPos startPos = BlockPos.containing(player.position());
+        BlockPos goalPos = BlockPos.containing(goal);
+
+        ElytraAStarPathfinder.Settings settings = ElytraAStarPathfinder.Settings.defaults();
+        ElytraAStarPathfinder pf = new ElytraAStarPathfinder();
+        List<BlockPos> raw = pf.findPath(level, startPos, goalPos, settings);
+        if (raw == null || raw.isEmpty())
+        {
+            Messenger.m(context.getSource(), "r No smart path found (range/terrain/chunks). Try a higher goal Y or move closer.");
+            return 0;
+        }
+
+        List<BlockPos> compressed = ElytraAStarPathfinder.compressWaypoints(raw, settings.waypointStride());
+        List<Vec3> waypoints = new java.util.ArrayList<>(compressed.size());
+        for (BlockPos p : compressed)
+        {
+            // Aim at block centers for smoother flight.
+            waypoints.add(new Vec3(p.getX() + 0.5D, p.getY() + 0.5D, p.getZ() + 0.5D));
+        }
+
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideEnabled(true);
+        ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.LAND);
+        ap.setGlideGotoWaypoints(waypoints, goal, radius);
+        Messenger.m(context.getSource(), "g smart glide path set with ", String.valueOf(waypoints.size()), "g  waypoints for ", player.getName());
+        return 1;
+    }
+
     private static int glideStatus(CommandContext<CommandSourceStack> context)
     {
         if (cantBotManipulate(context)) return 0;
@@ -342,7 +507,8 @@ public class PlayerCommand
         Messenger.m(context.getSource(),
                 "g glide: enabled=", ap.isGlideEnabled() ? "true" : "false",
                 "g , frozen=", ap.isGlideFrozen() ? "true" : "false",
-                "g , speed=", String.format("%.3f", ap.getGlideSpeed())
+            "g , speed=", String.format("%.3f", ap.getGlideSpeed()),
+            "g , arrival=", ap.getGlideArrivalAction().name().toLowerCase()
         );
         return 1;
     }

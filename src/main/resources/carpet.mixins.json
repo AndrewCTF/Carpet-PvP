@@ -22,6 +22,7 @@
     "SetBlockCommand_fillUpdatesMixin",
     "ForceLoadCommand_forceLoadLimitMixin",
     "BlockInput_fillUpdatesMixin",
+    "ServerPlayer_scarpetEventMixin",
     "Level_fillUpdatesMixin",
     "LevelChunk_fillUpdatesMixin",
     "StructureBlockEntity_fillUpdatesMixin",

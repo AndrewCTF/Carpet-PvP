@@ -6,6 +6,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import carpet.patches.EntityPlayerMPFake;
 import carpet.script.utils.Tracer;
@@ -63,6 +64,7 @@ public class EntityPlayerActionPack
     private boolean glideEnabled;
     private boolean glideFrozen;
     private boolean glideFreezeAtTarget;
+    private GlideArrivalAction glideArrivalAction = GlideArrivalAction.LAND;
     private GlideMode glideMode = GlideMode.MANUAL;
 
     private double glideSpeed = 1.6D; // blocks per tick
@@ -77,9 +79,26 @@ public class EntityPlayerActionPack
     private float glideTargetYaw;
     private float glideTargetPitch;
     private Vec3 glideTargetPos;
+    private Vec3 glideLandingTargetPos;
     private double glideArrivalRadius = 1.0D;
 
+    private List<Vec3> glideWaypoints;
+    private int glideWaypointIndex;
+
     private Boolean glidePrevNoGravity;
+    private Boolean glidePrevAbilityFlying;
+    private int glideDeployDelayTicks;
+    private int glideDeployAttempts;
+    private int glideTakeoffTimeoutTicks;
+    private boolean glideTakeoffRequested;
+    private boolean glideHasDeployed;
+
+    // Launch assist (pre-deployment) to achieve consistent elytra takeoff
+    private boolean glideLaunchAssistEnabled = true;
+    private float glideLaunchPitchDeg = 18.0F; // gentle nose-down
+    private double glideLaunchSpeed = 0.6D;    // horizontal boost (blocks/tick)
+    private int glideLaunchForwardTicks = 6;   // ticks of pre-deploy horizontal boost
+    private int glideLaunchTicksRemaining = 0;
 
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
@@ -117,12 +136,46 @@ public class EntityPlayerActionPack
 
     public EntityPlayerActionPack setGlideEnabled(boolean enabled)
     {
+        boolean wasEnabled = glideEnabled;
         glideEnabled = enabled;
+        if (enabled && !wasEnabled)
+        {
+            glideDeployDelayTicks = 0;
+            glideDeployAttempts = 0;
+            glideTakeoffTimeoutTicks = 0;
+            glideTakeoffRequested = false;
+            glideHasDeployed = false;
+            glideLaunchTicksRemaining = 0;
+            if (glidePrevAbilityFlying == null)
+            {
+                glidePrevAbilityFlying = player.getAbilities().flying;
+            }
+            if (player.getAbilities().flying)
+            {
+                player.getAbilities().flying = false;
+                player.onUpdateAbilities();
+            }
+        }
         if (!enabled)
         {
             setGlideFrozen(false);
             glideMode = GlideMode.MANUAL;
             glideTargetPos = null;
+            glideLandingTargetPos = null;
+            glideWaypoints = null;
+            glideWaypointIndex = 0;
+            glideDeployDelayTicks = 0;
+            glideDeployAttempts = 0;
+            glideTakeoffTimeoutTicks = 0;
+            glideTakeoffRequested = false;
+            glideHasDeployed = false;
+            glideLaunchTicksRemaining = 0;
+            if (glidePrevAbilityFlying != null)
+            {
+                player.getAbilities().flying = glidePrevAbilityFlying;
+                player.onUpdateAbilities();
+                glidePrevAbilityFlying = null;
+            }
         }
         return this;
     }
@@ -154,6 +207,43 @@ public class EntityPlayerActionPack
     public EntityPlayerActionPack setGlideFreezeAtTarget(boolean freezeAtTarget)
     {
         glideFreezeAtTarget = freezeAtTarget;
+        glideArrivalAction = freezeAtTarget ? GlideArrivalAction.FREEZE : GlideArrivalAction.STOP;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideArrivalAction(GlideArrivalAction action)
+    {
+        glideArrivalAction = action == null ? GlideArrivalAction.STOP : action;
+        glideFreezeAtTarget = glideArrivalAction == GlideArrivalAction.FREEZE;
+        return this;
+    }
+
+    public GlideArrivalAction getGlideArrivalAction()
+    {
+        return glideArrivalAction;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchAssistEnabled(boolean enabled)
+    {
+        glideLaunchAssistEnabled = enabled;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchPitch(float pitchDeg)
+    {
+        glideLaunchPitchDeg = Mth.clamp(pitchDeg, -45.0F, 45.0F);
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchSpeed(double speed)
+    {
+        glideLaunchSpeed = Math.max(0.0D, speed);
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchForwardTicks(int ticks)
+    {
+        glideLaunchForwardTicks = Mth.clamp(ticks, 0, 20);
         return this;
     }
 
@@ -203,8 +293,30 @@ public class EntityPlayerActionPack
     public EntityPlayerActionPack setGlideGoto(Vec3 targetPos, double arrivalRadius)
     {
         glideTargetPos = targetPos;
+        glideLandingTargetPos = null;
+        glideWaypoints = null;
+        glideWaypointIndex = 0;
         glideArrivalRadius = Math.max(0.0D, arrivalRadius);
         glideMode = GlideMode.GOTO;
+        glideTakeoffRequested = true;
+        glideTakeoffTimeoutTicks = 40;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideGotoWaypoints(List<Vec3> waypoints, Vec3 finalLandingTarget, double arrivalRadius)
+    {
+        if (waypoints == null || waypoints.isEmpty())
+        {
+            return setGlideGoto(finalLandingTarget, arrivalRadius);
+        }
+        glideWaypoints = new ArrayList<>(waypoints);
+        glideWaypointIndex = 0;
+        glideTargetPos = glideWaypoints.get(0);
+        glideLandingTargetPos = finalLandingTarget;
+        glideArrivalRadius = Math.max(0.0D, arrivalRadius);
+        glideMode = GlideMode.GOTO;
+        glideTakeoffRequested = true;
+        glideTakeoffTimeoutTicks = 40;
         return this;
     }
 
@@ -466,11 +578,90 @@ public class EntityPlayerActionPack
             return;
         }
 
-        ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
-        if (!chest.is(Items.ELYTRA))
+        // If we already deployed elytra and are now on the ground, stop gliding.
+        // This prevents "bounce" / redeploy spam when touching down.
+        if (glideHasDeployed && player.onGround() && !player.isFallFlying())
         {
+            setGlideEnabled(false);
             return;
         }
+
+        ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
+        if (!chest.is(Items.ELYTRA) || chest.nextDamageWillBreak())
+        {
+            // Can't glide without a usable elytra.
+            setGlideEnabled(false);
+            return;
+        }
+
+        // Deploy elytra like a normal player would: jump, then "double tap" to deploy.
+        // Server-side, that corresponds to calling tryToStartFallFlying() once airborne.
+        if (!player.isFallFlying())
+        {
+            if (player.onGround())
+            {
+                // Only auto-takeoff when we're navigating somewhere (goto). Plain `glide start` should not spam-jump.
+                if (!glideTakeoffRequested)
+                {
+                    return;
+                }
+                if (glideTakeoffTimeoutTicks-- <= 0)
+                {
+                    setGlideEnabled(false);
+                    return;
+                }
+                // Initiate takeoff once; after jumping, wait until we become airborne.
+                if (glideDeployAttempts == 0 && glideDeployDelayTicks == 0)
+                {
+                    // Aim towards current navigation target before jumping and apply launch pitch.
+                    float yawToTarget = player.getYRot();
+                    Vec3 aimPos = glideTargetPos;
+                    if (glideWaypoints != null && glideWaypointIndex < (glideWaypoints.size()))
+                    {
+                        aimPos = glideWaypoints.get(glideWaypointIndex);
+                    }
+                    if (aimPos != null)
+                    {
+                        Vec2 rot = rotationsTowards(player.getEyePosition(1.0F), aimPos);
+                        yawToTarget = rot.x;
+                    }
+                    look(stepYaw(player.getYRot(), yawToTarget, glideYawRate), glideLaunchPitchDeg);
+                    player.jumpFromGround();
+                    glideDeployDelayTicks = 1;
+                    glideDeployAttempts = 0;
+                    glideLaunchTicksRemaining = glideLaunchAssistEnabled ? glideLaunchForwardTicks : 0;
+                }
+                return;
+            }
+            if (glideDeployDelayTicks > 0)
+            {
+                glideDeployDelayTicks--;
+                // While airborne and not yet fall-flying, apply a horizontal boost to help deployment.
+                if (glideLaunchTicksRemaining > 0 && glideLaunchAssistEnabled)
+                {
+                    glideLaunchTicksRemaining--;
+                    float yaw = player.getYRot();
+                    Vec3 forwardHorizontal = directionFromRotation(0.0F, yaw);
+                    Vec3 current = player.getDeltaMovement();
+                    Vec3 boosted = new Vec3(forwardHorizontal.x * glideLaunchSpeed, current.y, forwardHorizontal.z * glideLaunchSpeed);
+                    player.setDeltaMovement(boosted);
+                }
+                return;
+            }
+            if (glideDeployAttempts < 20)
+            {
+                glideDeployAttempts++;
+                player.tryToStartFallFlying();
+            }
+            if (!player.isFallFlying())
+            {
+                // Don't apply glide velocity until elytra is actually deployed.
+                return;
+            }
+        }
+
+        glideHasDeployed = true;
+        glideTakeoffRequested = false;
 
         if (glideFrozen)
         {
@@ -488,11 +679,6 @@ public class EntityPlayerActionPack
             glidePrevNoGravity = null;
         }
 
-        if (!player.isFallFlying())
-        {
-            player.tryToStartFallFlying();
-        }
-
         float desiredYaw = player.getYRot();
         float desiredPitch = player.getXRot();
 
@@ -505,12 +691,54 @@ public class EntityPlayerActionPack
         {
             Vec3 from = player.getEyePosition(1.0F);
             Vec3 to = glideTargetPos;
-            double distSq = player.position().distanceToSqr(glideTargetPos);
-            if (distSq <= glideArrivalRadius * glideArrivalRadius)
+            double dx = player.getX() - glideTargetPos.x;
+            double dz = player.getZ() - glideTargetPos.z;
+            double distSqXZ = dx * dx + dz * dz;
+            if (distSqXZ <= glideArrivalRadius * glideArrivalRadius)
             {
-                if (glideFreezeAtTarget)
+                if (glideWaypoints != null)
+                {
+                    // Advance to next waypoint.
+                    glideWaypointIndex++;
+                    if (glideWaypointIndex < glideWaypoints.size())
+                    {
+                        glideTargetPos = glideWaypoints.get(glideWaypointIndex);
+                        return;
+                    }
+                    // Done with air path; start landing onto the requested destination.
+                    glideWaypoints = null;
+                    glideTargetPos = null;
+                    glideMode = GlideMode.LANDING;
+                    return;
+                }
+
+                GlideArrivalAction action = glideArrivalAction;
+                // Back-compat: if old flag was set, prefer freezing.
+                if (glideFreezeAtTarget) action = GlideArrivalAction.FREEZE;
+                if (action == GlideArrivalAction.FREEZE)
                 {
                     setGlideFrozen(true);
+                }
+                else if (action == GlideArrivalAction.DESCEND)
+                {
+                    // Controlled descent: keep elytra deployed, but pitch down gently.
+                    // This prevents stalling (pitching up / no forward speed) which looks like "just falling".
+                    glideTargetPos = null;
+                    glideLandingTargetPos = null;
+                    glideMode = GlideMode.HEADING;
+                    glideTargetYaw = player.getYRot();
+                    glideTargetPitch = 20.0F;
+                }
+                else if (action == GlideArrivalAction.CIRCLE)
+                {
+                    // Keep circling/holding target.
+                }
+                else if (action == GlideArrivalAction.LAND)
+                {
+                    // Dive down at the target XZ and stop on ground.
+                    glideLandingTargetPos = glideTargetPos;
+                    glideTargetPos = null;
+                    glideMode = GlideMode.LANDING;
                 }
                 else
                 {
@@ -521,6 +749,15 @@ public class EntityPlayerActionPack
             Vec2 rot = rotationsTowards(from, to);
             desiredYaw = rot.x;
             desiredPitch = rot.y;
+        }
+        else if (glideMode == GlideMode.LANDING && glideLandingTargetPos != null)
+        {
+            // Aim towards the landing XZ and pitch down.
+            Vec3 from = player.getEyePosition(1.0F);
+            Vec3 to = new Vec3(glideLandingTargetPos.x, from.y, glideLandingTargetPos.z);
+            Vec2 rot = rotationsTowards(from, to);
+            desiredYaw = rot.x;
+            desiredPitch = 80.0F;
         }
 
         float newYaw = stepYaw(player.getYRot(), desiredYaw, glideYawRate);
@@ -594,7 +831,17 @@ public class EntityPlayerActionPack
     {
         MANUAL,
         HEADING,
-        GOTO
+        GOTO,
+        LANDING
+    }
+
+    public enum GlideArrivalAction
+    {
+        STOP,
+        FREEZE,
+        DESCEND,
+        LAND,
+        CIRCLE
     }
 
     static HitResult getTarget(ServerPlayer player)
