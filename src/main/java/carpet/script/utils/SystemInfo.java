@@ -15,7 +15,7 @@ import carpet.script.value.ValueConversions;
 import com.sun.management.OperatingSystemMXBean;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.packs.PackType;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.LevelResource;

@@ -991,7 +991,7 @@ public class PlayerCommand
             {
                 net.minecraft.world.item.Item item = source.getServer().registryAccess()
                     .lookupOrThrow(net.minecraft.core.registries.Registries.ITEM)
-                    .get(net.minecraft.resources.ResourceLocation.parse(entry.getValue()))
+                    .get(net.minecraft.resources.Identifier.parse(entry.getValue()))
                     .map(net.minecraft.core.Holder::value)
                     .orElse(null);
                 
