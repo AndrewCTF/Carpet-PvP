@@ -82,7 +82,7 @@ public class ValueConversions
 
     public static Value of(ServerLevel world)
     {
-        return of(world.dimension().location());
+        return of(world.dimension().identifier());
     }
 
     public static Value of(MapColor color)
@@ -172,7 +172,7 @@ public class ValueConversions
                     // not using RegistryKey.of since that one creates on check
                     for (ResourceKey<Level> world : (server.levelKeys()))
                     {
-                        if (id.equals(world.location()))
+                        if (id.equals(world.identifier()))
                         {
                             dim = world;
                             break;
@@ -190,7 +190,7 @@ public class ValueConversions
 
     public static Value of(ResourceKey<?> dim)
     {
-        return of(dim.location());
+        return of(dim.identifier());
     }
 
     public static Value of(TagKey<?> tagKey)

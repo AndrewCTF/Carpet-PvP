@@ -60,7 +60,7 @@ public class SystemInfo
             String tlf = serverPath.getName(nodeCount - 2).toString();
             return StringValue.of(tlf);
         });
-        options.put("world_dimensions", c -> ListValue.wrap(c.server().levelKeys().stream().map(k -> ValueConversions.of(k.location()))));
+        options.put("world_dimensions", c -> ListValue.wrap(c.server().levelKeys().stream().map(k -> ValueConversions.of(k.identifier()))));
         options.put("world_spawn_point", (CarpetContext c) -> ValueConversions.of(c.server().getRespawnData().pos()));
 
         options.put("world_bottom", c -> new NumericValue(c.level().getMinY()));
