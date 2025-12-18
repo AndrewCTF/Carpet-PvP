@@ -575,8 +575,8 @@ public class EntityPlayerMPFake extends ServerPlayer
         try {
             LOGGER.debug("Starting dimension teleport for fake player {} from {} to {}", 
                 getName().getString(), 
-                this.level().dimension().location(),
-                teleportTransition.newLevel().dimension().location());
+                this.level().dimension().identifier(),
+                teleportTransition.newLevel().dimension().identifier());
             
             // Save equipment state before teleportation
             saveEquipmentState();

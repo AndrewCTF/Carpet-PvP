@@ -132,7 +132,7 @@ public class Auxiliary
             CarpetContext cc = (CarpetContext) c;
             if (lv.isEmpty())
             {
-                return ListValue.wrap(cc.registry(Registries.SOUND_EVENT).listElements().map(soundEventReference -> ValueConversions.of(soundEventReference.key().location())));
+                return ListValue.wrap(cc.registry(Registries.SOUND_EVENT).listElements().map(soundEventReference -> ValueConversions.of(soundEventReference.key().identifier())));
             }
             String rawString = lv.get(0).getString();
             Identifier soundName = InputValidator.identifierOf(rawString);
@@ -177,7 +177,7 @@ public class Auxiliary
             CarpetContext cc = (CarpetContext) c;
             if (lv.isEmpty())
             {
-                return ListValue.wrap(cc.registry(Registries.PARTICLE_TYPE).listElements().map(particleTypeReference -> ValueConversions.of(particleTypeReference.key().location())));
+                return ListValue.wrap(cc.registry(Registries.PARTICLE_TYPE).listElements().map(particleTypeReference -> ValueConversions.of(particleTypeReference.key().identifier())));
             }
             MinecraftServer ms = cc.server();
             ServerLevel world = cc.level();
