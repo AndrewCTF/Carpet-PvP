@@ -154,6 +154,19 @@ public class PlayerCommand
                 .then(literal("descend").executes(PlayerCommand::glideArrivalDescend))
                 .then(literal("land").executes(PlayerCommand::glideArrivalLand))
                 .then(literal("circle").executes(PlayerCommand::glideArrivalCircle)))
+            .then(literal("launch")
+                .then(literal("assist")
+                    .then(argument("value", BoolArgumentType.bool())
+                        .executes(PlayerCommand::glideLaunchAssist)))
+                .then(literal("pitch")
+                    .then(argument("deg", DoubleArgumentType.doubleArg(-45.0D, 45.0D))
+                        .executes(PlayerCommand::glideLaunchPitch)))
+                .then(literal("speed")
+                    .then(argument("blocksPerTick", DoubleArgumentType.doubleArg(0.0D))
+                        .executes(PlayerCommand::glideLaunchSpeed)))
+                .then(literal("forwardTicks")
+                    .then(argument("ticks", IntegerArgumentType.integer(0, 20))
+                        .executes(PlayerCommand::glideLaunchForwardTicks))))
                 .then(literal("freezeAtTarget")
                         .then(argument("value", BoolArgumentType.bool())
                                 .executes(PlayerCommand::glideFreezeAtTargetSet)))
@@ -306,6 +319,50 @@ public class PlayerCommand
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
         ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.CIRCLE);
         Messenger.m(context.getSource(), "g arrival action set to circle for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchAssist(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchAssistEnabled(value);
+        Messenger.m(context.getSource(), "g launch assist set to ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchPitch(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        float deg = (float) DoubleArgumentType.getDouble(context, "deg");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchPitch(deg);
+        Messenger.m(context.getSource(), "g launch pitch set to ", String.format("%.1f", deg), "g° for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchSpeed(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        double speed = DoubleArgumentType.getDouble(context, "blocksPerTick");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchSpeed(speed);
+        Messenger.m(context.getSource(), "g launch speed set to ", String.format("%.3f", speed), "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int glideLaunchForwardTicks(CommandContext<CommandSourceStack> context)
+    {
+        if (cantBotManipulate(context)) return 0;
+        int ticks = IntegerArgumentType.getInteger(context, "ticks");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setGlideLaunchForwardTicks(ticks);
+        Messenger.m(context.getSource(), "g launch forwardTicks set to ", String.valueOf(ticks), "g  for ", player.getName());
         return 1;
     }
 

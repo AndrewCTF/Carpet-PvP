@@ -93,6 +93,13 @@ public class EntityPlayerActionPack
     private boolean glideTakeoffRequested;
     private boolean glideHasDeployed;
 
+    // Launch assist (pre-deployment) to achieve consistent elytra takeoff
+    private boolean glideLaunchAssistEnabled = true;
+    private float glideLaunchPitchDeg = 18.0F; // gentle nose-down
+    private double glideLaunchSpeed = 0.6D;    // horizontal boost (blocks/tick)
+    private int glideLaunchForwardTicks = 6;   // ticks of pre-deploy horizontal boost
+    private int glideLaunchTicksRemaining = 0;
+
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
         player = playerIn;
@@ -138,6 +145,7 @@ public class EntityPlayerActionPack
             glideTakeoffTimeoutTicks = 0;
             glideTakeoffRequested = false;
             glideHasDeployed = false;
+            glideLaunchTicksRemaining = 0;
             if (glidePrevAbilityFlying == null)
             {
                 glidePrevAbilityFlying = player.getAbilities().flying;
@@ -161,6 +169,7 @@ public class EntityPlayerActionPack
             glideTakeoffTimeoutTicks = 0;
             glideTakeoffRequested = false;
             glideHasDeployed = false;
+            glideLaunchTicksRemaining = 0;
             if (glidePrevAbilityFlying != null)
             {
                 player.getAbilities().flying = glidePrevAbilityFlying;
@@ -212,6 +221,30 @@ public class EntityPlayerActionPack
     public GlideArrivalAction getGlideArrivalAction()
     {
         return glideArrivalAction;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchAssistEnabled(boolean enabled)
+    {
+        glideLaunchAssistEnabled = enabled;
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchPitch(float pitchDeg)
+    {
+        glideLaunchPitchDeg = Mth.clamp(pitchDeg, -45.0F, 45.0F);
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchSpeed(double speed)
+    {
+        glideLaunchSpeed = Math.max(0.0D, speed);
+        return this;
+    }
+
+    public EntityPlayerActionPack setGlideLaunchForwardTicks(int ticks)
+    {
+        glideLaunchForwardTicks = Mth.clamp(ticks, 0, 20);
+        return this;
     }
 
     public EntityPlayerActionPack setGlideSpeed(double blocksPerTick)
@@ -580,15 +613,39 @@ public class EntityPlayerActionPack
                 // Initiate takeoff once; after jumping, wait until we become airborne.
                 if (glideDeployAttempts == 0 && glideDeployDelayTicks == 0)
                 {
+                    // Aim towards current navigation target before jumping and apply launch pitch.
+                    float yawToTarget = player.getYRot();
+                    Vec3 aimPos = glideTargetPos;
+                    if (glideWaypoints != null && glideWaypointIndex < (glideWaypoints.size()))
+                    {
+                        aimPos = glideWaypoints.get(glideWaypointIndex);
+                    }
+                    if (aimPos != null)
+                    {
+                        Vec2 rot = rotationsTowards(player.getEyePosition(1.0F), aimPos);
+                        yawToTarget = rot.x;
+                    }
+                    look(stepYaw(player.getYRot(), yawToTarget, glideYawRate), glideLaunchPitchDeg);
                     player.jumpFromGround();
                     glideDeployDelayTicks = 1;
                     glideDeployAttempts = 0;
+                    glideLaunchTicksRemaining = glideLaunchAssistEnabled ? glideLaunchForwardTicks : 0;
                 }
                 return;
             }
             if (glideDeployDelayTicks > 0)
             {
                 glideDeployDelayTicks--;
+                // While airborne and not yet fall-flying, apply a horizontal boost to help deployment.
+                if (glideLaunchTicksRemaining > 0 && glideLaunchAssistEnabled)
+                {
+                    glideLaunchTicksRemaining--;
+                    float yaw = player.getYRot();
+                    Vec3 forwardHorizontal = directionFromRotation(0.0F, yaw);
+                    Vec3 current = player.getDeltaMovement();
+                    Vec3 boosted = new Vec3(forwardHorizontal.x * glideLaunchSpeed, current.y, forwardHorizontal.z * glideLaunchSpeed);
+                    player.setDeltaMovement(boosted);
+                }
                 return;
             }
             if (glideDeployAttempts < 20)

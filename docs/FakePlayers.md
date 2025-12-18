@@ -174,6 +174,17 @@ Notes:
 - Running `glide start` while the bot is on the ground will *arm* gliding but will not spam-jump.
 - `glide goto ...` will perform a takeoff jump and deploy elytra automatically.
 
+### Launch assist (takeoff tuning)
+
+Configure pre-deployment launch profile for consistent elytra takeoff:
+
+- `/player <name> glide launch assist true|false`
+- `/player <name> glide launch pitch <deg>` (suggest 15–25)
+- `/player <name> glide launch speed <blocksPerTick>` (suggest 0.5–0.8)
+- `/player <name> glide launch forwardTicks <ticks>` (0–20, suggest 5–8)
+
+Tip: enable `smart goto` and use a modest launch speed; the bot will aim toward the first waypoint before jumping.
+
 ### Freeze / hover
 
 Freeze forces the bot to hold position (zero velocity) and disables gravity while gliding.
