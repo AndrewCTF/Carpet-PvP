@@ -547,11 +547,11 @@ public class Scoreboards
 
             if (lv.isEmpty())
             {
-                return ListValue.wrap(bossBarManager.getEvents().stream().map(CustomBossEvent::getTextId).map(ResourceLocation::toString).map(StringValue::of));
+                return ListValue.wrap(bossBarManager.getEvents().stream().map(CustomBossEvent::getTextId).map(Identifier::toString).map(StringValue::of));
             }
 
             String id = lv.get(0).getString();
-            ResourceLocation identifier = InputValidator.identifierOf(id);
+            Identifier identifier = InputValidator.identifierOf(id);
 
             if (lv.size() == 1)
             {

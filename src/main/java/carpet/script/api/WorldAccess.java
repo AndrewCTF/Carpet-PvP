@@ -400,7 +400,7 @@ public class WorldAccess
                 return Value.TRUE;
             }
             String poiTypeString = poi.getString().toLowerCase(Locale.ROOT);
-            ResourceLocation resource = InputValidator.identifierOf(poiTypeString);
+                Identifier resource = InputValidator.identifierOf(poiTypeString);
             Registry<PoiType> poiReg = cc.registry(Registries.POINT_OF_INTEREST_TYPE);
             PoiType type = poiReg.getOptional(resource)
                     .orElseThrow(() -> new ThrowStatement(poiTypeString, Throwables.UNKNOWN_POI));
@@ -1238,7 +1238,7 @@ public class WorldAccess
             {
                 return ListValue.wrap(blocks.listElements().map(blockReference -> ValueConversions.of(blockReference.key().identifier())));
             }
-            ResourceLocation tag = InputValidator.identifierOf(lv.get(0).getString());
+            Identifier tag = InputValidator.identifierOf(lv.get(0).getString());
             Optional<HolderSet.Named<Block>> tagset = blocks.get(TagKey.create(Registries.BLOCK, tag));
             return tagset.isEmpty() ? Value.NULL : ListValue.wrap(tagset.get().stream().map(b -> ValueConversions.of(blocks.getKey(b.value()))));
         });

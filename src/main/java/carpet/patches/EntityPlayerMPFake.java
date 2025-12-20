@@ -488,7 +488,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     private void handleRespawnEquipment() {
         try {
             // Check game rules for equipment handling on death
-            boolean keepInventory = ((net.minecraft.server.level.ServerLevel) this.level()).getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY);
+            boolean keepInventory = ((net.minecraft.server.level.ServerLevel) this.level()).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
             
             if (keepInventory) {
                 // Restore all equipment if keepInventory is enabled

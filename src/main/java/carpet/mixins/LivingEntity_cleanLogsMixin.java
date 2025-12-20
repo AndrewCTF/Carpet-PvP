@@ -26,6 +26,6 @@ public abstract class LivingEntity_cleanLogsMixin extends Entity
         return livingEntity.hasCustomName()
             && CarpetSettings.cleanLogs
             && livingEntity.level() instanceof final ServerLevel serverLevel
-            && serverLevel.getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES);
+            && serverLevel.getGameRules().get(GameRules.SHOW_DEATH_MESSAGES);
     }
 }

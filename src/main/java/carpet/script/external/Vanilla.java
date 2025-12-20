@@ -324,7 +324,7 @@ public class Vanilla
 
     public static int MinecraftServer_getFillLimit(MinecraftServer server)
     {
-        return server.getGameRules().getInt(GameRules.RULE_COMMAND_MODIFICATION_BLOCK_LIMIT);
+        return server.overworld().getGameRules().get(GameRules.MAX_BLOCK_MODIFICATIONS);
     }
 
     public static int PoiRecord_getFreeTickets(PoiRecord record)

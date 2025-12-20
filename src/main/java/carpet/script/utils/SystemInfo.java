@@ -168,14 +168,7 @@ public class SystemInfo
         options.put("world_gamerules", c -> {
             Map<Value, Value> rules = new HashMap<>();
             GameRules gameRules = c.level().getGameRules();
-            gameRules.visitGameRuleTypes(new GameRules.GameRuleTypeVisitor()
-            {
-                @Override
-                public <T extends GameRules.Value<T>> void visit(GameRules.Key<T> key, GameRules.Type<T> type)
-                {
-                    rules.put(StringValue.of(key.getId()), StringValue.of(gameRules.getRule(key).toString()));
-                }
-            });
+            gameRules.availableRules().forEach(rule -> rules.put(StringValue.of(rule.id()), StringValue.of(gameRules.getAsString(rule))));
             return MapValue.wrap(rules);
         });
         options.put("world_min_spawning_light", c -> NumericValue.of(c.level().dimensionType().monsterSpawnBlockLightLimit()));
