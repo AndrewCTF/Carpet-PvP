@@ -28,7 +28,7 @@ public class RecipeHelper
                 for (RecipeDisplay recipeDisplay : r.value().display())
                 {
                     recipeDisplay.result().resolveForStacks(context).forEach(stack -> {
-                        if (BuiltInRegistries.ITEM.wrapAsHolder(stack.getItem()).unwrapKey().map(ResourceKey::location).orElseThrow(IllegalStateException::new).equals(id))
+                        if (BuiltInRegistries.ITEM.wrapAsHolder(stack.getItem()).unwrapKey().map(ResourceKey::identifier).orElseThrow(IllegalStateException::new).equals(id))
                         {
                             results.add(r.value());
                         }
@@ -48,7 +48,7 @@ public class RecipeHelper
             for (RecipeDisplay recipeDisplay : r.value().display())
             {
                 recipeDisplay.result().resolveForStacks(context).forEach(stack -> {
-                    if (BuiltInRegistries.ITEM.wrapAsHolder(stack.getItem()).unwrapKey().map(ResourceKey::location).orElseThrow(IllegalStateException::new).equals(id))
+                    if (BuiltInRegistries.ITEM.wrapAsHolder(stack.getItem()).unwrapKey().map(ResourceKey::identifier).orElseThrow(IllegalStateException::new).equals(id))
                     {
                         results.add(r.value());
                     }
