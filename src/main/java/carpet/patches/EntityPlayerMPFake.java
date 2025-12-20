@@ -629,7 +629,8 @@ public class EntityPlayerMPFake extends ServerPlayer
         }
     }    @Override
     public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float f) {
-        if(f > 0.0f && this.isBlocking()){
+        // Vanilla shields only block when the source is blockable and within the forward arc.
+        if (f > 0.0f && this.isDamageSourceBlocked(source)) {
             this.applyItemBlocking(serverLevel, source, f);
             ItemStack stack = this.getUseItem();
             // Check if this is an attack that can disable shields (axes can disable shields)

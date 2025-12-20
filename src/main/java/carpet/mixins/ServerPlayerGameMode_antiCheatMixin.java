@@ -34,7 +34,7 @@ public abstract class ServerPlayerGameMode_antiCheatMixin extends LivingEntity
         if (CarpetSettings.antiCheatDisabled && maxRange < 1024 && getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) < 1024) cir.setReturnValue(true);
     }
 
-    @Inject(method = "canInteractWithEntity(Lnet/minecraft/world/phys/AABB;D)Z", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "canInteractWithEntity", at = @At("HEAD"), cancellable = true)
     private void canInteractLongRangeEntity(AABB aabb, double d, CallbackInfoReturnable<Boolean> cir)
     {
         double maxRange = entityInteractionRange() + d;
