@@ -28,11 +28,11 @@ public class BiomeInfo
         Map<String, BiFunction<ServerLevel, Biome, Value>> map = new HashMap<>();
         map.put("tags", (w, b) -> ListValue.wrap(w.registryAccess().lookupOrThrow(Registries.BIOME).getTags().filter(p -> p.stream().anyMatch(h -> h.value() == b)).map(ValueConversions::of)));
         map.put("temperature", (w, b) -> NumericValue.of(b.getBaseTemperature()));
-        map.put("fog_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getFogColor()));
-        map.put("foliage_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getFoliageColorOverride().orElse(4764952))); // client Biome.getDefaultFoliageColor
-        map.put("sky_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getSkyColor()));
-        map.put("water_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getWaterColor()));
-        map.put("water_fog_color", (w, b) -> ValueConversions.ofRGB(b.getSpecialEffects().getWaterFogColor()));
+        map.put("fog_color", (w, b) -> Value.NULL);
+        map.put("foliage_color", (w, b) -> ValueConversions.ofRGB(b.getFoliageColor()));
+        map.put("sky_color", (w, b) -> Value.NULL);
+        map.put("water_color", (w, b) -> ValueConversions.ofRGB(b.getWaterColor()));
+        map.put("water_fog_color", (w, b) -> Value.NULL);
         map.put("humidity", (w, b) -> NumericValue.of(Vanilla.Biome_getClimateSettings(b).downfall()));
         map.put("precipitation", (w, b) -> StringValue.of(b.getPrecipitationAt(new BlockPos(0, w.getSeaLevel(), 0), w.getSeaLevel()).name().toLowerCase(Locale.ROOT)));
         map.put("features", (w, b) -> {

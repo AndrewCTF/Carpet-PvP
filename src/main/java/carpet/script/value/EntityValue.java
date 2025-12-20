@@ -3,6 +3,7 @@ package carpet.script.value;
 import carpet.fakes.FoodDataInterface;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.Tracer;
+import carpet.utils.CommandHelper;
 import carpet.script.CarpetContext;
 import carpet.script.CarpetScriptServer;
 import carpet.script.EntityEventsGroup;
@@ -121,11 +122,11 @@ public class EntityValue extends Value
             EntitySelector entitySelector = selectorCache.get(selector);
             if (entitySelector != null)
             {
-                return entitySelector.findEntities(source.withMaximumPermission(4));
+                return entitySelector.findEntities(source.withMaximumPermission(CommandHelper.permissionSetForLevel(4)));
             }
             entitySelector = new EntitySelectorParser(new StringReader(selector), true).parse();
             selectorCache.put(selector, entitySelector);
-            return entitySelector.findEntities(source.withMaximumPermission(4));
+            return entitySelector.findEntities(source.withMaximumPermission(CommandHelper.permissionSetForLevel(4)));
         }
         catch (CommandSyntaxException e)
         {
@@ -604,9 +605,10 @@ public class EntityValue extends Value
         put("permission_level", (e, a) -> {
             if (e instanceof ServerPlayer spe)
             {
+                CommandSourceStack source = spe.createCommandSourceStack();
                 for (int i = 4; i >= 0; i--)
                 {
-                    if (spe.hasPermissions(i))
+                    if (CommandHelper.hasPermissionLevel(source, i))
                     {
                         return new NumericValue(i);
                     }

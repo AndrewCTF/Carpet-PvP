@@ -1304,7 +1304,7 @@ public class WorldAccess
                         Climate.quantizeCoord(numberGetOrThrow(weirdness))
                 );
                 biome = mnbs.getNoiseBiome(point).value();
-                ResourceLocation biomeId = cc.registry(Registries.BIOME).getKey(biome);
+                Identifier biomeId = cc.registry(Registries.BIOME).getKey(biome);
                 return NBTSerializableValue.nameFromRegistryId(biomeId);
             }
 
@@ -1325,7 +1325,7 @@ public class WorldAccess
             // in locatebiome
             if (locator.offset == lv.size())
             {
-                ResourceLocation biomeId = cc.registry(Registries.BIOME).getKey(biome);
+                Identifier biomeId = cc.registry(Registries.BIOME).getKey(biome);
                 return NBTSerializableValue.nameFromRegistryId(biomeId);
             }
             String biomeFeature = lv.get(locator.offset).getString();
@@ -1441,7 +1441,7 @@ public class WorldAccess
                 if (!requested.isNull())
                 {
                     String reqString = requested.getString();
-                    ResourceLocation id = InputValidator.identifierOf(reqString);
+                    Identifier id = InputValidator.identifierOf(reqString);
                     Structure requestedStructure = reg.getValue(id);
                     if (requestedStructure != null)
                     {

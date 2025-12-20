@@ -1,6 +1,7 @@
 package carpet.patches;
 
 import net.minecraft.util.Mth;
+import net.minecraft.util.Util;
 import net.minecraft.world.level.border.BorderChangeListener;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
@@ -36,28 +37,28 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
     }
 
     @Override
-    public double getMinX()
+    public double getMinX(float tickDelta)
     {
         int maxSize = this.border.getAbsoluteMaxSize();
         return Mth.clamp(this.border.getCenterX() - this.getSize() / 2.0, -maxSize, maxSize);
     }
 
     @Override
-    public double getMaxX()
+    public double getMaxX(float tickDelta)
     {
         int maxSize = this.border.getAbsoluteMaxSize();
         return Mth.clamp(this.border.getCenterX() + this.getSize() / 2.0, -maxSize, maxSize);
     }
 
     @Override
-    public double getMinZ()
+    public double getMinZ(float tickDelta)
     {
         int maxSize = this.border.getAbsoluteMaxSize();
         return Mth.clamp(this.border.getCenterZ() - this.getSize() / 2.0, -maxSize, maxSize);
     }
 
     @Override
-    public double getMaxZ()
+    public double getMaxZ(float tickDelta)
     {
         int maxSize = this.border.getAbsoluteMaxSize();
         return Mth.clamp(this.border.getCenterZ() + this.getSize() / 2.0, -maxSize, maxSize);
@@ -117,9 +118,12 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
             // Most importantly those that send updates to the client
             // This is because the client logic uses real time
             // So if the tick speed has changed we need to tell the client
+            double progress = Mth.clamp(this.ticks / this.tickDuration, 0.0, 1.0);
+            long now = Util.getMillis();
+            long lerpStartTime = now - (long)(progress * this.realDuration);
             for (BorderChangeListener listener : this.border.getListeners())
             {
-                listener.onLerpSize(this.border, this.from, this.to, this.realDuration);
+                listener.onLerpSize(this.border, this.from, this.to, this.realDuration, lerpStartTime);
             }
         }
 
