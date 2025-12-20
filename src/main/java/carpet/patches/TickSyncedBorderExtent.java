@@ -137,12 +137,12 @@ public class TickSyncedBorderExtent implements WorldBorder.BorderExtent
         return Shapes.join(
             Shapes.INFINITY,
             Shapes.box(
-                Math.floor(this.getMinX()),
+                Math.floor(this.getMinX(0.0f)),
                 Double.NEGATIVE_INFINITY,
-                Math.floor(this.getMinZ()),
-                Math.ceil(this.getMaxX()),
+                Math.floor(this.getMinZ(0.0f)),
+                Math.ceil(this.getMaxX(0.0f)),
                 Double.POSITIVE_INFINITY,
-                Math.ceil(this.getMaxZ())
+                Math.ceil(this.getMaxZ(0.0f))
             ),
             BooleanOp.ONLY_FIRST
         );

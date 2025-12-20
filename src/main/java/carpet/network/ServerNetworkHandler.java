@@ -91,9 +91,8 @@ public class ServerNetworkHandler
         }
         else
         {
-            player.level().getServer().getCommands().performPrefixedCommand(
-                    new SnoopyCommandSource(player, error, output, returnValue), command
-            );
+            CommandSourceStack source = SnoopyCommandSource.wrap(player.createCommandSourceStack(), error, output);
+            returnValue[0] = player.level().getServer().getCommands().performPrefixedCommand(source, command);
         }
         CompoundTag result = new CompoundTag();
         result.putString("id", id);

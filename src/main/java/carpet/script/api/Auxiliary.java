@@ -685,17 +685,11 @@ public class Auxiliary
             try
             {
                 Component[] error = {null};
-                OptionalLong[] returnValue = {OptionalLong.empty()};
                 List<Component> output = new ArrayList<>();
-                s.getServer().getCommands().performPrefixedCommand(
-                        new SnoopyCommandSource(s, error, output, returnValue),
-                        lv.get(0).getString());
-                if (returnValue[0].isEmpty())
-                {
-                    return Value.NULL;
-                }
+                CommandSourceStack source = SnoopyCommandSource.wrap(s, error, output);
+                int returnValue = s.getServer().getCommands().performPrefixedCommand(source, lv.get(0).getString());
                 return ListValue.of(
-                        NumericValue.of(returnValue[0].getAsLong()),
+                        NumericValue.of(returnValue),
                         ListValue.wrap(output.stream().map(FormattedTextValue::new)),
                         FormattedTextValue.of(error[0])
                 );
