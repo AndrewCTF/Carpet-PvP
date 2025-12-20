@@ -627,12 +627,16 @@ public class EntityPlayerMPFake extends ServerPlayer
                 getName().getString(), e.getMessage(), e);
             return super.teleport(teleportTransition);
         }
-    }    @Override
+    }
+
+    @Override
     public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float f) {
-        // Vanilla shields only block when the source is blockable and within the forward arc.
-        if (f > 0.0f && this.isDamageSourceBlocked(source)) {
-            this.applyItemBlocking(serverLevel, source, f);
-            ItemStack stack = this.getUseItem();
+        // In 1.21+, directional blocking is handled by applyItemBlocking (uses BLOCKS_ATTACKS component).
+        if (f > 0.0f && this.isBlocking()) {
+            float blockedDamage = this.applyItemBlocking(serverLevel, source, f);
+            if (blockedDamage <= 0.0f) return super.hurtServer(serverLevel, source, f);
+
+            ItemStack stack = this.getItemBlockingWith();
             // Check if this is an attack that can disable shields (axes can disable shields)
             boolean canDisable = source.getEntity() instanceof LivingEntity le && 
                                 le.getMainHandItem().getItem().toString().contains("axe");
@@ -653,8 +657,8 @@ public class EntityPlayerMPFake extends ServerPlayer
                 this.playSound(SoundEvents.SHIELD_BLOCK.value(), 1.0F, 0.8F + this.level().random.nextFloat() * 0.4F);
             }
             CriteriaTriggers.ENTITY_HURT_PLAYER.trigger((ServerPlayer)this, source, f, 0, true);
-            if(f < 3.4028235E37F){
-                ((ServerPlayer)this).awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(f * 10.0F));
+            if(blockedDamage < 3.4028235E37F){
+                ((ServerPlayer)this).awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(blockedDamage * 10.0F));
             }
             return false;
         }
