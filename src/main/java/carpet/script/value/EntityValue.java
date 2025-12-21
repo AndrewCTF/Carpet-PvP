@@ -3,6 +3,7 @@ package carpet.script.value;
 import carpet.fakes.FoodDataInterface;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.Tracer;
+import carpet.utils.CommandHelper;
 import carpet.script.CarpetContext;
 import carpet.script.CarpetScriptServer;
 import carpet.script.EntityEventsGroup;
@@ -33,7 +34,7 @@ import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -61,13 +62,13 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.MoveTowardsRestrictionGoal;
 import net.minecraft.world.entity.ai.memory.ExpirableValue;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
-import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
-import net.minecraft.world.entity.projectile.WitherSkull;
-import net.minecraft.world.entity.vehicle.AbstractMinecart;
+import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull;
+import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -121,11 +122,11 @@ public class EntityValue extends Value
             EntitySelector entitySelector = selectorCache.get(selector);
             if (entitySelector != null)
             {
-                return entitySelector.findEntities(source.withMaximumPermission(4));
+                return entitySelector.findEntities(source.withMaximumPermission(CommandHelper.permissionSetForLevel(4)));
             }
             entitySelector = new EntitySelectorParser(new StringReader(selector), true).parse();
             selectorCache.put(selector, entitySelector);
-            return entitySelector.findEntities(source.withMaximumPermission(4));
+            return entitySelector.findEntities(source.withMaximumPermission(CommandHelper.permissionSetForLevel(4)));
         }
         catch (CommandSyntaxException e)
         {
@@ -384,7 +385,7 @@ public class EntityValue extends Value
                 return (illagers.contains(type) || arthropods.contains(type) || undeads.contains(type) || aquatique.contains(type)) && e.isAlive();
             }, allTypes.stream().filter(et -> !regular.contains(et) && living.contains(et))));
 
-            for (ResourceLocation typeId : BuiltInRegistries.ENTITY_TYPE.keySet())
+            for (Identifier typeId : BuiltInRegistries.ENTITY_TYPE.keySet())
             {
                 EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getValue(typeId);
                 String mobType = ValueConversions.simplify(typeId);
@@ -499,7 +500,7 @@ public class EntityValue extends Value
         put("immune_to_frost", (e, a) -> BooleanValue.of(!e.canFreeze()));
 
         put("invulnerable", (e, a) -> BooleanValue.of(e.isInvulnerable()));
-        put("dimension", (e, a) -> nameFromRegistryId(e.level().dimension().location())); // getDimId
+        put("dimension", (e, a) -> nameFromRegistryId(e.level().dimension().identifier())); // getDimId
         put("height", (e, a) -> new NumericValue(e.getDimensions(Pose.STANDING).height()));
         put("width", (e, a) -> new NumericValue(e.getDimensions(Pose.STANDING).width()));
         put("eye_height", (e, a) -> new NumericValue(e.getEyeHeight()));
@@ -604,9 +605,10 @@ public class EntityValue extends Value
         put("permission_level", (e, a) -> {
             if (e instanceof ServerPlayer spe)
             {
+                CommandSourceStack source = spe.createCommandSourceStack();
                 for (int i = 4; i >= 0; i--)
                 {
-                    if (spe.hasPermissions(i))
+                    if (CommandHelper.hasPermissionLevel(source, i))
                     {
                         return new NumericValue(i);
                     }
@@ -848,7 +850,7 @@ public class EntityValue extends Value
                 AttributeMap container = el.getAttributes();
                 return MapValue.wrap(attributes.listElements().filter(container::hasAttribute).collect(Collectors.toMap(aa -> ValueConversions.of(aa.key()), aa -> NumericValue.of(container.getValue(aa)))));
             }
-            ResourceLocation id = InputValidator.identifierOf(a.getString());
+                Identifier id = InputValidator.identifierOf(a.getString());
             Holder<Attribute> attrib = attributes.get(id).orElseThrow(
                     () -> new InternalExpressionException("Unknown attribute: " + a.getString())
             );

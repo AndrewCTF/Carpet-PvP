@@ -224,7 +224,7 @@ public class ScriptCommand
                                                         BlockPosArgument.getSpawnablePos(cc, "to"),
                                                         StringArgumentType.getString(cc, "arguments")
                                                 ))))));
-        LiteralArgumentBuilder<CommandSourceStack> i = literal("scan").requires((player) -> player.hasPermission(2)).
+        LiteralArgumentBuilder<CommandSourceStack> i = literal("scan").requires((player) -> carpet.utils.CommandHelper.hasPermissionLevel(player, 2)).
                 then(argument("origin", BlockPosArgument.blockPos()).
                         then(argument("from", BlockPosArgument.blockPos()).
                                 then(argument("to", BlockPosArgument.blockPos()).
@@ -237,7 +237,7 @@ public class ScriptCommand
                                                         BlockPosArgument.getSpawnablePos(cc, "to"),
                                                         StringArgumentType.getString(cc, "expr")
                                                 ))))));
-        LiteralArgumentBuilder<CommandSourceStack> e = literal("fill").requires((player) -> player.hasPermission(2)).
+        LiteralArgumentBuilder<CommandSourceStack> e = literal("fill").requires((player) -> carpet.utils.CommandHelper.hasPermissionLevel(player, 2)).
                 then(argument("origin", BlockPosArgument.blockPos()).
                         then(argument("from", BlockPosArgument.blockPos()).
                                 then(argument("to", BlockPosArgument.blockPos()).
@@ -264,7 +264,7 @@ public class ScriptCommand
                                                                                 BlockPredicateArgument.getBlockPredicate(cc, "filter"),
                                                                                 "solid"
                                                                         )))))))));
-        LiteralArgumentBuilder<CommandSourceStack> t = literal("outline").requires((player) -> player.hasPermission(2)).
+        LiteralArgumentBuilder<CommandSourceStack> t = literal("outline").requires((player) -> carpet.utils.CommandHelper.hasPermissionLevel(player, 2)).
                 then(argument("origin", BlockPosArgument.blockPos()).
                         then(argument("from", BlockPosArgument.blockPos()).
                                 then(argument("to", BlockPosArgument.blockPos()).

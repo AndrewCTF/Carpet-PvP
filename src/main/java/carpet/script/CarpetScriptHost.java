@@ -216,13 +216,13 @@ public class CarpetScriptHost extends ScriptHost
             {
                 throw CommandArgument.error("Numeric permission level for custom commands should be between 1 and 4");
             }
-            return s -> s.hasPermission(level);
+            return s -> carpet.utils.CommandHelper.hasPermissionLevel(s, level);
         }
         if (!(confValue instanceof final FunctionValue fun))
         {
             String perm = confValue.getString().toLowerCase(Locale.ROOT);
             return switch (perm) {
-                case "ops" -> s -> s.hasPermission(2);
+                case "ops" -> s -> carpet.utils.CommandHelper.hasPermissionLevel(s, 2);
                 case "server" -> s -> !(s.getEntity() instanceof ServerPlayer);
                 case "players" -> s -> s.getEntity() instanceof ServerPlayer;
                 case "all" -> s -> true;

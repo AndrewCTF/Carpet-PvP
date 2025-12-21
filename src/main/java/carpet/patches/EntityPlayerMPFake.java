@@ -488,7 +488,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     private void handleRespawnEquipment() {
         try {
             // Check game rules for equipment handling on death
-            boolean keepInventory = ((net.minecraft.server.level.ServerLevel) this.level()).getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY);
+            boolean keepInventory = ((net.minecraft.server.level.ServerLevel) this.level()).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
             
             if (keepInventory) {
                 // Restore all equipment if keepInventory is enabled
@@ -575,8 +575,8 @@ public class EntityPlayerMPFake extends ServerPlayer
         try {
             LOGGER.debug("Starting dimension teleport for fake player {} from {} to {}", 
                 getName().getString(), 
-                this.level().dimension().location(),
-                teleportTransition.newLevel().dimension().location());
+                this.level().dimension().identifier(),
+                teleportTransition.newLevel().dimension().identifier());
             
             // Save equipment state before teleportation
             saveEquipmentState();
@@ -627,11 +627,16 @@ public class EntityPlayerMPFake extends ServerPlayer
                 getName().getString(), e.getMessage(), e);
             return super.teleport(teleportTransition);
         }
-    }    @Override
+    }
+
+    @Override
     public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float f) {
-        if(f > 0.0f && this.isBlocking()){
-            this.applyItemBlocking(serverLevel, source, f);
-            ItemStack stack = this.getUseItem();
+        // In 1.21+, directional blocking is handled by applyItemBlocking (uses BLOCKS_ATTACKS component).
+        if (f > 0.0f && this.isBlocking()) {
+            float blockedDamage = this.applyItemBlocking(serverLevel, source, f);
+            if (blockedDamage <= 0.0f) return super.hurtServer(serverLevel, source, f);
+
+            ItemStack stack = this.getItemBlockingWith();
             // Check if this is an attack that can disable shields (axes can disable shields)
             boolean canDisable = source.getEntity() instanceof LivingEntity le && 
                                 le.getMainHandItem().getItem().toString().contains("axe");
@@ -652,8 +657,8 @@ public class EntityPlayerMPFake extends ServerPlayer
                 this.playSound(SoundEvents.SHIELD_BLOCK.value(), 1.0F, 0.8F + this.level().random.nextFloat() * 0.4F);
             }
             CriteriaTriggers.ENTITY_HURT_PLAYER.trigger((ServerPlayer)this, source, f, 0, true);
-            if(f < 3.4028235E37F){
-                ((ServerPlayer)this).awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(f * 10.0F));
+            if(blockedDamage < 3.4028235E37F){
+                ((ServerPlayer)this).awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(blockedDamage * 10.0F));
             }
             return false;
         }

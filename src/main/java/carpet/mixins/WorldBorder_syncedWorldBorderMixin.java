@@ -15,11 +15,11 @@ public class WorldBorder_syncedWorldBorderMixin
     @Shadow private WorldBorder.BorderExtent extent;
 
     @Inject(method = "lerpSizeBetween", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/border/WorldBorder;getListeners()Ljava/util/List;"))
-    private void getExtent(double d, double e, long l, CallbackInfo ci)
+    private void getExtent(double d, double e, long duration, long lerpStartTime, CallbackInfo ci)
     {
         if (d != e && CarpetSettings.tickSyncedWorldBorders)
         {
-            this.extent = new TickSyncedBorderExtent((WorldBorder) (Object) this, l, d, e);
+            this.extent = new TickSyncedBorderExtent((WorldBorder) (Object) this, duration, d, e);
         }
     }
 }

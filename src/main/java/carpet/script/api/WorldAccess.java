@@ -31,7 +31,7 @@ import carpet.script.value.ValueConversions;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -88,7 +88,7 @@ import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.protocol.game.ClientboundExplodePacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.SortedArraySet;
@@ -400,7 +400,7 @@ public class WorldAccess
                 return Value.TRUE;
             }
             String poiTypeString = poi.getString().toLowerCase(Locale.ROOT);
-            ResourceLocation resource = InputValidator.identifierOf(poiTypeString);
+                Identifier resource = InputValidator.identifierOf(poiTypeString);
             Registry<PoiType> poiReg = cc.registry(Registries.POINT_OF_INTEREST_TYPE);
             PoiType type = poiReg.getOptional(resource)
                     .orElseThrow(() -> new ThrowStatement(poiTypeString, Throwables.UNKNOWN_POI));
@@ -1236,9 +1236,9 @@ public class WorldAccess
             Registry<Block> blocks = cc.registry(Registries.BLOCK);
             if (lv.isEmpty())
             {
-                return ListValue.wrap(blocks.listElements().map(blockReference -> ValueConversions.of(blockReference.key().location())));
+                return ListValue.wrap(blocks.listElements().map(blockReference -> ValueConversions.of(blockReference.key().identifier())));
             }
-            ResourceLocation tag = InputValidator.identifierOf(lv.get(0).getString());
+            Identifier tag = InputValidator.identifierOf(lv.get(0).getString());
             Optional<HolderSet.Named<Block>> tagset = blocks.get(TagKey.create(Registries.BLOCK, tag));
             return tagset.isEmpty() ? Value.NULL : ListValue.wrap(tagset.get().stream().map(b -> ValueConversions.of(blocks.getKey(b.value()))));
         });
@@ -1267,7 +1267,7 @@ public class WorldAccess
             ServerLevel world = cc.level();
             if (lv.isEmpty())
             {
-                return ListValue.wrap(cc.registry(Registries.BIOME).listElements().map(biomeReference -> ValueConversions.of(biomeReference.key().location())));
+                return ListValue.wrap(cc.registry(Registries.BIOME).listElements().map(biomeReference -> ValueConversions.of(biomeReference.key().identifier())));
             }
 
             Biome biome;
@@ -1304,7 +1304,7 @@ public class WorldAccess
                         Climate.quantizeCoord(numberGetOrThrow(weirdness))
                 );
                 biome = mnbs.getNoiseBiome(point).value();
-                ResourceLocation biomeId = cc.registry(Registries.BIOME).getKey(biome);
+                Identifier biomeId = cc.registry(Registries.BIOME).getKey(biome);
                 return NBTSerializableValue.nameFromRegistryId(biomeId);
             }
 
@@ -1325,7 +1325,7 @@ public class WorldAccess
             // in locatebiome
             if (locator.offset == lv.size())
             {
-                ResourceLocation biomeId = cc.registry(Registries.BIOME).getKey(biome);
+                Identifier biomeId = cc.registry(Registries.BIOME).getKey(biome);
                 return NBTSerializableValue.nameFromRegistryId(biomeId);
             }
             String biomeFeature = lv.get(locator.offset).getString();
@@ -1441,7 +1441,7 @@ public class WorldAccess
                 if (!requested.isNull())
                 {
                     String reqString = requested.getString();
-                    ResourceLocation id = InputValidator.identifierOf(reqString);
+                    Identifier id = InputValidator.identifierOf(reqString);
                     Structure requestedStructure = reg.getValue(id);
                     if (requestedStructure != null)
                     {

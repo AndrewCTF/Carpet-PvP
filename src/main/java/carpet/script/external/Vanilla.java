@@ -54,12 +54,12 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.village.poi.PoiRecord;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.NaturalSpawner;
 import net.minecraft.world.level.PotentialCalculator;
 import net.minecraft.world.level.biome.Biome;
@@ -324,7 +324,7 @@ public class Vanilla
 
     public static int MinecraftServer_getFillLimit(MinecraftServer server)
     {
-        return server.getGameRules().getInt(GameRules.RULE_COMMAND_MODIFICATION_BLOCK_LIMIT);
+        return server.overworld().getGameRules().get(GameRules.MAX_BLOCK_MODIFICATIONS);
     }
 
     public static int PoiRecord_getFreeTickets(PoiRecord record)

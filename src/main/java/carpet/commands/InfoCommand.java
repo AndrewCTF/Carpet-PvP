@@ -68,7 +68,7 @@ public class InfoCommand
 
     private static int infoBlock(CommandSourceStack source, BlockPos pos, String grep)
     {
-        if (!source.hasPermission(Commands.LEVEL_GAMEMASTERS)) {
+        if (!Commands.LEVEL_GAMEMASTERS.check(source.permissions())) {
             // check if pos is loaded using chunk source presence (hasChunkAt is deprecated)
             boolean chunkLoaded = source.getLevel().getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
             if (!chunkLoaded) {

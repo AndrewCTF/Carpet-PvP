@@ -26,7 +26,7 @@ public class MinecraftMixin
         if (this.level != null) {
             boolean runsNormally = level.tickRateManager().runsNormally();
             // hope server doesn't need to tick - should be handled by the server on its own
-            if (!runsNormally)
+            if (!runsNormally && CarpetClient.shapes != null)
                 CarpetClient.shapes.renewShapes();
         }
     }

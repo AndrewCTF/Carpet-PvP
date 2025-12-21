@@ -4,7 +4,7 @@ import carpet.script.exception.InternalExpressionException;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 
@@ -104,7 +104,7 @@ public class EquipmentValidator {
         String trimmedName = itemName.trim();
         
         try {
-            ResourceLocation itemId = ResourceLocation.parse(trimmedName);
+            Identifier itemId = Identifier.parse(trimmedName);
             Registry<Item> itemRegistry = carpetContext.registry(Registries.ITEM);
             
             if (!itemRegistry.containsKey(itemId)) {

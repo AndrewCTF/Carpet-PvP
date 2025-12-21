@@ -12,9 +12,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -126,7 +127,7 @@ public class CarpetSettings
 
     private static class CarpetPermissionLevel extends Validator<String> {
         @Override public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String string) {
-            if (source == null || source.hasPermission(4))
+            if (source == null || CommandHelper.hasPermissionLevel(source, 4))
                 return newValue;
             return null;
         }
@@ -148,6 +149,9 @@ public class CarpetSettings
 
             @Rule(desc = "Allows fake players to use precise elytra gliding controls via /player <name> glide ...", category = {CREATIVE})
             public static boolean fakePlayerElytraGlide = false;
+
+            @Rule(desc = "Allows fake players to use built-in navigation/pathfinding via /player <name> nav ...", category = {CREATIVE})
+            public static boolean fakePlayerNavigation = false;
 
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
@@ -494,7 +498,7 @@ public class CarpetSettings
                     case "0", "1", "2", "3", "4" -> Integer.parseInt(newValue);
                     default -> throw new IllegalArgumentException(); // already checked by previous validator
             	};
-            if (source != null && !source.hasPermission(permissionLevel))
+            if (source != null && !CommandHelper.hasPermissionLevel(source, permissionLevel))
                 return null;
             CarpetSettings.runPermissionLevel = permissionLevel;
             if (source != null)
@@ -913,7 +917,7 @@ public class CarpetSettings
         @Override
         public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String string) {
             if (source == null) return newValue; // closing or sync
-            Optional<Block> ignoredBlock = source.registryAccess().lookupOrThrow(Registries.BLOCK).getOptional(ResourceLocation.tryParse(newValue));
+            Optional<Block> ignoredBlock = source.registryAccess().lookupOrThrow(Registries.BLOCK).getOptional(Identifier.tryParse(newValue));
             if (!ignoredBlock.isPresent()) {
                 Messenger.m(source, "r Unknown block '" + newValue + "'.");
                 return null;
@@ -1012,7 +1016,7 @@ public class CarpetSettings
                         double from = worldBorder.getSize();
                         double to = worldBorder.getLerpTarget();
                         long time = worldBorder.getLerpTime();
-                        worldBorder.lerpSizeBetween(from, to, time);
+                        worldBorder.lerpSizeBetween(from, to, time, Util.getMillis());
                     }
                 }
             }

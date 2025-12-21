@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -91,9 +92,10 @@ public class ServerNetworkHandler
         }
         else
         {
-            player.level().getServer().getCommands().performPrefixedCommand(
-                    new SnoopyCommandSource(player, error, output, returnValue), command
-            );
+            CommandSourceStack source = SnoopyCommandSource
+                    .wrap(player.createCommandSourceStack(), error, output)
+                    .withCallback((b, i) -> returnValue[0] = i);
+            player.level().getServer().getCommands().performPrefixedCommand(source, command);
         }
         CompoundTag result = new CompoundTag();
         result.putString("id", id);

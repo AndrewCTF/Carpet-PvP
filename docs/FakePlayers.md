@@ -157,34 +157,48 @@ Fake players act on what they are looking at (for attacking and right-click use)
 ## Elytra gliding (precise controls)
 
 Carpet PvP can drive fake-player elytra flight with:
-- rate-limited yaw/pitch steering
-- a fixed velocity “throttle” (speed)
-- optional freeze/hover
 
 This is gated behind a rule (off by default):
 
-- `/carpet fakePlayerElytraGlide true`
 
 ### Start / stop
 
-- `/player <name> glide start`
-- `/player <name> glide stop`
 
 Notes:
-- Running `glide start` while the bot is on the ground will *arm* gliding but will not spam-jump.
-- `glide goto ...` will perform a takeoff jump and deploy elytra automatically.
 
 ### Launch assist (takeoff tuning)
 
 Configure pre-deployment launch profile for consistent elytra takeoff:
 
-- `/player <name> glide launch assist true|false`
-- `/player <name> glide launch pitch <deg>` (suggest 15–25)
-- `/player <name> glide launch speed <blocksPerTick>` (suggest 0.5–0.8)
-- `/player <name> glide launch forwardTicks <ticks>` (0–20, suggest 5–8)
 
 Tip: enable `smart goto` and use a modest launch speed; the bot will aim toward the first waypoint before jumping.
 
+## Navigation (land / water / air)
+
+This mod includes a built-in, Baritone-inspired navigation foundation for fake players.
+
+It is deliberately **server-safe** (bounded search limits, won’t load chunks), and it can automatically replan if the bot gets stuck.
+
+Enable the rule:
+
+- `/carpet fakePlayerNavigation true`
+
+Basic usage:
+
+- `/player <bot> nav goto <x y z>` (AUTO: chooses water if swimming, else air if elytra is usable + `fakePlayerElytraGlide`, else land)
+- `/player <bot> nav goto land <x y z> [arrivalRadius]`
+- `/player <bot> nav goto water <x y z> [arrivalRadius]`
+- `/player <bot> nav goto air <x y z> [arrivalRadius]` (default: land on the floor under target XZ)
+- `/player <bot> nav goto air land <x y z> [arrivalRadius]`
+- `/player <bot> nav goto air drop <x y z> [arrivalRadius]` (stop gliding at the target and fall)
+- `/player <bot> nav status`
+- `/player <bot> nav stop`
+
+Notes:
+
+- LAND navigation is **amphibious**: it can walk and swim through water when needed.
+- AIR navigation additionally requires `/carpet fakePlayerElytraGlide true` and a non-broken elytra equipped in the chest slot.
+- This is a foundation for deeper Baritone-like features (cost models, danger avoidance, better movement primitives, long-range planning).
 ### Freeze / hover
 
 Freeze forces the bot to hold position (zero velocity) and disables gravity while gliding.

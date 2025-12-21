@@ -9,7 +9,7 @@ import carpet.script.value.ValueConversions;
 import com.google.common.collect.ImmutableList;
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.DynamicOps;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -94,11 +94,11 @@ public class Experimental
         for (Map.Entry<ResourceKey<LevelStem>, LevelStem> entry : generatorOptions.dimensions().entrySet())
         {
             ResourceKey<LevelStem> registryKey = entry.getKey();
-            CarpetScriptServer.LOG.error("Analysing workld: {}", registryKey.location());
+            CarpetScriptServer.LOG.error("Analysing workld: {}", registryKey.identifier());
             if (!existing_worlds.containsKey(registryKey))
             {
-                addeds.add(ValueConversions.of(registryKey.location()));
-                ResourceKey<Level> registryKey2 = ResourceKey.create(Registry.DIMENSION_REGISTRY, registryKey.location());
+                addeds.add(ValueConversions.of(registryKey.identifier()));
+                ResourceKey<Level> registryKey2 = ResourceKey.create(Registry.DIMENSION_REGISTRY, registryKey.identifier());
                 Holder<DimensionType> holder2 = (entry.getValue()).typeHolder();
                 ChunkGenerator chunkGenerator3 = entry.getValue().generator();
                 DerivedLevelData unmodifiableLevelProperties = new DerivedLevelData(saveProperties, ((ServerWorldInterface) server.overworld()).getWorldPropertiesCM());
@@ -136,12 +136,12 @@ public class Experimental
             ResourceKey<LevelStem> registryKey = entry.getKey();
             if (!existing_worlds.containsKey(registryKey))
             {
-                ResourceKey<Level> resourceKey2 = ResourceKey.create(Registry.DIMENSION_REGISTRY, registryKey.location());
+                ResourceKey<Level> resourceKey2 = ResourceKey.create(Registry.DIMENSION_REGISTRY, registryKey.identifier());
                 DerivedLevelData derivedLevelData = new DerivedLevelData(stem.worldData(), ((ServerWorldInterface) server.overworld()).getWorldPropertiesCM());
                 ServerLevel serverLevel2 = new ServerLevel(server, Util.backgroundExecutor(), session, derivedLevelData, resourceKey2, entry.getValue(), WorldTools.NOOP_LISTENER, bl, m, ImmutableList.of(), false);
                 server.overworld().getWorldBorder().addListener(new BorderChangeListener.DelegateBorderChangeListener(serverLevel2.getWorldBorder()));
                 existing_worlds.put(resourceKey2, serverLevel2);
-                addeds.add(ValueConversions.of(registryKey.location()));
+                addeds.add(ValueConversions.of(registryKey.identifier()));
             }
         }
         ((MinecraftServerInterface)server).reloadAfterReload(stem.registryAccess());

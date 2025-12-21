@@ -5,7 +5,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -26,6 +26,6 @@ public abstract class LivingEntity_cleanLogsMixin extends Entity
         return livingEntity.hasCustomName()
             && CarpetSettings.cleanLogs
             && livingEntity.level() instanceof final ServerLevel serverLevel
-            && serverLevel.getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES);
+            && serverLevel.getGameRules().get(GameRules.SHOW_DEATH_MESSAGES);
     }
 }

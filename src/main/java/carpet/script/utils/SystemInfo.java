@@ -15,7 +15,7 @@ import carpet.script.value.ValueConversions;
 import com.sun.management.OperatingSystemMXBean;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.packs.PackType;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.LevelResource;
@@ -60,7 +60,7 @@ public class SystemInfo
             String tlf = serverPath.getName(nodeCount - 2).toString();
             return StringValue.of(tlf);
         });
-        options.put("world_dimensions", c -> ListValue.wrap(c.server().levelKeys().stream().map(k -> ValueConversions.of(k.location()))));
+        options.put("world_dimensions", c -> ListValue.wrap(c.server().levelKeys().stream().map(k -> ValueConversions.of(k.identifier()))));
         options.put("world_spawn_point", (CarpetContext c) -> ValueConversions.of(c.server().getRespawnData().pos()));
 
         options.put("world_bottom", c -> new NumericValue(c.level().getMinY()));
@@ -168,14 +168,7 @@ public class SystemInfo
         options.put("world_gamerules", c -> {
             Map<Value, Value> rules = new HashMap<>();
             GameRules gameRules = c.level().getGameRules();
-            gameRules.visitGameRuleTypes(new GameRules.GameRuleTypeVisitor()
-            {
-                @Override
-                public <T extends GameRules.Value<T>> void visit(GameRules.Key<T> key, GameRules.Type<T> type)
-                {
-                    rules.put(StringValue.of(key.getId()), StringValue.of(gameRules.getRule(key).toString()));
-                }
-            });
+            gameRules.availableRules().forEach(rule -> rules.put(StringValue.of(rule.id()), StringValue.of(gameRules.getAsString(rule))));
             return MapValue.wrap(rules);
         });
         options.put("world_min_spawning_light", c -> NumericValue.of(c.level().dimensionType().monsterSpawnBlockLightLimit()));
