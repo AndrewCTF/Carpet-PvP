@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(Player.class)
 public abstract class Player_attackResetTicker_18CombatMixin {
 
-    @Redirect(method = "attack", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/player/Player;resetAttackStrengthTicker()V"))
+    @Redirect(method = "onAttack", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/player/Player;resetOnlyAttackStrengthTicker()V"))
     private void carpet$noResetCooldown(Player instance) {
         if (!CarpetSettings.spamClickCombat) {
-            instance.resetAttackStrengthTicker();
+            instance.resetOnlyAttackStrengthTicker();
         }
         // else do nothing => no cooldown
     }
