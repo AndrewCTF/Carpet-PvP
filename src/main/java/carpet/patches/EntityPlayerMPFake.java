@@ -469,17 +469,24 @@ public class EntityPlayerMPFake extends ServerPlayer
         {
             if (passenger instanceof Player) passenger.stopRiding();
         }
-    }    @Override
+    }
+
+    @Override
     public void die(DamageSource cause) {
         shakeOff();
-        super.die(cause);
-        kill(this.getCombatTracker().getDeathMessage());
+        Component deathMessage = this.getCombatTracker().getDeathMessage();
+
+        // Avoid super.die() to prevent the internal "dead" flag from sticking and blocking future damage.
+        this.setHealth(0.0F);
+        this.invulnerableTime = 0;
+        this.hurtTime = 0;
+        this.deathTime = 0;
+        this.setRemainingFireTicks(0);
+        this.setDeltaMovement(0, 0, 0);
+
+        // Keep fake players in-world and immediately schedule a respawn.
+        kill(deathMessage);
         EntityPlayerMPFake.executor.schedule(this::respawn, 1L, TimeUnit.MILLISECONDS);
-        this.setHealth(20);
-        giveExperienceLevels(-(experienceLevel + 1));
-        kill(this.getCombatTracker().getDeathMessage());
-        this.teleportTo(spawnPos.x, spawnPos.y, spawnPos.z);
-        EntityPlayerMPFake.executor.schedule(() -> this.setDeltaMovement(0, 0, 0), 1L, TimeUnit.MILLISECONDS);
     }
     
     /**
