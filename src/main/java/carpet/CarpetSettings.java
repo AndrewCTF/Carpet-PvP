@@ -153,6 +153,12 @@ public class CarpetSettings
             @Rule(desc = "Allows fake players to use built-in navigation/pathfinding via /player <name> nav ...", category = {CREATIVE})
             public static boolean fakePlayerNavigation = false;
 
+            @Rule(desc = "Enable fall damage for real players", category = {SURVIVAL, FEATURE})
+            public static boolean playerFallDamage = true;
+
+            @Rule(desc = "Enable fall damage for fake players", category = {SURVIVAL, FEATURE})
+            public static boolean fakePlayerFallDamage = true;
+
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
 

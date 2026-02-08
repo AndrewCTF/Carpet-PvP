@@ -80,6 +80,13 @@ Stop all actions:
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension>`
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>` (requires permission level 2)
 
+### Fall damage rules
+
+Carpet PvP exposes separate fall-damage rules for real players and fake players:
+
+- `/carpet playerFallDamage true|false` (real players)
+- `/carpet fakePlayerFallDamage true|false` (fake players)
+
 ### Remove
 
 - `/player <name> kill` (fake players only)
