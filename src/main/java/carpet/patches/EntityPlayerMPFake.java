@@ -547,8 +547,11 @@ public class EntityPlayerMPFake extends ServerPlayer
      * Resets death-related state so fake players can take damage after respawn.
      */
     private void resetDeathStateForRespawn() {
+        // Reset internal death flag/state maintained by LivingEntity.
+        this.revive();
         // Ensure the entity is not flagged as removed from the world.
         this.unsetRemoved();
+        this.setInvulnerable(false);
         // Clear invulnerability and death timers that can block damage after death.
         this.invulnerableTime = 0;
         this.hurtTime = 0;
