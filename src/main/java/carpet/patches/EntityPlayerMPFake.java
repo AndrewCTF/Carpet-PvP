@@ -524,7 +524,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     public void respawn() {
         try {
             LOGGER.debug("Respawning fake player {}", getName().getString());
-            this.setHealth(20);
+            resetDeathStateForRespawn();
             this.teleportTo(spawnPos.x, spawnPos.y, spawnPos.z);
             
             // Ensure equipment synchronization after respawn
@@ -541,6 +541,25 @@ public class EntityPlayerMPFake extends ServerPlayer
         } catch (Exception e) {
             LOGGER.error("Error during respawn for fake player {}: {}", getName().getString(), e.getMessage(), e);
         }
+    }
+
+    /**
+     * Resets death-related state so fake players can take damage after respawn.
+     */
+    private void resetDeathStateForRespawn() {
+        // Ensure the entity is not flagged as removed from the world.
+        this.unsetRemoved();
+        // Clear invulnerability and death timers that can block damage after death.
+        this.invulnerableTime = 0;
+        this.hurtTime = 0;
+        this.deathTime = 0;
+        // Reset core survival state.
+        this.setHealth(20.0F);
+        this.setAbsorptionAmount(0.0F);
+        this.foodData = new FoodData();
+        this.setAirSupply(this.getMaxAirSupply());
+        this.setRemainingFireTicks(0);
+        this.fallDistance = 0.0F;
     }
 
 //    public void respawn()
