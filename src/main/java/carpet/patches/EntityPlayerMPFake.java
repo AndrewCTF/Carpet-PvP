@@ -30,6 +30,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodData;
@@ -122,7 +123,9 @@ public class EntityPlayerMPFake extends ServerPlayer
             instance.setHealth(20.0F);
             instance.unsetRemoved();
             instance.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
-            instance.gameMode.changeGameModeForPlayer(gamemode);
+            // Always spawn fake players in survival by default.
+            instance.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
+            instance.getAbilities().flying = false;
             instance.spawnPos = pos;
             instance.spawnYaw = yaw;
             server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);//instance.dimension);
@@ -135,7 +138,6 @@ public class EntityPlayerMPFake extends ServerPlayer
             
             // Ensure equipment is synchronized to all clients
             instance.syncAllEquipmentToClients();
-            instance.getAbilities().flying = flying;
         }, server);
         return true;
     }
@@ -474,18 +476,16 @@ public class EntityPlayerMPFake extends ServerPlayer
     @Override
     public void die(DamageSource cause) {
         shakeOff();
-        Component deathMessage = this.getCombatTracker().getDeathMessage();
-
         // Avoid super.die() to prevent the internal "dead" flag from sticking and blocking future damage.
-        this.setHealth(0.0F);
         this.invulnerableTime = 0;
         this.hurtTime = 0;
         this.deathTime = 0;
         this.setRemainingFireTicks(0);
         this.setDeltaMovement(0, 0, 0);
+        this.setHealth(1.0F);
+        this.setPose(Pose.STANDING);
 
         // Keep fake players in-world and immediately schedule a respawn.
-        kill(deathMessage);
         EntityPlayerMPFake.executor.schedule(this::respawn, 1L, TimeUnit.MILLISECONDS);
     }
     

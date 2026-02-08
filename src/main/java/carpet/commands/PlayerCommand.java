@@ -861,13 +861,8 @@ public class PlayerCommand
                 () -> DimensionArgument.getDimension(context, "dimension").dimension(),
                 source.getLevel().dimension()
         );
-        GameType mode = GameType.CREATIVE;
+        GameType mode = GameType.SURVIVAL;
         boolean flying = false;
-        if (source.getEntity() instanceof ServerPlayer sender)
-        {
-            mode = sender.gameMode.getGameModeForPlayer();
-            flying = sender.getAbilities().flying;
-        }
         try {
             mode = GameModeArgument.getGameMode(context, "gamemode");
         } catch (IllegalArgumentException notPresent) {}
