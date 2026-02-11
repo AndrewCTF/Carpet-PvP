@@ -56,7 +56,7 @@
     "MobMixin",
     "Villager_aiMixin",
     "Player_fakePlayersMixin",
-    "Player_fallDamageRuleMixin",
+    "LivingEntity_fallDamageRuleMixin",
     "ServerGamePacketListenerImpl_coreMixin",
     "ServerGamePacketListenerImpl_swordBlockMarkerMixin",
     "MinecraftServer_scarpetMixin",
