@@ -1,4 +1,5 @@
 # Carpet PvP
+![Carpet PvP logo](assets/icon.png)
 ![GitHub all releases](https://img.shields.io/github/downloads/AndrewCTF/Carpet-PvP/total?style=for-the-badge)
 ![GitHub Repo stars](https://img.shields.io/github/stars/AndrewCTF/Carpet-PvP?style=for-the-badge)
 ![GitHub forks](https://img.shields.io/github/forks/AndrewCTF/Carpet-PvP?style=for-the-badge)
