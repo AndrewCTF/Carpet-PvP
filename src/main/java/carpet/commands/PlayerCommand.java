@@ -308,6 +308,48 @@ public class PlayerCommand
         return 1;
     }
 
+    private static int navOptionsReset(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.resetNavOptions();
+        Messenger.m(context.getSource(), "g Navigation options reset for ", player.getName());
+        return 1;
+    }
+
+    private static int navOptionBool(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String name = StringArgumentType.getString(context, "name");
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        if (!ap.setNavOption(name, value))
+        {
+            Messenger.m(context.getSource(), "r Unknown boolean nav option: ", name);
+            return 0;
+        }
+        Messenger.m(context.getSource(), "g nav ", name, "g = ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int navOptionInt(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String name = StringArgumentType.getString(context, "name");
+        int value = IntegerArgumentType.getInteger(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        if (!ap.setNavOption(name, value))
+        {
+            Messenger.m(context.getSource(), "r Unknown integer nav option: ", name);
+            return 0;
+        }
+        Messenger.m(context.getSource(), "g nav ", name, "g = ", String.valueOf(value), "g  for ", player.getName());
+        return 1;
+    }
+
     private static int navGoto(CommandContext<CommandSourceStack> context, BotNavMode mode)
     {
         if (cantNavManipulate(context)) return 0;
