@@ -209,6 +209,25 @@ public class PlayerCommand
         return literal("nav")
                 .then(literal("stop").executes(PlayerCommand::navStop))
                 .then(literal("status").executes(PlayerCommand::navStatus))
+            .then(literal("options")
+                .then(literal("reset").executes(PlayerCommand::navOptionsReset))
+                .then(argument("name", StringArgumentType.word())
+                    .suggests((c, b) -> suggest(List.of(
+                        "breakBlocks",
+                        "placeBlocks",
+                        "autoTool",
+                        "autoEat",
+                        "autoEatBelow",
+                        "avoidLava",
+                        "avoidFire",
+                        "avoidCobwebs",
+                        "breakCobwebs",
+                        "avoidPowderSnow"
+                    ), b))
+                    .then(argument("value", BoolArgumentType.bool())
+                        .executes(PlayerCommand::navOptionBool))
+                    .then(argument("value", IntegerArgumentType.integer(0, 20))
+                        .executes(PlayerCommand::navOptionInt))))
                 .then(literal("goto")
                         .then(argument("pos", Vec3Argument.vec3())
                                 .executes(c -> navGoto(c, BotNavMode.AUTO))

@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -38,7 +39,11 @@ public final class NavAStarPathfinder
             int maxStepUp,
             boolean allowDiagonal,
             boolean allowJumps,
-            int maxJumpLength
+            int maxJumpLength,
+            boolean avoidLava,
+            boolean avoidFire,
+            boolean avoidPowderSnow,
+            boolean avoidCobwebs
     )
     {
         public static Settings defaults()
@@ -52,7 +57,11 @@ public final class NavAStarPathfinder
                     1,
                 true,
                 true,
-                2
+                2,
+                true,
+                true,
+                true,
+                true
             );
         }
     }
@@ -84,8 +93,8 @@ public final class NavAStarPathfinder
      */
     public List<BlockPos> findPath(ServerLevel level, BlockPos start, BlockPos goal, Traversal traversal, Settings settings)
     {
-        BlockPos s = sanitizeStart(level, start, traversal);
-        BlockPos g = sanitizeGoal(level, goal, traversal);
+        BlockPos s = sanitizeStart(level, start, traversal, settings);
+        BlockPos g = sanitizeGoal(level, goal, traversal, settings);
         if (s == null || g == null)
         {
             return null;
@@ -158,7 +167,7 @@ public final class NavAStarPathfinder
                     // Avoid corner-cutting when diagonal.
                     if (dx != 0 && dz != 0)
                     {
-                        if (!canMoveDiagonally(level, cur.x, cur.y, cur.z, dx, dz, traversal))
+                        if (!canMoveDiagonally(level, cur.x, cur.y, cur.z, dx, dz, traversal, settings))
                         {
                             continue;
                         }
@@ -203,7 +212,7 @@ public final class NavAStarPathfinder
                         BlockPos nextPos = nextStandableLand(level, cur.x, cur.y, cur.z, nx, nz, settings);
                         if (nextPos == null) continue;
 
-                        if (!isJumpArcClear(level, cur.x, cur.y, cur.z, nextPos))
+                        if (!isJumpArcClear(level, cur.x, cur.y, cur.z, nextPos, settings))
                         {
                             continue;
                         }
@@ -229,7 +238,7 @@ public final class NavAStarPathfinder
         return null;
     }
 
-    private static boolean isJumpArcClear(ServerLevel level, int fromX, int fromY, int fromZ, BlockPos landing)
+    private static boolean isJumpArcClear(ServerLevel level, int fromX, int fromY, int fromZ, BlockPos landing, Settings settings)
     {
         // Very conservative clearance check:
         // require 2-3 blocks of empty space at the midpoint so we don't bonk on low ceilings.
@@ -240,9 +249,9 @@ public final class NavAStarPathfinder
 
         int baseY = Math.max(fromY, landing.getY());
         BlockPos midFeet = new BlockPos(mx, baseY, mz);
-        if (!isPassable(level, midFeet)) return false;
-        if (!isPassable(level, midFeet.above())) return false;
-        if (!isPassable(level, midFeet.above(2))) return false;
+        if (!isPassable(level, midFeet, settings)) return false;
+        if (!isPassable(level, midFeet.above(), settings)) return false;
+        if (!isPassable(level, midFeet.above(2), settings)) return false;
         return true;
     }
 
@@ -291,72 +300,72 @@ public final class NavAStarPathfinder
         return x >= minX && x <= maxX && z >= minZ && z <= maxZ && y >= minY && y <= maxY;
     }
 
-    private static BlockPos sanitizeStart(ServerLevel level, BlockPos start, Traversal traversal)
+    private static BlockPos sanitizeStart(ServerLevel level, BlockPos start, Traversal traversal, Settings settings)
     {
         if (!level.hasChunk(start.getX() >> 4, start.getZ() >> 4)) return null;
 
         if (traversal == Traversal.WATER)
         {
-            BlockPos s = findNearbySwimmable(level, start);
+            BlockPos s = findNearbySwimmable(level, start, settings);
             return s;
         }
 
         if (traversal == Traversal.AMPHIBIOUS)
         {
-            BlockPos s = findNearbyAmphibious(level, start);
+            BlockPos s = findNearbyAmphibious(level, start, settings);
             return s;
         }
 
-        BlockPos s = findNearbyStandable(level, start);
+        BlockPos s = findNearbyStandable(level, start, settings);
         return s;
     }
 
-    private static BlockPos sanitizeGoal(ServerLevel level, BlockPos goal, Traversal traversal)
+    private static BlockPos sanitizeGoal(ServerLevel level, BlockPos goal, Traversal traversal, Settings settings)
     {
         if (!level.hasChunk(goal.getX() >> 4, goal.getZ() >> 4)) return null;
 
         if (traversal == Traversal.WATER)
         {
-            return findNearbySwimmable(level, goal);
+            return findNearbySwimmable(level, goal, settings);
         }
 
         if (traversal == Traversal.AMPHIBIOUS)
         {
-            return findNearbyAmphibious(level, goal);
+            return findNearbyAmphibious(level, goal, settings);
         }
 
-        return findNearbyStandable(level, goal);
+        return findNearbyStandable(level, goal, settings);
     }
 
-    private static BlockPos findNearbyAmphibious(ServerLevel level, BlockPos around)
+    private static BlockPos findNearbyAmphibious(ServerLevel level, BlockPos around, Settings settings)
     {
-        BlockPos water = findNearbySwimmable(level, around);
+        BlockPos water = findNearbySwimmable(level, around, settings);
         if (water != null) return water;
-        return findNearbyStandable(level, around);
+        return findNearbyStandable(level, around, settings);
     }
 
-    private static BlockPos findNearbyStandable(ServerLevel level, BlockPos around)
+    private static BlockPos findNearbyStandable(ServerLevel level, BlockPos around, Settings settings)
     {
         // Small vertical scan first.
         for (int dy = 0; dy <= 2; dy++)
         {
             BlockPos up = around.above(dy);
-            if (isStandable(level, up)) return up;
+            if (isStandable(level, up, settings)) return up;
         }
         for (int dy = 1; dy <= 6; dy++)
         {
             BlockPos down = around.below(dy);
-            if (isStandable(level, down)) return down;
+            if (isStandable(level, down, settings)) return down;
         }
         return null;
     }
 
-    private static BlockPos findNearbySwimmable(ServerLevel level, BlockPos around)
+    private static BlockPos findNearbySwimmable(ServerLevel level, BlockPos around, Settings settings)
     {
         for (int dy = -4; dy <= 4; dy++)
         {
             BlockPos p = around.offset(0, dy, 0);
-            if (isSwimmable(level, p)) return p;
+            if (isSwimmable(level, p, settings)) return p;
         }
         return null;
     }
@@ -367,10 +376,10 @@ public final class NavAStarPathfinder
         for (int stepUp = 0; stepUp <= settings.maxStepUp(); stepUp++)
         {
             BlockPos p = new BlockPos(toX, fromY + stepUp, toZ);
-            if (isStandable(level, p))
+            if (isStandable(level, p, settings))
             {
                 // Also ensure the move corridor is passable at body height.
-                if (!isBodyPassable(level, p)) return null;
+                if (!isBodyPassable(level, p, settings)) return null;
                 return p;
             }
         }
@@ -379,9 +388,9 @@ public final class NavAStarPathfinder
         for (int fall = 1; fall <= settings.maxFall(); fall++)
         {
             BlockPos p = new BlockPos(toX, fromY - fall, toZ);
-            if (isStandable(level, p))
+            if (isStandable(level, p, settings))
             {
-                if (!isBodyPassable(level, p)) return null;
+                if (!isBodyPassable(level, p, settings)) return null;
                 return p;
             }
         }
@@ -396,7 +405,7 @@ public final class NavAStarPathfinder
         {
             BlockPos p = new BlockPos(toX, fromY + dy, toZ);
             if (!withinWorldY(level, p.getY())) continue;
-            if (isSwimmable(level, p))
+            if (isSwimmable(level, p, settings))
             {
                 return p;
             }
@@ -417,38 +426,42 @@ public final class NavAStarPathfinder
         return y >= level.getMinY() + 1 && y <= level.getMaxY() - 2;
     }
 
-    private static boolean canMoveDiagonally(ServerLevel level, int x, int y, int z, int dx, int dz, Traversal traversal)
+    private static boolean canMoveDiagonally(ServerLevel level, int x, int y, int z, int dx, int dz, Traversal traversal, Settings settings)
     {
         BlockPos a = new BlockPos(x + dx, y, z);
         BlockPos b = new BlockPos(x, y, z + dz);
         if (traversal == Traversal.WATER)
         {
-            return isSwimmable(level, a) && isSwimmable(level, b);
+            return isSwimmable(level, a, settings) && isSwimmable(level, b, settings);
         }
         if (traversal == Traversal.AMPHIBIOUS)
         {
-            return isBodyPassable(level, a) && isBodyPassable(level, b);
+            return isBodyPassable(level, a, settings) && isBodyPassable(level, b, settings);
         }
-        return isBodyPassable(level, a) && isBodyPassable(level, b);
+        return isBodyPassable(level, a, settings) && isBodyPassable(level, b, settings);
     }
 
-    private static boolean isBodyPassable(ServerLevel level, BlockPos feet)
+    private static boolean isBodyPassable(ServerLevel level, BlockPos feet, Settings settings)
     {
         // Player-ish: 2 blocks tall.
-        return isPassable(level, feet) && isPassable(level, feet.above());
+        return isPassable(level, feet, settings) && isPassable(level, feet.above(), settings);
     }
 
-    private static boolean isStandable(ServerLevel level, BlockPos feet)
+    private static boolean isStandable(ServerLevel level, BlockPos feet, Settings settings)
     {
         if (!withinWorldY(level, feet.getY())) return false;
-        if (!isBodyPassable(level, feet)) return false;
+        if (!isBodyPassable(level, feet, settings)) return false;
 
         BlockPos below = feet.below();
         BlockState ground = level.getBlockState(below);
+        if (settings.avoidLava() && ground.getFluidState().is(FluidTags.LAVA)) return false;
+        if (settings.avoidFire() && (ground.is(Blocks.FIRE) || ground.is(Blocks.SOUL_FIRE))) return false;
+        if (settings.avoidPowderSnow() && ground.is(Blocks.POWDER_SNOW)) return false;
+        if (settings.avoidCobwebs() && ground.is(Blocks.COBWEB)) return false;
         return !ground.getCollisionShape(level, below).isEmpty() && !ground.getFluidState().is(FluidTags.WATER);
     }
 
-    private static boolean isSwimmable(ServerLevel level, BlockPos feet)
+    private static boolean isSwimmable(ServerLevel level, BlockPos feet, Settings settings)
     {
         if (!withinWorldY(level, feet.getY())) return false;
 
@@ -456,16 +469,20 @@ public final class NavAStarPathfinder
         BlockState s1 = level.getBlockState(feet.above());
 
         boolean inWater = s0.getFluidState().is(FluidTags.WATER);
-        boolean headOk = s1.getFluidState().is(FluidTags.WATER) || isPassable(level, feet.above());
+        boolean headOk = s1.getFluidState().is(FluidTags.WATER) || isPassable(level, feet.above(), settings);
         if (!inWater || !headOk) return false;
 
         // Avoid swimming into solid blocks.
-        return isPassable(level, feet) && isPassable(level, feet.above());
+        return isPassable(level, feet, settings) && isPassable(level, feet.above(), settings);
     }
 
-    private static boolean isPassable(ServerLevel level, BlockPos pos)
+    private static boolean isPassable(ServerLevel level, BlockPos pos, Settings settings)
     {
         BlockState state = level.getBlockState(pos);
+        if (settings.avoidLava() && state.getFluidState().is(FluidTags.LAVA)) return false;
+        if (settings.avoidFire() && (state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE))) return false;
+        if (settings.avoidPowderSnow() && state.is(Blocks.POWDER_SNOW)) return false;
+        if (settings.avoidCobwebs() && state.is(Blocks.COBWEB)) return false;
         return state.getCollisionShape(level, pos).isEmpty();
     }
 
