@@ -190,6 +190,19 @@ Enable the rule:
 
 - `/carpet fakePlayerNavigation true`
 
+Related navigation rules:
+
+- `/carpet fakePlayerNavBreakBlocks true|false`
+- `/carpet fakePlayerNavPlaceBlocks true|false`
+- `/carpet fakePlayerNavAutoTool true|false`
+- `/carpet fakePlayerNavAutoEat true|false`
+- `/carpet fakePlayerNavAutoEatBelow <0..20>`
+- `/carpet fakePlayerNavAvoidLava true|false`
+- `/carpet fakePlayerNavAvoidFire true|false`
+- `/carpet fakePlayerNavAvoidCobwebs true|false`
+- `/carpet fakePlayerNavBreakCobwebs true|false`
+- `/carpet fakePlayerNavAvoidPowderSnow true|false`
+
 Basic usage:
 
 - `/player <bot> nav goto <x y z>` (AUTO: chooses water if swimming, else air if elytra is usable + `fakePlayerElytraGlide`, else land)
@@ -200,6 +213,15 @@ Basic usage:
 - `/player <bot> nav goto air drop <x y z> [arrivalRadius]` (stop gliding at the target and fall)
 - `/player <bot> nav status`
 - `/player <bot> nav stop`
+
+Per-bot overrides (optional):
+
+- `/player <bot> nav options <name> <true|false>`
+- `/player <bot> nav options autoEatBelow <0..20>`
+- `/player <bot> nav options reset`
+
+Options names:
+`breakBlocks`, `placeBlocks`, `autoTool`, `autoEat`, `autoEatBelow`, `avoidLava`, `avoidFire`, `avoidCobwebs`, `breakCobwebs`, `avoidPowderSnow`
 
 Notes:
 
