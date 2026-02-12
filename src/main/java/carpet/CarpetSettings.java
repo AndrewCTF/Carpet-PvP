@@ -216,6 +216,9 @@ public class CarpetSettings
             @Rule(desc = "Allow opening fence gates during navigation", category = {FEATURE})
             public static boolean fakePlayerNavAllowOpenFenceGates = true;
 
+            @Rule(desc = "Allow underwater swimming during navigation (default: false = float on surface)", category = {FEATURE})
+            public static boolean fakePlayerNavAllowSwimming = false;
+
             @Rule(desc = "Enable fall damage for real players", category = {SURVIVAL, FEATURE})
             public static boolean playerFallDamage = true;
 

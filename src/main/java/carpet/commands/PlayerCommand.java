@@ -258,7 +258,8 @@ public class PlayerCommand
                         "maxFallHeight",
                         "avoidSoulSand",
                         "allowOpenDoors",
-                        "allowOpenFenceGates"
+                        "allowOpenFenceGates",
+                        "allowSwimming"
                     ), b))
                     .then(argument("value", BoolArgumentType.bool())
                         .executes(PlayerCommand::navOptionBool))

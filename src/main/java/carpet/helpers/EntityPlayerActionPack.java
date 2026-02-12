@@ -171,6 +171,7 @@ public class EntityPlayerActionPack
     private Boolean navAvoidSoulSand;
     private Boolean navAllowOpenDoors;
     private Boolean navAllowOpenFenceGates;
+    private Boolean navAllowSwimming;
 
     // Follow mode fields.
     private UUID navFollowTarget = null;
@@ -656,6 +657,7 @@ public class EntityPlayerActionPack
         navAvoidSoulSand = null;
         navAllowOpenDoors = null;
         navAllowOpenFenceGates = null;
+        navAllowSwimming = null;
     }
 
     public boolean setNavOption(String option, boolean value)
@@ -680,6 +682,7 @@ public class EntityPlayerActionPack
             case "avoidSoulSand" -> { navAvoidSoulSand = value; yield true; }
             case "allowOpenDoors" -> { navAllowOpenDoors = value; yield true; }
             case "allowOpenFenceGates" -> { navAllowOpenFenceGates = value; yield true; }
+            case "allowSwimming" -> { navAllowSwimming = value; yield true; }
             default -> false;
         };
     }
@@ -1755,7 +1758,10 @@ public class EntityPlayerActionPack
                 return;
             }
         }
-        if (dist <= 0.85D)
+
+        // Adaptive waypoint arrival distance: wider on ice to account for sliding.
+        double arrivalDist = isOnIce() ? 1.8D : 0.85D;
+        if (dist <= arrivalDist)
         {
             navWaypointIndex++;
             navNoProgressTicks = 0;
@@ -1863,22 +1869,71 @@ public class EntityPlayerActionPack
         }
 
         // Sprint based on settings and move type.
-        boolean shouldSprint = allowSprint() && (currentMoveType == NavAStarPathfinder.MoveType.WALK
+        // Disable sprint on ice to prevent overshooting waypoints.
+        boolean onIce = isOnIce();
+        boolean shouldSprint = allowSprint() && !onIce && (currentMoveType == NavAStarPathfinder.MoveType.WALK
                 || currentMoveType == NavAStarPathfinder.MoveType.PARKOUR);
+
+        // Slow down on ice when approaching waypoint to reduce overshoot.
+        float forwardSpeed = 1.0F;
+        if (onIce && dist <= 3.0D)
+        {
+            forwardSpeed = 0.4F;
+        }
 
         setSneaking(false);
         setSprinting(shouldSprint);
-        setForward(1.0F);
+        setForward(forwardSpeed);
         setStrafing(0.0F);
 
         boolean wantUp = next.y > player.getY() + 0.2D;
+        boolean wantDown = next.y < player.getY() - 0.4D;
         if (effectiveMode == BotNavMode.WATER)
         {
             boolean inWater = isInWaterish();
-            if (inWater && wantUp)
+            if (inWater)
             {
-                player.setJumping(true);
-                navWaterJumping = true;
+                if (allowSwimming())
+                {
+                    // Full swimming mode: 3D navigation in water.
+                    // Look toward the waypoint in 3D (including pitch).
+                    Vec2 swimRot = rotationsTowards(player.getEyePosition(1.0F), next);
+                    look(stepYaw(player.getYRot(), swimRot.x, 40.0F), swimRot.y);
+
+                    if (wantUp)
+                    {
+                        player.setJumping(true);
+                        navWaterJumping = true;
+                        setSneaking(false);
+                    }
+                    else if (wantDown)
+                    {
+                        // Descend: sneak to sink in water.
+                        player.setJumping(false);
+                        navWaterJumping = false;
+                        setSneaking(true);
+                    }
+                    else
+                    {
+                        // Horizontal swimming.
+                        player.setJumping(false);
+                        navWaterJumping = false;
+                        setSneaking(false);
+                    }
+                    // Sprint-swim for faster underwater movement.
+                    if (allowSprint())
+                    {
+                        setSprinting(true);
+                    }
+                }
+                else
+                {
+                    // Floating mode (default): stay at surface, navigate horizontally.
+                    // Always jump to keep at the water surface.
+                    player.setJumping(true);
+                    navWaterJumping = true;
+                    setSneaking(false);
+                }
             }
             else if (navWaterJumping)
             {
@@ -2305,7 +2360,8 @@ public class EntityPlayerActionPack
                 base.allowDiagonalDescend(),
                 navAvoidSoulSand != null ? navAvoidSoulSand : CarpetSettings.fakePlayerNavAvoidSoulSand,
                 navAllowOpenDoors != null ? navAllowOpenDoors : CarpetSettings.fakePlayerNavAllowOpenDoors,
-                navAllowOpenFenceGates != null ? navAllowOpenFenceGates : CarpetSettings.fakePlayerNavAllowOpenFenceGates
+                navAllowOpenFenceGates != null ? navAllowOpenFenceGates : CarpetSettings.fakePlayerNavAllowOpenFenceGates,
+                navAllowSwimming != null ? navAllowSwimming : CarpetSettings.fakePlayerNavAllowSwimming
         );
     }
 
@@ -2317,6 +2373,18 @@ public class EntityPlayerActionPack
         }
         BlockPos feet = player.blockPosition();
         return player.level().getFluidState(feet).is(FluidTags.WATER) || player.level().getFluidState(feet.above()).is(FluidTags.WATER);
+    }
+
+    private boolean isOnIce()
+    {
+        BlockPos below = player.blockPosition().below();
+        BlockState state = player.level().getBlockState(below);
+        return state.is(Blocks.ICE) || state.is(Blocks.PACKED_ICE) || state.is(Blocks.BLUE_ICE) || state.is(Blocks.FROSTED_ICE);
+    }
+
+    private boolean allowSwimming()
+    {
+        return navAllowSwimming != null ? navAllowSwimming : CarpetSettings.fakePlayerNavAllowSwimming;
     }
 
     private Vec3 resolveLandingTarget(Vec3 requested)

@@ -105,7 +105,8 @@ public final class NavAStarPathfinder
             boolean allowDiagonalDescend,
             boolean avoidSoulSand,
             boolean allowOpenDoors,
-            boolean allowOpenFenceGates
+            boolean allowOpenFenceGates,
+            boolean allowSwimming
     )
     {
         public static Settings defaults()
@@ -144,7 +145,8 @@ public final class NavAStarPathfinder
                     true,       // allowDiagonalDescend
                     false,      // avoidSoulSand
                     true,       // allowOpenDoors
-                    true        // allowOpenFenceGates
+                    true,       // allowOpenFenceGates
+                    false       // allowSwimming (default = float on surface)
             );
         }
     }
@@ -649,6 +651,15 @@ public final class NavAStarPathfinder
             }
         }
 
+        // Ice slippery penalty: slightly increase cost on ice to prefer normal paths.
+        {
+            BlockState belowForIce = level.getBlockState(new BlockPos(next.getX(), next.getY() - 1, next.getZ()));
+            if (isIce(belowForIce))
+            {
+                cost *= 1.3F;
+            }
+        }
+
         // Door/fence-gate cost.
         BlockState nextState = level.getBlockState(new BlockPos(next.getX(), next.getY(), next.getZ()));
         if (nextState.getBlock() instanceof DoorBlock || nextState.getBlock() instanceof FenceGateBlock)
@@ -725,13 +736,41 @@ public final class NavAStarPathfinder
 
     private static BlockPos nextSwimmable(ServerLevel level, int fromX, int fromY, int fromZ, int toX, int toZ, Settings settings)
     {
-        for (int dy = -1; dy <= 1; dy++)
+        if (settings.allowSwimming())
         {
-            BlockPos p = new BlockPos(toX, fromY + dy, toZ);
-            if (!withinWorldY(level, p.getY())) continue;
-            if (isSwimmable(level, p, settings))
+            // Full underwater navigation: search wider vertical range.
+            for (int dy = -2; dy <= 2; dy++)
             {
-                return p;
+                BlockPos p = new BlockPos(toX, fromY + dy, toZ);
+                if (!withinWorldY(level, p.getY())) continue;
+                if (isSwimmable(level, p, settings))
+                {
+                    return p;
+                }
+            }
+        }
+        else
+        {
+            // Surface-only: prefer water surface positions (floating mode).
+            for (int dy = 1; dy >= -1; dy--)
+            {
+                BlockPos p = new BlockPos(toX, fromY + dy, toZ);
+                if (!withinWorldY(level, p.getY())) continue;
+                if (isSwimmable(level, p, settings) && isWaterSurface(level, p))
+                {
+                    return p;
+                }
+            }
+            // Fallback: allow non-surface swimmable to avoid getting stuck
+            // at water entry/exit points.
+            for (int dy = 1; dy >= -1; dy--)
+            {
+                BlockPos p = new BlockPos(toX, fromY + dy, toZ);
+                if (!withinWorldY(level, p.getY())) continue;
+                if (isSwimmable(level, p, settings))
+                {
+                    return p;
+                }
             }
         }
         return null;
@@ -804,6 +843,16 @@ public final class NavAStarPathfinder
 
     private static BlockPos findNearbySwimmable(ServerLevel level, BlockPos around, Settings settings)
     {
+        if (!settings.allowSwimming())
+        {
+            // Surface mode: find highest swimmable (surface) position.
+            for (int dy = 4; dy >= -4; dy--)
+            {
+                BlockPos p = around.offset(0, dy, 0);
+                if (isSwimmable(level, p, settings) && isWaterSurface(level, p)) return p;
+            }
+        }
+        // Full swimming or fallback: any swimmable.
         for (int dy = -4; dy <= 4; dy++)
         {
             BlockPos p = around.offset(0, dy, 0);
@@ -851,7 +900,8 @@ public final class NavAStarPathfinder
         if (settings.avoidFire() && (ground.is(Blocks.FIRE) || ground.is(Blocks.SOUL_FIRE))) return false;
         if (settings.avoidPowderSnow() && ground.is(Blocks.POWDER_SNOW)) return false;
         if (settings.avoidCobwebs() && ground.is(Blocks.COBWEB)) return false;
-        return !ground.getCollisionShape(level, below).isEmpty() && !ground.getFluidState().is(FluidTags.WATER);
+        return !ground.getCollisionShape(level, below).isEmpty()
+                && (!ground.getFluidState().is(FluidTags.WATER) || isIce(ground));
     }
 
     private static boolean isSwimmable(ServerLevel level, BlockPos feet, Settings settings)
@@ -883,6 +933,21 @@ public final class NavAStarPathfinder
     private static boolean isLiquid(BlockState state)
     {
         return !state.getFluidState().isEmpty();
+    }
+
+    private static boolean isIce(BlockState state)
+    {
+        return state.is(Blocks.ICE) || state.is(Blocks.PACKED_ICE) || state.is(Blocks.BLUE_ICE) || state.is(Blocks.FROSTED_ICE);
+    }
+
+    /**
+     * Checks if position is at the water surface (bot can breathe).
+     * Surface = feet in water but the block above the player's head is NOT water.
+     */
+    private static boolean isWaterSurface(ServerLevel level, BlockPos feet)
+    {
+        BlockState aboveHead = level.getBlockState(feet.above(2));
+        return !aboveHead.getFluidState().is(FluidTags.WATER);
     }
 
     // --- Path reconstruction returning positions + move types ---

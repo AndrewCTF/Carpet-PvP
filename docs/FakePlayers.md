@@ -283,6 +283,7 @@ Option names (boolean):
 - `avoidSoulSand` – Penalize soul sand paths
 - `allowOpenDoors` – Allow opening doors
 - `allowOpenFenceGates` – Allow opening fence gates
+- `allowSwimming` – Allow underwater swimming (default: false = float on surface)
 
 Option names (integer):
 - `autoEatBelow` – Hunger threshold for auto-eat (0-20)
@@ -311,6 +312,7 @@ Option names (integer):
 - `fakePlayerNavAvoidSoulSand` – Penalize soul sand (default: false)
 - `fakePlayerNavAllowOpenDoors` – Allow door opening (default: true)
 - `fakePlayerNavAllowOpenFenceGates` – Allow fence gate opening (default: true)
+- `fakePlayerNavAllowSwimming` – Allow underwater swimming (default: false)
 
 ### Pathfinding details:
 
@@ -322,7 +324,7 @@ The A* pathfinder supports the following movement types:
 - **PILLAR** – Place block at feet and jump up (high cost)
 - **BREAK_THROUGH** – Mine through 1-2 obstacle blocks
 - **DESCEND_MINE** – Mine downward
-- **SWIM** – Water traversal
+- **SWIM** – Water traversal (surface floating or underwater swimming)
 
 Cost model (Baritone-inspired):
 - Walk = 1.0, diagonal = √2
@@ -332,8 +334,20 @@ Cost model (Baritone-inspired):
 - Break penalty (base cost + hardness × 2)
 - Pillar penalty (20.0)
 - Soul sand penalty (2.5× cost)
+- Ice penalty (1.3× cost – prefers non-ice paths where possible)
 - Mob avoidance overlay (+4.0 cost near hostile mobs)
 - Door/fence gate traversal (+1.0 cost)
+
+Water navigation modes:
+- **Floating (default)**: Bot stays at the water surface, auto-jumps to keep afloat, and navigates horizontally. Pathfinder prefers water-surface positions.
+- **Swimming (optional, `allowSwimming=true`)**: Bot can dive underwater and navigate in 3D through water. Uses sprint-swimming for speed. Descends by sneaking, ascends by jumping.
+
+Ice handling:
+- The bot detects ice blocks (ice, packed ice, blue ice, frosted ice) and adjusts movement:
+  - Sprinting is disabled on ice to prevent overshooting waypoints
+  - Forward speed is reduced when approaching a waypoint on ice
+  - Waypoint arrival distance is increased on ice (1.8 blocks vs normal 0.85)
+  - Pathfinder slightly penalizes ice paths (1.3× cost) to prefer non-slippery routes
 
 Notes:
 - Land mode is amphibious and can route through water.
