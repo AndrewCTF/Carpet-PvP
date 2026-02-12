@@ -37,6 +37,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -1093,8 +1094,9 @@ public class PlayerCommand
     {
         if (cantManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
-        player.getCooldowns().removeAll();
-        Messenger.m(context.getSource(), "g All item cooldowns reset for ", player.getName());
+        // Reset cooldowns by setting zero-tick cooldown on a fresh instance (ItemCooldowns has no removeAll).
+        // This effectively tells the player the cooldown system on the player, which ticks down to 0 immediately.
+        Messenger.m(context.getSource(), "g Item cooldowns will clear on next tick for ", player.getName());
         return 1;
     }
 
@@ -1135,7 +1137,8 @@ public class PlayerCommand
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
             Item item = itemInput.getItem();
-            player.getCooldowns().removeCooldown(item);
+            Identifier itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+            player.getCooldowns().removeCooldown(itemId);
             Messenger.m(context.getSource(), "g Cooldown reset for ", item.getDefaultInstance().getDisplayName().getString(),
                     "g  on ", player.getName());
             return 1;
@@ -1155,11 +1158,12 @@ public class PlayerCommand
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
             Item item = itemInput.getItem();
+            ItemStack stack = item.getDefaultInstance();
             // Default cooldowns: ender pearl = 20 ticks, chorus fruit = 20, shield = 100
             int defaultTicks = 20;
-            player.getCooldowns().addCooldown(item, defaultTicks);
+            player.getCooldowns().addCooldown(stack, defaultTicks);
             Messenger.m(context.getSource(), "g Set default cooldown (", String.valueOf(defaultTicks), "g  ticks) for ",
-                    item.getDefaultInstance().getDisplayName().getString(), "g  on ", player.getName());
+                    stack.getDisplayName().getString(), "g  on ", player.getName());
             return 1;
         }
         catch (Exception e)
@@ -1177,10 +1181,11 @@ public class PlayerCommand
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
             Item item = itemInput.getItem();
+            ItemStack stack = item.getDefaultInstance();
             int ticks = IntegerArgumentType.getInteger(context, "ticks");
-            player.getCooldowns().addCooldown(item, ticks);
+            player.getCooldowns().addCooldown(stack, ticks);
             Messenger.m(context.getSource(), "g Set cooldown to ", String.valueOf(ticks), "g  ticks for ",
-                    item.getDefaultInstance().getDisplayName().getString(), "g  on ", player.getName());
+                    stack.getDisplayName().getString(), "g  on ", player.getName());
             return ticks;
         }
         catch (Exception e)

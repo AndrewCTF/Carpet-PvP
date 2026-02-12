@@ -27,10 +27,17 @@ Legend:
 
 ## /player
 - Permission: op
-- Summary: Spawn/manage fake players for testing. See also: [FakePlayers.md](FakePlayers.md)
+- Summary: Spawn/manage fake players for testing, combat automation, nav/glide control, item cooldown control, and animation control. See also: [FakePlayers.md](FakePlayers.md)
 - Usage:
   - /player <name> spawn [at <x> <y> <z>] [facing <yaw> <pitch>]
   - /player <name> kill
+  - /player <name> move <forward|backward|left|right> [for <ticks>] [sneaking|sprinting]
+  - /player <name> attack [crit] [once|continuous|interval <ticks>]
+  - /player <name> swing [once|continuous|interval <ticks>]
+  - /player <name> animate <attack|use|continuous|interval <ticks>>
+  - /player <name> nav ...
+  - /player <name> glide ...
+  - /player <name> itemCd [<item> [reset|set [ticks]]]
   - /player <name> <action...>
 
 ## /counter
@@ -41,9 +48,19 @@ Legend:
 
 ## /distance
 - Permission: any (requires rule commandDistance)
-- Summary: Measure distance between points.
+- Summary: Measure distance between points and return integer result for execute-store scoreboard usage.
 - Usage:
-  - /distance <x1> <y1> <z1> <x2> <y2> <z2>
+  - /distance from [<x> <y> <z>]
+  - /distance from <x1> <y1> <z1> to [<x2> <y2> <z2>]
+  - /distance to [<x> <y> <z>]
+
+## /schedule
+- Permission: op (uses commandPlayer permission gate)
+- Summary: Run commands after a delay in ticks.
+- Usage:
+  - /schedule command <ticks> <command...>
+  - /schedule list
+  - /schedule clear
 
 ## /draw
 - Permission: any (requires rule commandDraw)

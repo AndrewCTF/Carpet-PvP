@@ -1,534 +1,385 @@
 # Fake Players & PvP Bot Scripting (Carpet PvP)
 
-This page is the comprehensive guide for creating and controlling fake players (bots) in Carpet PvP.
-It covers:
-- spawning/killing/disconnecting fake players
-- movement, looking, item use, inventory/gear
-- attacking (including reliable **critical hits**)
-- scripting patterns using Scarpet (`/script`) to build simple bots
+This page documents the complete fake-player and bot-control surface in Carpet PvP.
+It includes lifecycle, movement, look/turn, combat, navigation, gliding, cooldown control, scheduling, and scripting usage.
 
-> Note: Command syntax uses Brigadier conventions: `<required>` and `[optional]`.
+Syntax conventions:
+- `<required>` = required argument
+- `[optional]` = optional argument
+- `a|b` = alternatives
 
 ---
 
-## What is a fake player?
+## Overview
 
-A fake player is a server-side player entity (similar to vanilla player mechanics) that can be controlled via commands.
+Fake players are server-side players controlled through `/player <name> ...`.
+
 Typical uses:
-- PvP testing (timings, knockback, sprint-reset, sword blocking, etc.)
-- automation testing (right click, attack, block breaking)
-- demo bots for Scarpet scripts
+- PvP behavior testing (combat timings, crits, movement, shield interactions)
+- automation and command scripting
+- pathfinding/navigation experiments
 
-Carpet PvP fake players are controlled via:
-- `/player <name> ...`
-
-### Permissions / safety
-
-- You generally need OP permissions (or the appropriate carpet rule permission) to use `/player`.
-- Non-OP players can’t control *other real players*.
-- You can use `s` as a convenience alias meaning “self” (only if the command source is a player).
+Key permission notes:
+- `/player` is gated by the `commandPlayer` rule.
+- non-OP users cannot control other real players.
+- `s` can be used as self-target when command source is a player.
 
 ---
 
-## Quick start (manual)
+## Quick Start
 
-### 1) Spawn a bot
-
+1) Spawn
 - `/player Bot spawn`
 
-Spawn with full options:
-
-- `/player Bot spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>`
-
-Examples:
-- Spawn at your position facing north-ish:
-  - `/player Bot spawn at ~ ~ ~ facing 0 0`
-- Spawn in the Nether:
-  - `/player Bot spawn at 0 80 0 facing 180 0 in minecraft:the_nether`
-
-### 2) Make it move and look
-
+2) Move and look
 - `/player Bot move forward`
-- `/player Bot look at <x> <y> <z>`
-- `/player Bot sprint`
-- `/player Bot sneak`
+- `/player Bot look at ~ ~ ~`
 
-Stop movement:
-- `/player Bot move`
-
-### 3) Make it fight
-
-Normal attacks:
+3) Fight
 - `/player Bot attack continuous`
 
-Critical attacks:
-- `/player Bot attack crit continuous`
-
-Stop all actions:
+4) Stop everything
 - `/player Bot stop`
 
 ---
 
-## Spawn / lifecycle commands
+## Lifecycle Commands
 
-### Spawn
-
+Spawn variants:
 - `/player <name> spawn`
-- `/player <name> spawn in <gamemode>` (requires permission level 2)
+- `/player <name> spawn in <gamemode>`
 - `/player <name> spawn at <x> <y> <z>`
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch>`
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension>`
-- `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>` (requires permission level 2)
+- `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>`
 
-### Fall damage rules
-
-Carpet PvP exposes separate fall-damage rules for real players and fake players:
-
-- `/carpet playerFallDamage true|false` (real players)
-- `/carpet fakePlayerFallDamage true|false` (fake players)
-
-### Remove
-
+Removal and session:
 - `/player <name> kill` (fake players only)
 - `/player <name> disconnect` (fake players only)
+- `/player <realPlayer> shadow`
 
-### Shadow
-
-- `/player <realPlayerName> shadow`
-
-Creates a “shadow” fake player based on a real player (useful for testing without forcing the real player to perform actions).
-Restrictions:
-- You cannot shadow fake players.
-- You cannot shadow the singleplayer server owner.
+Global stop:
+- `/player <name> stop`
 
 ---
 
-## Core control model: actions + modes
+## Action Modes
 
-Most actions support 4 modes:
+Many actions support these execution modes:
 - default (same as `once`)
 - `once`
-- `continuous` (runs every tick)
+- `continuous`
 - `interval <ticks>`
 
-Examples:
-- `/player Bot use once`
-- `/player Bot jump continuous`
-- `/player Bot attack interval 10`
-
-Stop everything:
-- `/player Bot stop`
+Applies to commands such as:
+- `use`, `jump`, `attack`, `drop`, `dropStack`, `swapHands`, `swing`
 
 ---
 
 ## Movement
 
-### Directional movement
-
+### Base movement
 - `/player <name> move` (stop movement)
 - `/player <name> move forward`
 - `/player <name> move backward`
 - `/player <name> move left`
 - `/player <name> move right`
 
-### Sneak / sprint
+### Timed movement (auto-stop)
+- `/player <name> move <direction> for <ticks>`
 
+Examples:
+- `/player Bot move forward for 40`
+- `/player Bot move right for 10`
+
+### Movement modifiers integrated into move
+- `/player <name> move <direction> sneaking`
+- `/player <name> move <direction> sprinting`
+- `/player <name> move <direction> for <ticks> sneaking`
+- `/player <name> move <direction> for <ticks> sprinting`
+- `/player <name> move <direction> sneaking for <ticks>`
+- `/player <name> move <direction> sprinting for <ticks>`
+
+### Standalone sneak/sprint
 - `/player <name> sneak`
 - `/player <name> unsneak`
 - `/player <name> sprint`
 - `/player <name> unsprint`
+- `/player <name> sneak for <ticks>`
+- `/player <name> sprint for <ticks>`
 
 ### Jump
-
 - `/player <name> jump [once|continuous|interval <ticks>]`
+
+Notes:
+- Movement timers stop motion automatically after the requested duration.
+- Jump vibration under ceilings is prevented by head-clearance checks and repathing behavior in navigation mode.
 
 ---
 
-## Looking / rotation
-
-Fake players act on what they are looking at (for attacking and right-click use).
+## Looking & Turning
 
 ### Look (absolute)
-
 - `/player <name> look north|south|east|west|up|down`
 - `/player <name> look at <x> <y> <z>`
 - `/player <name> look <yaw> <pitch>`
 
 ### Turn (relative)
-
 - `/player <name> turn left|right|back`
-- `/player <name> turn <yawDelta> <pitchDelta>` (via rotation argument)
+- `/player <name> turn <yawDelta> <pitchDelta>`
+
+Notes:
+- Yaw/pitch mapping is aligned with vanilla rotation argument behavior.
 
 ---
 
-## Elytra gliding (precise controls)
+## Combat & Animation
 
-Carpet PvP can drive fake-player elytra flight with:
-
-This is gated behind a rule (off by default):
-
-
-### Start / stop
-
-
-Notes:
-
-### Launch assist (takeoff tuning)
-
-Configure pre-deployment launch profile for consistent elytra takeoff:
-
-
-Tip: enable `smart goto` and use a modest launch speed; the bot will aim toward the first waypoint before jumping.
-
-## Navigation (land / water / air)
-
-This mod includes a built-in, Baritone-inspired navigation foundation for fake players.
-
-It is deliberately **server-safe** (bounded search limits, won’t load chunks), and it can automatically replan if the bot gets stuck.
-
-Enable the rule:
-
-- `/carpet fakePlayerNavigation true`
-
-Related navigation rules:
-
-- `/carpet fakePlayerNavBreakBlocks true|false`
-- `/carpet fakePlayerNavPlaceBlocks true|false`
-- `/carpet fakePlayerNavAutoTool true|false`
-- `/carpet fakePlayerNavAutoEat true|false`
-- `/carpet fakePlayerNavAutoEatBelow <0..20>`
-- `/carpet fakePlayerNavAvoidLava true|false`
-- `/carpet fakePlayerNavAvoidFire true|false`
-- `/carpet fakePlayerNavAvoidCobwebs true|false`
-- `/carpet fakePlayerNavBreakCobwebs true|false`
-- `/carpet fakePlayerNavAvoidPowderSnow true|false`
-
-Basic usage:
-
-- `/player <bot> nav goto <x y z>` (AUTO: chooses water if swimming, else air if elytra is usable + `fakePlayerElytraGlide`, else land)
-- `/player <bot> nav goto land <x y z> [arrivalRadius]`
-- `/player <bot> nav goto water <x y z> [arrivalRadius]`
-- `/player <bot> nav goto air <x y z> [arrivalRadius]` (default: land on the floor under target XZ)
-- `/player <bot> nav goto air land <x y z> [arrivalRadius]`
-- `/player <bot> nav goto air drop <x y z> [arrivalRadius]` (stop gliding at the target and fall)
-- `/player <bot> nav status`
-- `/player <bot> nav stop`
-
-Per-bot overrides (optional):
-
-- `/player <bot> nav options <name> <true|false>`
-- `/player <bot> nav options autoEatBelow <0..20>`
-- `/player <bot> nav options reset`
-
-Options names:
-`breakBlocks`, `placeBlocks`, `autoTool`, `autoEat`, `autoEatBelow`, `avoidLava`, `avoidFire`, `avoidCobwebs`, `breakCobwebs`, `avoidPowderSnow`
-
-Notes:
-
-- LAND navigation is **amphibious**: it can walk and swim through water when needed.
-- AIR navigation additionally requires `/carpet fakePlayerElytraGlide true` and a non-broken elytra equipped in the chest slot.
-- This is a foundation for deeper Baritone-like features (cost models, danger avoidance, better movement primitives, long-range planning).
-### Freeze / hover
-
-Freeze forces the bot to hold position (zero velocity) and disables gravity while gliding.
-
-- `/player <name> glide freeze` (toggle)
-- `/player <name> glide freeze true`
-- `/player <name> glide freeze false`
-
-Freeze automatically when reaching a goto target:
-
-- `/player <name> glide freezeAtTarget true`
-
-### Speed (blocks/tick)
-
-`speed` is a direct velocity magnitude in blocks per tick ($20$ ticks per second).
-
-- `/player <name> glide speed <blocksPerTick>`
-
-Example:
-- `/player Bot glide speed 0.8`
-
-### Steering precision (deg/tick)
-
-Yaw/pitch changes are rate-limited per tick (smaller = more precise / less twitchy).
-
-- `/player <name> glide rates <yawDegPerTick> <pitchDegPerTick>`
-
-Example:
-- `/player Bot glide rates 2.0 1.0`
-
-### Modes
-
-#### Heading hold
-
-Steer to and hold a specific yaw/pitch.
-
-- `/player <name> glide heading <yaw> <pitch>`
-
-Example:
-- `/player Bot glide heading 90 -10`
-
-#### Goto position
-
-Fly toward a target position. Optional `arrivalRadius` (default is 1 block).
-
-- `/player <name> glide goto <x> <y> <z> [arrivalRadius]`
-
-Examples:
-- `/player Bot glide goto 100 120 100`
-- `/player Bot glide goto 100 120 100 2.5`
-
-#### Smart goto (A* pathfinding base)
-
-This variant runs a bounded A* search in “air space” and produces waypoints that route over terrain (and avoids planning into unloaded chunks).
-
-- `/player <name> glide goto smart <x> <y> <z> [arrivalRadius]`
-
-Notes:
-- If it fails, try giving a higher Y target (more air space) or move closer so chunks are loaded.
-
-On arrival, you can choose what happens next:
-
-- `/player <name> glide arrival stop` (default)
-- `/player <name> glide arrival freeze`
-- `/player <name> glide arrival descend` (keeps elytra deployed and pitches down for a controlled descent; use a lower speed for a gentler glide)
-- `/player <name> glide arrival land` (default behavior for goto: reach target XZ then dive down and stop on ground)
-- `/player <name> glide arrival circle` (keep orbiting/holding the target instead of finishing)
-
-#### Manual thrust input
-
-Manual thrust inputs are in the range `-1..1`:
-- `forward`: forward/back
-- `strafe`: left/right
-- `up`: up/down
-
-- `/player <name> glide input <forward> <strafe> <up>`
-
-Examples:
-- `/player Bot glide input 1 0 0`
-- `/player Bot glide input 0.8 0.2 0`
-- `/player Bot glide input 0 0 1`
-
-By default, forward thrust uses the bot’s pitch. You can disable that and make “forward” stay horizontal:
-
-- `/player <name> glide usePitch true|false`
-
-Example:
-- `/player Bot glide usePitch false`
-
-### Status
-
-- `/player <name> glide status`
-
----
-
-## Attacking (normal + crit)
-
-### Normal attacks
-
+### Attack
 - `/player <name> attack [once|continuous|interval <ticks>]`
-
-Behavior:
-- Attacks whatever entity the bot is currently targeting (crosshair ray-trace).
-- If the bot is targeting a block, it will start breaking it (creative breaks quickly; survival follows normal breaking).
-
-### Critical attacks
-
 - `/player <name> attack crit [once|continuous|interval <ticks>]`
 
-Important details (how crit mode works):
-- In crit mode, the bot will:
-  1) jump if it is on the ground
-  2) only perform the attack while **falling** (not rising)
-- If the `spamClickCombat` rule is **off** (modern combat), it will also wait for a “charged” hit (attack cooldown) before swinging.
+Crit mode behavior:
+- bot jumps first, then attacks while falling.
+- with modern cooldown enabled (`spamClickCombat = false`), weak spam swings are avoided.
 
-#### Why “bot cannot crit” happens (common causes)
+### Swing (visual arm animation)
+- `/player <name> swing [once|continuous|interval <ticks>]`
 
-1) **Using `crit once` previously could jump but never hit**
-   - This is now fixed: crit actions retry until they successfully land the hit.
+Difference from attack:
+- `swing` = animation only.
+- `attack` = hit detection and actual combat/block break behavior.
 
-2) **The bot is never actually falling when the attack attempt happens**
-   - Use `continuous`, or use `interval` but expect the bot to retry every tick until it hits during the falling window.
+### Animate
+- `/player <name> animate attack`
+- `/player <name> animate use`
+- `/player <name> animate continuous`
+- `/player <name> animate interval <ticks>`
 
-3) **Attack cooldown is not ready (modern combat)**
-   - If `spamClickCombat` is off, the bot won’t do weak spam hits.
-   - Use a larger interval (often ~10 ticks+) or enable the spam-click combat rule if that’s your server’s intent.
-
-4) **Targeting/aim issues**
-   - The bot only attacks what it is looking at within reach.
-   - Make sure you set look direction: `/player Bot look at ...`
-
-#### Practical crit recipes
-
-- Consistent crit attempts:
-  - `/player Bot attack crit continuous`
-
-- “Try to crit roughly every half-second” (with cooldown-friendly pacing):
-  - `/player Bot attack crit interval 10`
+Notes:
+- `animate` provides animation-only routines without forcing real interaction side effects.
 
 ---
 
-## Using items (right click)
+## Interaction, Hands, and Inventory
 
+### Use (right click)
 - `/player <name> use [once|continuous|interval <ticks>]`
 
-Behavior:
-- The bot will attempt to use/interact with the targeted block/entity.
-- If nothing is targetable, it will attempt a normal item use.
-- Both hands are considered.
-
-Common uses:
-- place blocks
-- open doors
-- eat / drink
-- use fishing rod, bow/crossbow, etc. (note: charge timing matters)
-
----
-
-## Inventory / gear
-
-### Hotbar slot selection
-
-- `/player <name> hotbar <slot>` where `<slot>` is 1..9
-
 ### Swap hands
-
 - `/player <name> swapHands [once|continuous|interval <ticks>]`
 
-### Drop items
+### Hotbar
+- `/player <name> hotbar <1..9>`
 
-Drop single item:
+### Drop commands
 - `/player <name> drop [once|continuous|interval <ticks>]`
-
-Drop stack:
 - `/player <name> dropStack [once|continuous|interval <ticks>]`
-
-Drop by slot:
 - `/player <name> drop all|mainhand|offhand|<slot>`
 - `/player <name> dropStack all|mainhand|offhand|<slot>`
 
-Slot notes:
-- Slots are `0..40` (includes hotbar + main inventory + armor/offhand indices).
-
-### Equip / unequip
-
-Equip a full armor set:
+### Equipment
 - `/player <name> equip <armor_type>`
-
-Equip a specific slot:
 - `/player <name> equip <slot> <item>`
-
-Valid slot names:
-- `head|helmet`, `chest|chestplate`, `legs|leggings`, `feet|boots`, `mainhand|weapon`, `offhand|shield`
-
-Remove equipped item:
 - `/player <name> unequip <slot>`
-
-Show current equipment:
 - `/player <name> equipment`
 
----
-
-## Mounting
-
-- `/player <name> mount` (mount nearby rideables)
-- `/player <name> mount anything` (mount anything nearby)
+### Mounting
+- `/player <name> mount`
+- `/player <name> mount anything`
 - `/player <name> dismount`
 
 ---
 
-## Scarpet scripting: turning `/player` into a bot
+## Item Cooldown Control (`itemCd`)
 
-You can script bots by calling vanilla commands from Scarpet using `run('...')`.
+`itemCd` controls/queries cooldown state for fake or real players through `/player` target context.
 
-### Key Scarpet note: `run()` must not be used directly in `/script run`
+Commands:
+- `/player <name> itemCd`
+- `/player <name> itemCd <item>`
+- `/player <name> itemCd <item> reset`
+- `/player <name> itemCd <item> set`
+- `/player <name> itemCd <item> set <ticks>`
 
-When you call `run('...')` from `/script run`, it may return `null` because the command gets deferred.
-Use `run()` from:
-- a scheduled callback (`schedule(...)`)
-- a tick event (`__on_tick()`)
-- or any app event handler
+Behavior summary:
+- no-args form: reset/clear behavior for cooldown tracking context.
+- item only: returns cooldown result value (useful for `execute store`).
+- `reset`: clears cooldown for that item.
+- `set`: applies default cooldown duration.
+- `set <ticks>`: applies explicit cooldown.
 
-See Scarpet `run(expr)` docs for details.
+Examples:
+- `/player Bot itemCd minecraft:shield`
+- `/player Bot itemCd minecraft:shield reset`
+- `/player Bot itemCd minecraft:ender_pearl set`
+- `/player Bot itemCd minecraft:ender_pearl set 5`
 
-### Minimal bot app: spawn + fight
+---
 
-Create `world/scripts/pvp_bot.sc`:
+## Navigation (Land/Water/Air)
 
+Enable rules:
+- `/carpet fakePlayerNavigation true`
+- `/carpet fakePlayerElytraGlide true` (required for AIR mode)
+
+Navigation commands:
+- `/player <bot> nav status`
+- `/player <bot> nav stop`
+- `/player <bot> nav goto <x> <y> <z> [arrivalRadius]`
+- `/player <bot> nav goto land <x> <y> <z> [arrivalRadius]`
+- `/player <bot> nav goto water <x> <y> <z> [arrivalRadius]`
+- `/player <bot> nav goto air <x> <y> <z> [arrivalRadius]`
+- `/player <bot> nav goto air land <x> <y> <z> [arrivalRadius]`
+- `/player <bot> nav goto air drop <x> <y> <z> [arrivalRadius]`
+
+Per-bot options:
+- `/player <bot> nav options reset`
+- `/player <bot> nav options <name> <true|false>`
+- `/player <bot> nav options autoEatBelow <0..20>`
+
+Option names:
+- `breakBlocks`
+- `placeBlocks`
+- `autoTool`
+- `autoEat`
+- `autoEatBelow`
+- `avoidLava`
+- `avoidFire`
+- `avoidCobwebs`
+- `breakCobwebs`
+- `avoidPowderSnow`
+
+Global Carpet rules:
+- `fakePlayerNavBreakBlocks`
+- `fakePlayerNavPlaceBlocks`
+- `fakePlayerNavAutoTool`
+- `fakePlayerNavAutoEat`
+- `fakePlayerNavAutoEatBelow`
+- `fakePlayerNavAvoidLava`
+- `fakePlayerNavAvoidFire`
+- `fakePlayerNavAvoidCobwebs`
+- `fakePlayerNavBreakCobwebs`
+- `fakePlayerNavAvoidPowderSnow`
+
+Notes:
+- Land mode is amphibious and can route through water.
+- Auto-eat selects food using survival-safe inventory consumption.
+- Cobweb/lava/fire/powder-snow behavior is configurable per bot and globally.
+
+---
+
+## Elytra Glide Controls
+
+Enable:
+- `/carpet fakePlayerElytraGlide true`
+
+Core:
+- `/player <name> glide start`
+- `/player <name> glide stop`
+- `/player <name> glide status`
+
+Freeze and arrival behavior:
+- `/player <name> glide freeze`
+- `/player <name> glide freeze <true|false>`
+- `/player <name> glide freezeAtTarget <true|false>`
+- `/player <name> glide arrival stop|freeze|descend|land|circle`
+
+Flight tuning:
+- `/player <name> glide speed <blocksPerTick>`
+- `/player <name> glide rates <yawDegPerTick> <pitchDegPerTick>`
+- `/player <name> glide usePitch <true|false>`
+
+Manual drive:
+- `/player <name> glide input <forward> <strafe> <up>`
+- `/player <name> glide heading <yaw> <pitch>`
+
+Goto:
+- `/player <name> glide goto <x> <y> <z> [arrivalRadius]`
+- `/player <name> glide goto smart <x> <y> <z> [arrivalRadius]`
+
+Launch assist:
+- `/player <name> glide launch assist <true|false>`
+- `/player <name> glide launch pitch <deg>`
+- `/player <name> glide launch speed <blocksPerTick>`
+- `/player <name> glide launch forwardTicks <ticks>`
+
+---
+
+## Scheduling Commands
+
+New scheduler command:
+- `/schedule command <ticks> <command...>`
+- `/schedule list`
+- `/schedule clear`
+
+Examples:
+- `/schedule command 5 clear HerobaneNair`
+- `/execute as example_bot run schedule command 1 function example:example`
+
+Notes:
+- Scheduled commands run at server tick time.
+- Useful for delayed bot actions and scripted sequences.
+
+---
+
+## Distance Command Integration
+
+`/distance` now returns a meaningful integer result (spherical distance) suitable for scoreboard storage.
+
+Example:
+- `/execute store result score @s dist run distance from 0 64 0 to 10 64 10`
+
+Distance forms:
+- `/distance from [<x> <y> <z>]`
+- `/distance from <x1> <y1> <z1> to [<x2> <y2> <z2>]`
+- `/distance to [<x> <y> <z>]`
+
+---
+
+## Scarpet Tips
+
+Recommended pattern:
+- call `/player` commands through app events/ticks/schedules.
+- avoid direct `run()` usage from bare `/script run` contexts if expecting immediate command-side effects.
+
+Example snippets:
 ```scarpet
-__config() -> {
-  'scope' -> 'global'
-};
-
-spawn_bot(name) -> run(str('player %s spawn', name));
-
-start_crit(name) -> run(str('player %s attack crit continuous', name));
-
-stop_all(name) -> run(str('player %s stop', name));
-
-__command() -> {
-  'botspawn' -> _(name) -> spawn_bot(name);
-  'botcrit'  -> _(name) -> start_crit(name);
-  'botstop'  -> _(name) -> stop_all(name);
-};
+run('player Bot spawn');
+run('player Bot look at 0 64 0');
+run('player Bot attack crit continuous');
 ```
-
-Then:
-- `/script load pvp_bot`
-- `/botspawn Bot`
-- `/botcrit Bot`
-
-### Aim helper: look at a point then attack
-
-```scarpet
-bot_look_at(name, x, y, z) -> run(str('player %s look at %d %d %d', name, x, y, z));
-
-bot_attack(name) -> run(str('player %s attack continuous', name));
-```
-
-### Simple “follow me” pattern
-
-A common pattern is:
-- every tick, compute a direction vector to the player
-- turn/aim towards them
-- move forward until close enough
-
-Carpet PvP’s `/player` movement controls are intentionally simple (forward/strafe), so scripts typically implement a lightweight steering loop.
 
 ---
 
 ## Troubleshooting
 
-### Bot doesn’t attack
+Bot does not move:
+- verify spawn success
+- ensure no active contradictory command (`move` stop, `stop`)
+- check if pathfinding rule is enabled for nav commands
 
-Checklist:
-- Is it spawned? (`/player <name> spawn`)
-- Is it looking at the target? (`/player <name> look at ...`)
-- Is it close enough (reach is limited)?
-- Is something blocking line-of-sight?
+Bot does not crit:
+- use `attack crit continuous`
+- ensure target is in reach and in crosshair
+- if modern cooldown is active, avoid too-short intervals
 
-### Bot attacks but never crits
-
-Checklist:
-- Use `attack crit continuous` to verify basics.
-- Make sure the bot is actually falling during the swing (crits require falling).
-- If `spamClickCombat` is off, make sure you’re not trying to swing too fast (cooldown gating).
-
-### `run('player ...')` returns null
-
-- Don’t call `run()` directly from `/script run`.
-- Use `schedule(0, _() -> run('...'))` or call it from an event handler.
+Navigation stalls:
+- check hazard options (`avoid*`, `breakCobwebs`)
+- ensure bot has valid tools/blocks if break/place is expected
+- verify chunks around destination are loaded
 
 ---
 
-## Reference: full `/player` surface (high-level)
+## Full `/player` Surface (High-Level)
 
-Actions:
-- `use`, `jump`, `attack`, `attack crit`, `drop`, `dropStack`, `swapHands`
-- `hotbar <1..9>`
-- `sneak/unsneak`, `sprint/unsprint`
-- `look ...`, `turn ...`, `move ...`
-- `equip ...`, `unequip ...`, `equipment`
-- `mount [anything]`, `dismount`
-- `stop`, `kill`, `disconnect`, `shadow`, `spawn ...`
+- Lifecycle: `spawn`, `kill`, `disconnect`, `shadow`, `stop`
+- Motion: `move`, `sneak/unsneak`, `sprint/unsprint`, `jump`
+- Aim: `look`, `turn`
+- Combat: `attack`, `attack crit`, `swing`, `animate`
+- Interaction: `use`, `swapHands`, `hotbar`, `drop`, `dropStack`
+- Equipment: `equip`, `unequip`, `equipment`
+- Riding: `mount`, `dismount`
+- Navigation: `nav ...`
+- Elytra control: `glide ...`
+- Item cooldowns: `itemCd ...`

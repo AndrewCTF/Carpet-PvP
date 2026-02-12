@@ -15,6 +15,7 @@ import carpet.commands.MobAICommand;
 import carpet.commands.PerimeterInfoCommand;
 import carpet.commands.PlayerCommand;
 import carpet.commands.ProfileCommand;
+import carpet.commands.ScheduleCommand;
 import carpet.script.ScriptCommand;
 import carpet.commands.SpawnCommand;
 import carpet.commands.TestCommand;
@@ -102,6 +103,7 @@ public class CarpetServer
     {
         HUDController.update_hud(server, null);
         if (scriptServer != null) scriptServer.tick();
+        ScheduleCommand.tick(server);
         CarpetSettings.impendingFillSkipUpdates.set(false);
         extensions.forEach(e -> e.onTick(server));
     }
@@ -125,6 +127,7 @@ public class CarpetServer
         DrawCommand.register(dispatcher, commandBuildContext);
         ScriptCommand.register(dispatcher, commandBuildContext);
         MobAICommand.register(dispatcher, commandBuildContext);
+        ScheduleCommand.register(dispatcher, commandBuildContext);
         extensions.forEach(e -> {
             e.registerCommands(dispatcher, commandBuildContext);
         });
@@ -173,6 +176,7 @@ public class CarpetServer
 
             scriptServer = null;
             ServerNetworkHandler.close();
+            ScheduleCommand.onServerClosed();
 
             LoggerRegistry.stopLoggers();
             HUDController.resetScarpetHUDs();
