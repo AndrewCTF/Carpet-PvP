@@ -35,7 +35,13 @@ Legend:
   - /player <name> attack [crit] [once|continuous|interval <ticks>]
   - /player <name> swing [once|continuous|interval <ticks>]
   - /player <name> animate <attack|use|continuous|interval <ticks>>
-  - /player <name> nav ...
+  - /player <name> nav stop|status
+  - /player <name> nav goto [land|water|air [land|drop]] <x> <y> <z> [arrivalRadius]
+  - /player <name> nav follow <playerName> [radius]
+  - /player <name> nav come [arrivalRadius]
+  - /player <name> nav mine <block> [count] [radius]
+  - /player <name> nav patrol <pos1> <pos2> [pos3] [pos4] [loop|once]
+  - /player <name> nav options [reset|<name> <value>]
   - /player <name> glide ...
   - /player <name> itemCd [<item> [reset|set [ticks]]]
   - /player <name> <action...>

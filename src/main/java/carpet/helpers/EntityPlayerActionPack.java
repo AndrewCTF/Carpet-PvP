@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.UUID;
 
 import carpet.patches.EntityPlayerMPFake;
 import carpet.script.utils.Tracer;
@@ -17,6 +18,7 @@ import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
@@ -39,7 +41,10 @@ import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -153,6 +158,41 @@ public class EntityPlayerActionPack
     private Boolean navAvoidCobwebs;
     private Boolean navBreakCobwebs;
     private Boolean navAvoidPowderSnow;
+
+    // Extended Baritone-like behavior overrides.
+    private Boolean navAllowParkour;
+    private Boolean navAllowPillar;
+    private Boolean navAllowBreakThrough;
+    private Boolean navAllowDescendMine;
+    private Boolean navAllowSprint;
+    private Boolean navMobAvoidance;
+    private Integer navMobAvoidanceRadius;
+    private Integer navMaxFallHeight;
+    private Boolean navAvoidSoulSand;
+    private Boolean navAllowOpenDoors;
+    private Boolean navAllowOpenFenceGates;
+
+    // Follow mode fields.
+    private UUID navFollowTarget = null;
+    private double navFollowRadius = 3.0D;
+    private int navFollowRepathInterval = 20;
+    private int navFollowRepathTicks = 0;
+
+    // Mine mode fields.
+    private List<Block> navMineTargets = null;
+    private int navMineRadius = 32;
+    private BlockPos navMineCurrentTarget = null;
+    private int navMinedCount = 0;
+    private int navMineMaxCount = -1; // -1 = unlimited
+
+    // Patrol mode fields.
+    private List<Vec3> navPatrolWaypoints = null;
+    private boolean navPatrolLoop = true;
+    private int navPatrolIndex = 0;
+    private boolean navPatrolReverse = false;
+
+    // Node / move types for advanced movement execution.
+    private List<NavAStarPathfinder.MoveType> navMoveTypes = null;
 
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
@@ -543,6 +583,24 @@ public class EntityPlayerActionPack
         navNoProgressTicks = 0;
         navLastDistanceToNext = Double.POSITIVE_INFINITY;
         navJumpCooldownTicks = 0;
+        navMoveTypes = null;
+
+        // Follow mode
+        navFollowTarget = null;
+        navFollowRadius = 3.0D;
+        navFollowRepathTicks = 0;
+
+        // Mine mode
+        navMineTargets = null;
+        navMineCurrentTarget = null;
+        navMinedCount = 0;
+        navMineMaxCount = -1;
+
+        // Patrol mode
+        navPatrolWaypoints = null;
+        navPatrolIndex = 0;
+        navPatrolLoop = true;
+        navPatrolReverse = false;
 
         if (navWaterJumping)
         {
@@ -587,6 +645,17 @@ public class EntityPlayerActionPack
         navAvoidCobwebs = null;
         navBreakCobwebs = null;
         navAvoidPowderSnow = null;
+        navAllowParkour = null;
+        navAllowPillar = null;
+        navAllowBreakThrough = null;
+        navAllowDescendMine = null;
+        navAllowSprint = null;
+        navMobAvoidance = null;
+        navMobAvoidanceRadius = null;
+        navMaxFallHeight = null;
+        navAvoidSoulSand = null;
+        navAllowOpenDoors = null;
+        navAllowOpenFenceGates = null;
     }
 
     public boolean setNavOption(String option, boolean value)
@@ -602,18 +671,28 @@ public class EntityPlayerActionPack
             case "avoidCobwebs" -> { navAvoidCobwebs = value; yield true; }
             case "breakCobwebs" -> { navBreakCobwebs = value; yield true; }
             case "avoidPowderSnow" -> { navAvoidPowderSnow = value; yield true; }
+            case "allowParkour" -> { navAllowParkour = value; yield true; }
+            case "allowPillar" -> { navAllowPillar = value; yield true; }
+            case "allowBreakThrough" -> { navAllowBreakThrough = value; yield true; }
+            case "allowDescendMine" -> { navAllowDescendMine = value; yield true; }
+            case "allowSprint" -> { navAllowSprint = value; yield true; }
+            case "mobAvoidance" -> { navMobAvoidance = value; yield true; }
+            case "avoidSoulSand" -> { navAvoidSoulSand = value; yield true; }
+            case "allowOpenDoors" -> { navAllowOpenDoors = value; yield true; }
+            case "allowOpenFenceGates" -> { navAllowOpenFenceGates = value; yield true; }
             default -> false;
         };
     }
 
     public boolean setNavOption(String option, int value)
     {
-        if ("autoEatBelow".equals(option))
+        return switch (option)
         {
-            navAutoEatBelow = Mth.clamp(value, 0, 20);
-            return true;
-        }
-        return false;
+            case "autoEatBelow" -> { navAutoEatBelow = Mth.clamp(value, 0, 20); yield true; }
+            case "mobAvoidanceRadius" -> { navMobAvoidanceRadius = Mth.clamp(value, 1, 32); yield true; }
+            case "maxFallHeight" -> { navMaxFallHeight = Mth.clamp(value, 1, 64); yield true; }
+            default -> false;
+        };
     }
 
     public EntityPlayerActionPack setNavGoto(Vec3 targetPos, BotNavMode mode, double arrivalRadius)
@@ -660,6 +739,65 @@ public class EntityPlayerActionPack
         navLastDistanceToNext = Double.POSITIVE_INFINITY;
         return this;
     }
+
+    public EntityPlayerActionPack setNavFollow(UUID targetUUID, double radius)
+    {
+        stopNavigation();
+        navEnabled = true;
+        navMode = BotNavMode.FOLLOW;
+        navFollowTarget = targetUUID;
+        navFollowRadius = Math.max(1.0D, radius);
+        navFollowRepathTicks = 0;
+        navArrivalRadius = radius;
+        return this;
+    }
+
+    public EntityPlayerActionPack setNavMine(List<Block> targets, int radius, int maxCount)
+    {
+        stopNavigation();
+        navEnabled = true;
+        navMode = BotNavMode.MINE;
+        navMineTargets = targets;
+        navMineRadius = Math.max(1, radius);
+        navMineMaxCount = maxCount;
+        navMinedCount = 0;
+        navMineCurrentTarget = null;
+        navNeedsRepath = true;
+        return this;
+    }
+
+    public EntityPlayerActionPack setNavCome(Vec3 senderPos, double arrivalRadius)
+    {
+        return setNavGoto(senderPos, BotNavMode.AUTO, arrivalRadius);
+    }
+
+    public EntityPlayerActionPack setNavPatrol(List<Vec3> waypoints, boolean loop)
+    {
+        stopNavigation();
+        navEnabled = true;
+        navMode = BotNavMode.PATROL;
+        navPatrolWaypoints = new ArrayList<>(waypoints);
+        navPatrolLoop = loop;
+        navPatrolIndex = 0;
+        navPatrolReverse = false;
+        navArrivalRadius = 1.5D;
+        // Set first target.
+        if (!navPatrolWaypoints.isEmpty())
+        {
+            navTargetPos = navPatrolWaypoints.get(0);
+            navNeedsRepath = true;
+        }
+        return this;
+    }
+
+    // Getters for status display.
+    public UUID getNavFollowTarget() { return navFollowTarget; }
+    public List<Block> getNavMineTargets() { return navMineTargets; }
+    public int getNavMinedCount() { return navMinedCount; }
+    public int getNavMineMaxCount() { return navMineMaxCount; }
+    public List<Vec3> getNavPatrolWaypoints() { return navPatrolWaypoints; }
+    public int getNavPatrolIndex() { return navPatrolIndex; }
+    public boolean isNavPatrolLoop() { return navPatrolLoop; }
 
     public EntityPlayerActionPack mount(boolean onlyRideables)
     {
@@ -1318,6 +1456,51 @@ public class EntityPlayerActionPack
         return navOpt(navAvoidPowderSnow, CarpetSettings.fakePlayerNavAvoidPowderSnow);
     }
 
+    private boolean allowParkour()
+    {
+        return navOpt(navAllowParkour, CarpetSettings.fakePlayerNavAllowParkour);
+    }
+
+    private boolean allowPillar()
+    {
+        return navOpt(navAllowPillar, CarpetSettings.fakePlayerNavAllowPillar);
+    }
+
+    private boolean allowBreakThrough()
+    {
+        return navOpt(navAllowBreakThrough, CarpetSettings.fakePlayerNavAllowBreakThrough);
+    }
+
+    private boolean allowDescendMine()
+    {
+        return navOpt(navAllowDescendMine, CarpetSettings.fakePlayerNavAllowDescendMine);
+    }
+
+    private boolean allowSprint()
+    {
+        return navOpt(navAllowSprint, CarpetSettings.fakePlayerNavAllowSprint);
+    }
+
+    private boolean mobAvoidance()
+    {
+        return navOpt(navMobAvoidance, CarpetSettings.fakePlayerNavMobAvoidance);
+    }
+
+    private boolean avoidSoulSand()
+    {
+        return navOpt(navAvoidSoulSand, CarpetSettings.fakePlayerNavAvoidSoulSand);
+    }
+
+    private boolean allowOpenDoors()
+    {
+        return navOpt(navAllowOpenDoors, CarpetSettings.fakePlayerNavAllowOpenDoors);
+    }
+
+    private boolean allowOpenFenceGates()
+    {
+        return navOpt(navAllowOpenFenceGates, CarpetSettings.fakePlayerNavAllowOpenFenceGates);
+    }
+
     private void tickNavigation()
     {
         if (!navEnabled)
@@ -1354,6 +1537,23 @@ public class EntityPlayerActionPack
         if (navJumpCooldownTicks > 0)
         {
             navJumpCooldownTicks--;
+        }
+
+        // Dispatch to mode-specific tick handlers.
+        if (navMode == BotNavMode.FOLLOW)
+        {
+            tickNavFollow();
+            return;
+        }
+        if (navMode == BotNavMode.MINE)
+        {
+            tickNavMine();
+            return;
+        }
+        if (navMode == BotNavMode.PATROL)
+        {
+            tickNavPatrol();
+            return;
         }
 
         if (navTargetPos == null)
@@ -1478,32 +1678,19 @@ public class EntityPlayerActionPack
 
             BlockPos start = player.blockPosition();
             BlockPos goal = BlockPos.containing(navTargetPos);
-                NavAStarPathfinder.Settings base = NavAStarPathfinder.Settings.defaults();
-                NavAStarPathfinder.Settings settings = new NavAStarPathfinder.Settings(
-                    base.maxExpanded(),
-                    base.maxQueued(),
-                    base.maxRangeXZ(),
-                    base.maxRangeY(),
-                    base.maxFall(),
-                    base.maxStepUp(),
-                    base.allowDiagonal(),
-                    base.allowJumps(),
-                    base.maxJumpLength(),
-                    avoidLava(),
-                    avoidFire(),
-                    avoidPowderSnow(),
-                    avoidCobwebs()
-                );
+                NavAStarPathfinder.Settings settings = buildNavSettings();
             NavAStarPathfinder.Traversal traversal = (effectiveMode == BotNavMode.WATER) ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
-            List<BlockPos> raw = NAV_ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, settings);
-            if (raw == null)
+            NavAStarPathfinder.PathResult result = NAV_ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, settings);
+            if (result == null || result.positions().isEmpty())
             {
                 stopNavigation();
                 return;
             }
 
+            List<BlockPos> raw = result.positions();
             // Keep node-to-node fidelity so the follower can detect jump edges.
             navNodes = raw;
+            navMoveTypes = result.moveTypes();
 
             List<Vec3> waypoints = new ArrayList<>(raw.size());
             for (BlockPos p : raw)
@@ -1606,8 +1793,81 @@ public class EntityPlayerActionPack
         Vec2 rot = rotationsTowards(player.getEyePosition(1.0F), next);
         look(stepYaw(player.getYRot(), rot.x, 40.0F), player.getXRot());
 
+        // Determine the MoveType for the current waypoint.
+        NavAStarPathfinder.MoveType currentMoveType = NavAStarPathfinder.MoveType.WALK;
+        if (navMoveTypes != null && navWaypointIndex < navMoveTypes.size())
+        {
+            currentMoveType = navMoveTypes.get(navWaypointIndex);
+        }
+
+        // Handle door/fence gate opening.
+        BlockState nextBlockState = player.level().getBlockState(nextFeet);
+        if (nextBlockState.getBlock() instanceof DoorBlock door && allowOpenDoors())
+        {
+            if (!door.isOpen(nextBlockState))
+            {
+                door.setOpen(player, player.level(), nextBlockState, nextFeet, true);
+            }
+        }
+        if (nextBlockState.getBlock() instanceof FenceGateBlock && allowOpenFenceGates())
+        {
+            if (!nextBlockState.getValue(FenceGateBlock.OPEN))
+            {
+                player.level().setBlock(nextFeet, nextBlockState.setValue(FenceGateBlock.OPEN, true), 2);
+            }
+        }
+
+        // Handle break-through: mine blocks ahead.
+        if (currentMoveType == NavAStarPathfinder.MoveType.BREAK_THROUGH && allowBreakBlocks() && dist <= 2.5D)
+        {
+            BlockState feetAhead = player.level().getBlockState(nextFeet);
+            BlockState headAhead = player.level().getBlockState(nextFeet.above());
+            if (!feetAhead.getCollisionShape(player.level(), nextFeet).isEmpty())
+            {
+                tryBreakBlock(nextFeet, Direction.UP);
+                return;
+            }
+            if (!headAhead.getCollisionShape(player.level(), nextFeet.above()).isEmpty())
+            {
+                tryBreakBlock(nextFeet.above(), Direction.UP);
+                return;
+            }
+        }
+
+        // Handle descend-mine: mine block below.
+        if (currentMoveType == NavAStarPathfinder.MoveType.DESCEND_MINE && allowBreakBlocks() && dist <= 1.5D)
+        {
+            BlockPos belowTarget = new BlockPos(nextFeet.getX(), nextFeet.getY(), nextFeet.getZ());
+            BlockState belowState = player.level().getBlockState(belowTarget);
+            if (!belowState.getCollisionShape(player.level(), belowTarget).isEmpty())
+            {
+                tryBreakBlock(belowTarget, Direction.UP);
+                return;
+            }
+        }
+
+        // Handle pillar: place block at feet to go up.
+        if (currentMoveType == NavAStarPathfinder.MoveType.PILLAR && allowPlaceBlocks() && dist <= 1.5D)
+        {
+            BlockPos placeFeet = player.blockPosition();
+            if (tryPlaceBridgeBlock(placeFeet))
+            {
+                // Jump onto the placed block.
+                if (player.onGround() && navJumpCooldownTicks <= 0)
+                {
+                    navJumpCooldownTicks = 8;
+                    start(ActionType.JUMP, Action.once());
+                }
+                return;
+            }
+        }
+
+        // Sprint based on settings and move type.
+        boolean shouldSprint = allowSprint() && (currentMoveType == NavAStarPathfinder.MoveType.WALK
+                || currentMoveType == NavAStarPathfinder.MoveType.PARKOUR);
+
         setSneaking(false);
-        setSprinting(true);
+        setSprinting(shouldSprint);
         setForward(1.0F);
         setStrafing(0.0F);
 
@@ -1635,8 +1895,15 @@ public class EntityPlayerActionPack
                 BlockPos planned = navNodes.get(navWaypointIndex);
                 int dx = Math.abs(planned.getX() - cur.getX());
                 int dz = Math.abs(planned.getZ() - cur.getZ());
-                // A 2-block cardinal move is usually a planned gap-jump.
+                // A 2-block cardinal move or parkour move is a planned gap-jump.
                 needsPlannedJump = (dx + dz) >= 2 && (dx == 0 || dz == 0);
+            }
+
+            // Parkour: always sprint-jump.
+            if (currentMoveType == NavAStarPathfinder.MoveType.PARKOUR)
+            {
+                needsPlannedJump = true;
+                setSprinting(true);
             }
 
             boolean shouldJump = wantUp || (needsPlannedJump && dist <= 1.35D);
@@ -1657,6 +1924,389 @@ public class EntityPlayerActionPack
                 }
             }
         }
+    }
+
+    // --- Follow mode: re-path periodically to stay near a target player ---
+    private void tickNavFollow()
+    {
+        if (navFollowTarget == null)
+        {
+            stopNavigation();
+            return;
+        }
+
+        ServerLevel level = (ServerLevel) player.level();
+        Entity target = level.getEntity(navFollowTarget);
+        if (target == null)
+        {
+            // Try finding by UUID among players.
+            target = level.getServer().getPlayerList().getPlayer(navFollowTarget);
+        }
+        if (target == null)
+        {
+            stopNavigation();
+            return;
+        }
+
+        double distToTarget = player.position().distanceTo(target.position());
+
+        // Already close enough.
+        if (distToTarget <= navFollowRadius)
+        {
+            stopMovement();
+            navWaypoints = null;
+            navNodes = null;
+            navMoveTypes = null;
+            // Still keep following – just wait.
+            navFollowRepathTicks = Math.min(navFollowRepathTicks, 10);
+        }
+
+        navFollowRepathTicks--;
+        if (navFollowRepathTicks <= 0 && distToTarget > navFollowRadius)
+        {
+            navFollowRepathTicks = navFollowRepathInterval;
+            navTargetPos = target.position();
+
+            BlockPos start = player.blockPosition();
+            BlockPos goal = BlockPos.containing(navTargetPos);
+            NavAStarPathfinder.Settings settings = buildNavSettings();
+            NavAStarPathfinder.Traversal traversal = isInWaterish() ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
+            NavAStarPathfinder.PathResult result = NAV_ASTAR.findPath(level, start, goal, traversal, settings);
+            if (result == null || result.positions().isEmpty())
+            {
+                navWaypoints = null;
+                navNodes = null;
+                navMoveTypes = null;
+                return;
+            }
+            navNodes = result.positions();
+            navMoveTypes = result.moveTypes();
+            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
+            for (BlockPos p : navNodes)
+            {
+                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
+            }
+            navWaypoints = waypoints;
+            navWaypointIndex = 0;
+            navNoProgressTicks = 0;
+            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        }
+
+        // Execute movement along waypoints (shared logic).
+        tickNavWaypointFollowing(BotNavMode.LAND);
+    }
+
+    // --- Mine mode: find target block, navigate to it, mine it, repeat ---
+    private void tickNavMine()
+    {
+        if (navMineTargets == null || navMineTargets.isEmpty())
+        {
+            stopNavigation();
+            return;
+        }
+        if (navMineMaxCount > 0 && navMinedCount >= navMineMaxCount)
+        {
+            stopNavigation();
+            return;
+        }
+
+        ServerLevel level = (ServerLevel) player.level();
+
+        // If we don't have a target, find one.
+        if (navMineCurrentTarget == null)
+        {
+            navMineCurrentTarget = NavAStarPathfinder.findNearestBlock(level, player.blockPosition(), navMineTargets, navMineRadius);
+            if (navMineCurrentTarget == null)
+            {
+                stopNavigation();
+                return;
+            }
+            navTargetPos = new Vec3(navMineCurrentTarget.getX() + 0.5D, navMineCurrentTarget.getY(), navMineCurrentTarget.getZ() + 0.5D);
+            navNeedsRepath = true;
+            navRepathCooldownTicks = 0;
+        }
+
+        double distToTarget = player.position().distanceTo(navTargetPos);
+
+        // Close enough to mine.
+        if (distToTarget <= 4.0D)
+        {
+            BlockState targetState = level.getBlockState(navMineCurrentTarget);
+            boolean isTargetBlock = false;
+            for (Block b : navMineTargets)
+            {
+                if (targetState.is(b)) { isTargetBlock = true; break; }
+            }
+            if (!isTargetBlock)
+            {
+                // Block was already mined or changed; find new target.
+                navMinedCount++;
+                navMineCurrentTarget = null;
+                navWaypoints = null;
+                navNodes = null;
+                navMoveTypes = null;
+                return;
+            }
+            tryBreakBlock(navMineCurrentTarget, Direction.UP);
+            stopMovement();
+            return;
+        }
+
+        // Path to the target block.
+        if (navNeedsRepath && navRepathCooldownTicks <= 0)
+        {
+            navNeedsRepath = false;
+            navRepathCooldownTicks = 20;
+
+            BlockPos start = player.blockPosition();
+            BlockPos goal = navMineCurrentTarget;
+            NavAStarPathfinder.Settings settings = buildNavSettings();
+            NavAStarPathfinder.PathResult result = NAV_ASTAR.findPath(level, start, goal, NavAStarPathfinder.Traversal.AMPHIBIOUS, settings);
+            if (result == null || result.positions().isEmpty())
+            {
+                // Can't reach; try another target.
+                navMineCurrentTarget = null;
+                navNeedsRepath = true;
+                return;
+            }
+            navNodes = result.positions();
+            navMoveTypes = result.moveTypes();
+            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
+            for (BlockPos p : navNodes)
+            {
+                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
+            }
+            navWaypoints = waypoints;
+            navWaypointIndex = 0;
+            navNoProgressTicks = 0;
+            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        }
+
+        tickNavWaypointFollowing(BotNavMode.LAND);
+    }
+
+    // --- Patrol mode: walk between waypoints ---
+    private void tickNavPatrol()
+    {
+        if (navPatrolWaypoints == null || navPatrolWaypoints.isEmpty())
+        {
+            stopNavigation();
+            return;
+        }
+
+        // Check if we've arrived at current patrol waypoint.
+        if (navTargetPos != null && player.position().distanceTo(navTargetPos) <= navArrivalRadius)
+        {
+            // Advance to next patrol waypoint.
+            if (navPatrolLoop)
+            {
+                navPatrolIndex = (navPatrolIndex + 1) % navPatrolWaypoints.size();
+            }
+            else if (!navPatrolReverse)
+            {
+                navPatrolIndex++;
+                if (navPatrolIndex >= navPatrolWaypoints.size())
+                {
+                    stopNavigation();
+                    stopMovement();
+                    return;
+                }
+            }
+            else
+            {
+                navPatrolIndex--;
+                if (navPatrolIndex < 0)
+                {
+                    stopNavigation();
+                    stopMovement();
+                    return;
+                }
+            }
+            navTargetPos = navPatrolWaypoints.get(navPatrolIndex);
+            navNeedsRepath = true;
+            navRepathCooldownTicks = 0;
+        }
+
+        if (navTargetPos == null)
+        {
+            navTargetPos = navPatrolWaypoints.get(navPatrolIndex);
+            navNeedsRepath = true;
+        }
+
+        // Path to current patrol target.
+        if (navNeedsRepath && navRepathCooldownTicks <= 0)
+        {
+            navNeedsRepath = false;
+            navRepathCooldownTicks = 20;
+
+            BlockPos start = player.blockPosition();
+            BlockPos goal = BlockPos.containing(navTargetPos);
+            NavAStarPathfinder.Settings settings = buildNavSettings();
+            NavAStarPathfinder.Traversal traversal = isInWaterish() ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
+            NavAStarPathfinder.PathResult result = NAV_ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, settings);
+            if (result == null || result.positions().isEmpty())
+            {
+                // Skip this waypoint.
+                if (navPatrolLoop)
+                {
+                    navPatrolIndex = (navPatrolIndex + 1) % navPatrolWaypoints.size();
+                    navTargetPos = navPatrolWaypoints.get(navPatrolIndex);
+                    navNeedsRepath = true;
+                }
+                else
+                {
+                    stopNavigation();
+                }
+                return;
+            }
+            navNodes = result.positions();
+            navMoveTypes = result.moveTypes();
+            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
+            for (BlockPos p : navNodes)
+            {
+                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
+            }
+            navWaypoints = waypoints;
+            navWaypointIndex = 0;
+            navNoProgressTicks = 0;
+            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        }
+
+        tickNavWaypointFollowing(BotNavMode.LAND);
+    }
+
+    /**
+     * Shared waypoint-following movement logic for follow/mine/patrol modes.
+     * Handles walking, sprinting, jumping, parkour, door-opening, etc.
+     */
+    private void tickNavWaypointFollowing(BotNavMode effectiveMode)
+    {
+        if (navWaypoints == null || navWaypointIndex >= navWaypoints.size())
+        {
+            return;
+        }
+
+        Vec3 next = navWaypoints.get(navWaypointIndex);
+        double dist = player.position().distanceTo(next);
+
+        if (dist <= 0.85D)
+        {
+            navWaypointIndex++;
+            navNoProgressTicks = 0;
+            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+            if (navWaterJumping)
+            {
+                player.setJumping(false);
+                navWaterJumping = false;
+            }
+            return;
+        }
+
+        if (dist + 0.01D >= navLastDistanceToNext)
+        {
+            navNoProgressTicks++;
+        }
+        else
+        {
+            navNoProgressTicks = 0;
+        }
+        navLastDistanceToNext = dist;
+
+        if (navNoProgressTicks > 60)
+        {
+            navNoProgressTicks = 0;
+            navNeedsRepath = true;
+            return;
+        }
+
+        Vec2 rot2 = rotationsTowards(player.getEyePosition(1.0F), next);
+        look(stepYaw(player.getYRot(), rot2.x, 40.0F), player.getXRot());
+
+        NavAStarPathfinder.MoveType moveType = NavAStarPathfinder.MoveType.WALK;
+        if (navMoveTypes != null && navWaypointIndex < navMoveTypes.size())
+        {
+            moveType = navMoveTypes.get(navWaypointIndex);
+        }
+
+        boolean shouldSprint = allowSprint() && (moveType == NavAStarPathfinder.MoveType.WALK
+                || moveType == NavAStarPathfinder.MoveType.PARKOUR);
+        setSneaking(false);
+        setSprinting(shouldSprint);
+        setForward(1.0F);
+        setStrafing(0.0F);
+
+        boolean wantUp = next.y > player.getY() + 0.2D;
+        boolean needsPlannedJump = false;
+        if (navNodes != null && navWaypointIndex < navNodes.size())
+        {
+            BlockPos cur = player.blockPosition();
+            BlockPos planned = navNodes.get(navWaypointIndex);
+            int ddx = Math.abs(planned.getX() - cur.getX());
+            int ddz = Math.abs(planned.getZ() - cur.getZ());
+            needsPlannedJump = (ddx + ddz) >= 2 && (ddx == 0 || ddz == 0);
+        }
+        if (moveType == NavAStarPathfinder.MoveType.PARKOUR)
+        {
+            needsPlannedJump = true;
+            setSprinting(true);
+        }
+
+        boolean shouldJump = wantUp || (needsPlannedJump && dist <= 1.35D);
+        if (shouldJump && player.onGround() && navJumpCooldownTicks <= 0)
+        {
+            BlockPos headAbove = player.blockPosition().above(2);
+            BlockState headAboveState = player.level().getBlockState(headAbove);
+            if (headAboveState.getCollisionShape(player.level(), headAbove).isEmpty())
+            {
+                navJumpCooldownTicks = 8;
+                start(ActionType.JUMP, Action.once());
+            }
+        }
+    }
+
+    /**
+     * Build NavAStarPathfinder.Settings from current carpet rules + per-bot overrides.
+     */
+    private NavAStarPathfinder.Settings buildNavSettings()
+    {
+        NavAStarPathfinder.Settings base = NavAStarPathfinder.Settings.defaults();
+        return new NavAStarPathfinder.Settings(
+                base.maxExpanded(),
+                base.maxQueued(),
+                base.maxRangeXZ(),
+                base.maxRangeY(),
+                navMaxFallHeight != null ? navMaxFallHeight : CarpetSettings.fakePlayerNavMaxFallHeight,
+                base.maxStepUp(),
+                base.allowDiagonal(),
+                base.allowJumps(),
+                base.maxJumpLength(),
+                avoidLava(),
+                avoidFire(),
+                avoidPowderSnow(),
+                avoidCobwebs(),
+                // Baritone-like extensions
+                navAllowBreakThrough != null ? navAllowBreakThrough : CarpetSettings.fakePlayerNavAllowBreakThrough,
+                base.breakCostBase(),
+                navAllowPillar != null ? navAllowPillar : CarpetSettings.fakePlayerNavAllowPillar,
+                base.pillarCost(),
+                navAllowParkour != null ? navAllowParkour : CarpetSettings.fakePlayerNavAllowParkour,
+                base.maxParkourLength(),
+                navAllowDescendMine != null ? navAllowDescendMine : CarpetSettings.fakePlayerNavAllowDescendMine,
+                base.descendMineCost(),
+                navAllowSprint != null ? navAllowSprint : CarpetSettings.fakePlayerNavAllowSprint,
+                base.sprintCostMultiplier(),
+                navMobAvoidance != null ? navMobAvoidance : CarpetSettings.fakePlayerNavMobAvoidance,
+                navMobAvoidanceRadius != null ? navMobAvoidanceRadius : CarpetSettings.fakePlayerNavMobAvoidanceRadius,
+                base.mobAvoidanceCost(),
+                navMaxFallHeight != null ? navMaxFallHeight : CarpetSettings.fakePlayerNavMaxFallHeight,
+                base.jumpPenalty(),
+                base.fallDamagePenalty(),
+                base.allowDiagonalAscend(),
+                base.allowDiagonalDescend(),
+                navAvoidSoulSand != null ? navAvoidSoulSand : CarpetSettings.fakePlayerNavAvoidSoulSand,
+                navAllowOpenDoors != null ? navAllowOpenDoors : CarpetSettings.fakePlayerNavAllowOpenDoors,
+                navAllowOpenFenceGates != null ? navAllowOpenFenceGates : CarpetSettings.fakePlayerNavAllowOpenFenceGates
+        );
     }
 
     private boolean isInWaterish()

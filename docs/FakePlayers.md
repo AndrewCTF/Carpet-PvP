@@ -217,13 +217,17 @@ Examples:
 
 ---
 
-## Navigation (Land/Water/Air)
+## Navigation
 
-Enable rules:
+The navigation system provides Baritone-like pathfinding and movement for fake players, including advanced traversal modes like parkour, pillar-jumping, break-through mining, mob avoidance, sprinting optimization, and more.
+
+### Enable rules:
 - `/carpet fakePlayerNavigation true`
 - `/carpet fakePlayerElytraGlide true` (required for AIR mode)
 
-Navigation commands:
+### Navigation commands:
+
+**Goto (walk/swim/fly to a position):**
 - `/player <bot> nav status`
 - `/player <bot> nav stop`
 - `/player <bot> nav goto <x> <y> <z> [arrivalRadius]`
@@ -233,24 +237,59 @@ Navigation commands:
 - `/player <bot> nav goto air land <x> <y> <z> [arrivalRadius]`
 - `/player <bot> nav goto air drop <x> <y> <z> [arrivalRadius]`
 
-Per-bot options:
+**Follow (stay near another player):**
+- `/player <bot> nav follow <playerName> [radius]`
+  - Bot will continuously re-path to stay within `radius` blocks of the target player.
+  - Default radius: 3 blocks.
+
+**Come (navigate to the command sender's position):**
+- `/player <bot> nav come [arrivalRadius]`
+  - Shorthand for `nav goto` to your current position.
+
+**Mine (find and mine specific blocks):**
+- `/player <bot> nav mine <block> [count] [radius]`
+  - Navigates to the nearest instance of `<block>` and mines it.
+  - Repeats until `count` blocks are mined (use -1 for unlimited).
+  - Default radius: 32 blocks.
+  - Example: `/player Bot nav mine minecraft:diamond_ore 10 64`
+
+**Patrol (walk between waypoints):**
+- `/player <bot> nav patrol <pos1> <pos2> [pos3] [pos4] [loop|once]`
+  - Walks between the given waypoints.
+  - `loop` (default): cycles endlessly through waypoints.
+  - `once`: walks through waypoints once, then stops.
+
+### Per-bot options:
 - `/player <bot> nav options reset`
 - `/player <bot> nav options <name> <true|false>`
-- `/player <bot> nav options autoEatBelow <0..20>`
+- `/player <bot> nav options <name> <integer>`
 
-Option names:
-- `breakBlocks`
-- `placeBlocks`
-- `autoTool`
-- `autoEat`
-- `autoEatBelow`
-- `avoidLava`
-- `avoidFire`
-- `avoidCobwebs`
-- `breakCobwebs`
-- `avoidPowderSnow`
+Option names (boolean):
+- `breakBlocks` – Allow breaking blocks in the way
+- `placeBlocks` – Allow placing blocks to bridge gaps
+- `autoTool` – Auto-select best tool when breaking
+- `autoEat` – Auto-eat food when hungry
+- `avoidLava` – Avoid routing through lava
+- `avoidFire` – Avoid routing through fire
+- `avoidCobwebs` – Avoid routing through cobwebs
+- `breakCobwebs` – Break cobwebs in the way
+- `avoidPowderSnow` – Avoid powder snow
+- `allowParkour` – Allow gap-jumping (up to 4 blocks)
+- `allowPillar` – Allow pillar-jumping (place block at feet to ascend)
+- `allowBreakThrough` – Allow mining through obstacles
+- `allowDescendMine` – Allow downward mining
+- `allowSprint` – Allow sprinting (reduces path cost)
+- `mobAvoidance` – Avoid hostile mobs when pathing
+- `avoidSoulSand` – Penalize soul sand paths
+- `allowOpenDoors` – Allow opening doors
+- `allowOpenFenceGates` – Allow opening fence gates
 
-Global Carpet rules:
+Option names (integer):
+- `autoEatBelow` – Hunger threshold for auto-eat (0-20)
+- `mobAvoidanceRadius` – Radius to avoid mobs (1-32)
+- `maxFallHeight` – Maximum safe fall height (1-64)
+
+### Global Carpet rules:
 - `fakePlayerNavBreakBlocks`
 - `fakePlayerNavPlaceBlocks`
 - `fakePlayerNavAutoTool`
@@ -261,11 +300,47 @@ Global Carpet rules:
 - `fakePlayerNavAvoidCobwebs`
 - `fakePlayerNavBreakCobwebs`
 - `fakePlayerNavAvoidPowderSnow`
+- `fakePlayerNavAllowParkour` – Enable parkour gap-jumping (default: true)
+- `fakePlayerNavAllowPillar` – Enable pillar-jumping (default: false)
+- `fakePlayerNavAllowBreakThrough` – Enable mining through obstacles (default: false)
+- `fakePlayerNavAllowDescendMine` – Enable downward mining (default: false)
+- `fakePlayerNavAllowSprint` – Enable sprinting (default: true)
+- `fakePlayerNavMobAvoidance` – Enable mob avoidance (default: false)
+- `fakePlayerNavMobAvoidanceRadius` – Mob avoidance radius (default: 8)
+- `fakePlayerNavMaxFallHeight` – Maximum safe fall (default: 4)
+- `fakePlayerNavAvoidSoulSand` – Penalize soul sand (default: false)
+- `fakePlayerNavAllowOpenDoors` – Allow door opening (default: true)
+- `fakePlayerNavAllowOpenFenceGates` – Allow fence gate opening (default: true)
+
+### Pathfinding details:
+
+The A* pathfinder supports the following movement types:
+- **WALK** – Standard cardinal + diagonal movement
+- **JUMP** – Step up 1 block
+- **FALL** – Descend (up to maxFallHeight)
+- **PARKOUR** – Gap-jump 2-4 blocks, including ascending parkour
+- **PILLAR** – Place block at feet and jump up (high cost)
+- **BREAK_THROUGH** – Mine through 1-2 obstacle blocks
+- **DESCEND_MINE** – Mine downward
+- **SWIM** – Water traversal
+
+Cost model (Baritone-inspired):
+- Walk = 1.0, diagonal = √2
+- Sprint discount (0.8× cost for flat walking)
+- Jump penalty (+0.4 per jump)
+- Fall damage penalty (+2.0 per block beyond safe threshold)
+- Break penalty (base cost + hardness × 2)
+- Pillar penalty (20.0)
+- Soul sand penalty (2.5× cost)
+- Mob avoidance overlay (+4.0 cost near hostile mobs)
+- Door/fence gate traversal (+1.0 cost)
 
 Notes:
 - Land mode is amphibious and can route through water.
 - Auto-eat selects food using survival-safe inventory consumption.
 - Cobweb/lava/fire/powder-snow behavior is configurable per bot and globally.
+- Partial paths are returned when pathfinder limits are hit, allowing progress toward distant goals.
+- The pathfinder pre-computes a mob danger map each path calculation for hostile mob avoidance.
 
 ---
 

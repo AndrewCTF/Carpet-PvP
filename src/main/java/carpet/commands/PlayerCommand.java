@@ -51,13 +51,16 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static net.minecraft.commands.Commands.argument;
@@ -244,11 +247,22 @@ public class PlayerCommand
                         "avoidFire",
                         "avoidCobwebs",
                         "breakCobwebs",
-                        "avoidPowderSnow"
+                        "avoidPowderSnow",
+                        "allowParkour",
+                        "allowPillar",
+                        "allowBreakThrough",
+                        "allowDescendMine",
+                        "allowSprint",
+                        "mobAvoidance",
+                        "mobAvoidanceRadius",
+                        "maxFallHeight",
+                        "avoidSoulSand",
+                        "allowOpenDoors",
+                        "allowOpenFenceGates"
                     ), b))
                     .then(argument("value", BoolArgumentType.bool())
                         .executes(PlayerCommand::navOptionBool))
-                    .then(argument("value", IntegerArgumentType.integer(0, 20))
+                    .then(argument("value", IntegerArgumentType.integer(0, 64))
                         .executes(PlayerCommand::navOptionInt))))
                 .then(literal("goto")
                         .then(argument("pos", Vec3Argument.vec3())
@@ -279,8 +293,44 @@ public class PlayerCommand
                         .then(argument("pos", Vec3Argument.vec3())
                             .executes(c -> navGotoAir(c, false))
                             .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
-                                .executes(c -> navGotoAir(c, false))))))
-                );
+                                .executes(c -> navGotoAir(c, false)))))))
+                // --- Follow command ---
+                .then(literal("follow")
+                    .then(argument("target", StringArgumentType.word())
+                        .executes(PlayerCommand::navFollow)
+                        .then(argument("radius", DoubleArgumentType.doubleArg(1.0D))
+                            .executes(PlayerCommand::navFollow))))
+                // --- Come command ---
+                .then(literal("come")
+                    .executes(PlayerCommand::navCome)
+                    .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                        .executes(PlayerCommand::navCome)))
+                // --- Mine command ---
+                .then(literal("mine")
+                    .then(argument("block", StringArgumentType.string())
+                        .suggests((c, b) -> suggest(BuiltInRegistries.BLOCK.keySet().stream()
+                            .map(rl -> rl.toString()), b))
+                        .executes(PlayerCommand::navMine)
+                        .then(argument("count", IntegerArgumentType.integer(-1))
+                            .executes(PlayerCommand::navMine)
+                            .then(argument("radius", IntegerArgumentType.integer(1, 128))
+                                .executes(PlayerCommand::navMine)))))
+                // --- Patrol command ---
+                .then(literal("patrol")
+                    .then(argument("pos1", Vec3Argument.vec3())
+                        .then(argument("pos2", Vec3Argument.vec3())
+                            .executes(c -> navPatrol(c, 2))
+                            .then(literal("loop").executes(c -> navPatrol(c, 2)))
+                            .then(literal("once").executes(c -> navPatrolOnce(c, 2)))
+                            .then(argument("pos3", Vec3Argument.vec3())
+                                .executes(c -> navPatrol(c, 3))
+                                .then(literal("loop").executes(c -> navPatrol(c, 3)))
+                                .then(literal("once").executes(c -> navPatrolOnce(c, 3)))
+                                .then(argument("pos4", Vec3Argument.vec3())
+                                    .executes(c -> navPatrol(c, 4))
+                                    .then(literal("loop").executes(c -> navPatrol(c, 4)))
+                                    .then(literal("once").executes(c -> navPatrolOnce(c, 4))))))))
+                ;
     }
 
     private static boolean cantNavManipulate(CommandContext<CommandSourceStack> context)
@@ -321,12 +371,41 @@ public class PlayerCommand
             return 1;
         }
         Vec3 target = ap.getNavTargetPos();
+        BotNavMode mode = ap.getNavMode();
         Messenger.m(context.getSource(),
                 "g Navigation: enabled ",
-                "w mode=", "y ", ap.getNavMode().name().toLowerCase(),
+                "w mode=", "y ", mode.name().toLowerCase(),
                 "w  target=", (target == null ? "r <none>" : String.format("y %.1f %.1f %.1f", target.x, target.y, target.z)),
                 "w  radius=", String.format("y %.2f", ap.getNavArrivalRadius()),
                 "g  for ", player.getName());
+
+        // Mode-specific info.
+        if (mode == BotNavMode.FOLLOW && ap.getNavFollowTarget() != null)
+        {
+            ServerPlayer followTarget = context.getSource().getServer().getPlayerList().getPlayer(ap.getNavFollowTarget());
+            String targetName = followTarget != null ? followTarget.getName().getString() : ap.getNavFollowTarget().toString();
+            Messenger.m(context.getSource(), "w   following: ", "y ", targetName);
+        }
+        if (mode == BotNavMode.MINE && ap.getNavMineTargets() != null)
+        {
+            StringBuilder blocks = new StringBuilder();
+            for (Block b : ap.getNavMineTargets())
+            {
+                if (blocks.length() > 0) blocks.append(", ");
+                blocks.append(BuiltInRegistries.BLOCK.getKey(b));
+            }
+            int mined = ap.getNavMinedCount();
+            int max = ap.getNavMineMaxCount();
+            String countInfo = max > 0 ? (mined + "/" + max) : String.valueOf(mined);
+            Messenger.m(context.getSource(), "w   mining: ", "y ", blocks.toString(), "w  mined: ", "y ", countInfo);
+        }
+        if (mode == BotNavMode.PATROL && ap.getNavPatrolWaypoints() != null)
+        {
+            int idx = ap.getNavPatrolIndex();
+            int total = ap.getNavPatrolWaypoints().size();
+            String loopStr = ap.isNavPatrolLoop() ? "loop" : "once";
+            Messenger.m(context.getSource(), "w   patrol waypoint: ", "y ", (idx + 1) + "/" + total, "w  mode: ", "y ", loopStr);
+        }
         return 1;
     }
 
@@ -413,6 +492,107 @@ public class PlayerCommand
         ap.setNavGotoAir(pos, arrivalRadius, landOnFloor);
 
         Messenger.m(context.getSource(), "g Air navigation started for ", player.getName(), "w  arrival=", "y ", landOnFloor ? "land" : "drop");
+        return 1;
+    }
+
+    private static int navFollow(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String targetName = StringArgumentType.getString(context, "target");
+        double radius = 3.0D;
+        try
+        {
+            radius = DoubleArgumentType.getDouble(context, "radius");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        ServerPlayer player = getPlayer(context);
+        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+        if (targetPlayer == null)
+        {
+            Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
+            return 0;
+        }
+        if (targetPlayer == player)
+        {
+            Messenger.m(context.getSource(), "r Cannot follow self.");
+            return 0;
+        }
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavFollow(targetPlayer.getUUID(), radius);
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now following ", targetPlayer.getName(), "w  radius=", String.format("y %.1f", radius));
+        return 1;
+    }
+
+    private static int navCome(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        double arrivalRadius = 1.0D;
+        try
+        {
+            arrivalRadius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        Vec3 senderPos = context.getSource().getPosition();
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavCome(senderPos, arrivalRadius);
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is coming to your position.");
+        return 1;
+    }
+
+    private static int navMine(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String blockName = StringArgumentType.getString(context, "block");
+        int count = -1;
+        int radius = 32;
+        try { count = IntegerArgumentType.getInteger(context, "count"); } catch (IllegalArgumentException ignored) {}
+        try { radius = IntegerArgumentType.getInteger(context, "radius"); } catch (IllegalArgumentException ignored) {}
+
+        // Parse block name.
+        var blockId = net.minecraft.resources.Identifier.tryParse(blockName);
+        if (blockId == null || !BuiltInRegistries.BLOCK.containsKey(blockId))
+        {
+            Messenger.m(context.getSource(), "r Unknown block: ", blockName);
+            return 0;
+        }
+        Block block = BuiltInRegistries.BLOCK.getValue(blockId);
+        List<Block> targets = new ArrayList<>();
+        targets.add(block);
+
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavMine(targets, radius, count);
+        String countStr = count > 0 ? " (max " + count + ")" : "";
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now mining ", "y ", blockName, "g ", countStr, "w  radius=", String.format("y %d", radius));
+        return 1;
+    }
+
+    private static int navPatrol(CommandContext<CommandSourceStack> context, int posCount)
+    {
+        return navPatrolImpl(context, posCount, true);
+    }
+
+    private static int navPatrolOnce(CommandContext<CommandSourceStack> context, int posCount)
+    {
+        return navPatrolImpl(context, posCount, false);
+    }
+
+    private static int navPatrolImpl(CommandContext<CommandSourceStack> context, int posCount, boolean loop)
+    {
+        if (cantNavManipulate(context)) return 0;
+        List<Vec3> waypoints = new ArrayList<>();
+        waypoints.add(Vec3Argument.getVec3(context, "pos1"));
+        waypoints.add(Vec3Argument.getVec3(context, "pos2"));
+        if (posCount >= 3) waypoints.add(Vec3Argument.getVec3(context, "pos3"));
+        if (posCount >= 4) waypoints.add(Vec3Argument.getVec3(context, "pos4"));
+
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavPatrol(waypoints, loop);
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now patrolling ", "y ", String.valueOf(waypoints.size()), "g  waypoints", "w  mode=", "y ", loop ? "loop" : "once");
         return 1;
     }
 
