@@ -16,6 +16,7 @@ import carpet.helpers.pathfinding.NavAStarPathfinder;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
@@ -1013,7 +1014,7 @@ public class EntityPlayerActionPack
             return false;
         }
         ItemStack stack = player.getItemInHand(InteractionHand.MAIN_HAND);
-        if (!stack.isEdible())
+        if (stack.get(DataComponents.FOOD) == null)
         {
             return false;
         }
@@ -1034,11 +1035,10 @@ public class EntityPlayerActionPack
         for (int i = 0; i < inv.getContainerSize(); i++)
         {
             ItemStack stack = inv.getItem(i);
-            if (stack.isEmpty() || !stack.isEdible()) continue;
-            FoodProperties props = stack.getFoodProperties(player);
+            if (stack.isEmpty()) continue;
+            FoodProperties props = stack.get(DataComponents.FOOD);
             if (props == null) continue;
-            double saturation = props.getNutrition() * props.getSaturationModifier() * 2.0D;
-            double score = saturation + props.getNutrition();
+            double score = props.nutrition();
             if (score > bestScore)
             {
                 bestScore = score;
