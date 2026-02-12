@@ -107,9 +107,20 @@ public class PlayerCommand
                                         .suggests((c, b) -> suggest(List.of("head", "helmet", "chest", "chestplate", "legs", "leggings", "feet", "boots", "mainhand", "weapon", "offhand", "shield"), b))
                                         .executes(PlayerCommand::unequipItem)))
                         .then(literal("equipment").executes(PlayerCommand::showEquipment))
-                        .then(literal("sneak").executes(manipulation(ap -> ap.setSneaking(true))))
+                        .then(makeItemCdCommand(commandBuildContext))
+                        .then(literal("sneak").executes(manipulation(ap -> ap.setSneaking(true)))
+                                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c, ap -> {
+                                            ap.setSneaking(true);
+                                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                                        })))))
                         .then(literal("unsneak").executes(manipulation(ap -> ap.setSneaking(false))))
-                        .then(literal("sprint").executes(manipulation(ap -> ap.setSprinting(true))))
+                        .then(literal("sprint").executes(manipulation(ap -> ap.setSprinting(true)))
+                                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c, ap -> {
+                                            ap.setSprinting(true);
+                                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                                        })))))
                         .then(literal("unsprint").executes(manipulation(ap -> ap.setSprinting(false))))
                         .then(literal("look")
                                 .then(literal("north").executes(manipulation(ap -> ap.look(Direction.NORTH))))
@@ -129,10 +140,10 @@ public class PlayerCommand
                                 .then(argument("rotation", RotationArgument.rotation())
                                         .executes(c -> manipulate(c, ap -> ap.turn(RotationArgument.getRotation(c, "rotation").getRotation(c.getSource())))))
                         ).then(literal("move").executes(manipulation(EntityPlayerActionPack::stopMovement))
-                                .then(literal("forward").executes(manipulation(ap -> ap.setForward(1))))
-                                .then(literal("backward").executes(manipulation(ap -> ap.setForward(-1))))
-                                .then(literal("left").executes(manipulation(ap -> ap.setStrafing(1))))
-                                .then(literal("right").executes(manipulation(ap -> ap.setStrafing(-1))))
+                                .then(makeMoveDirection("forward", 1.0F, 0.0F))
+                                .then(makeMoveDirection("backward", -1.0F, 0.0F))
+                                .then(makeMoveDirection("left", 0.0F, 1.0F))
+                                .then(makeMoveDirection("right", 0.0F, -1.0F))
                         ).then(literal("spawn").executes(PlayerCommand::spawn)
                             .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
                                         .then(argument("gamemode", GameModeArgument.gameMode())
@@ -1003,6 +1014,180 @@ public class PlayerCommand
  
         EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
         return 1;
+    }
+
+    /**
+     * Creates a move direction sub-command with optional modifiers:
+     *   /player name move forward [for <ticks>] [sneaking] [sprinting]
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> makeMoveDirection(String name, float forwardVal, float strafeVal)
+    {
+        return literal(name)
+                .executes(manipulation(ap -> {
+                    if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                    if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                }))
+                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        }))
+                        .then(literal("sneaking").executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSneaking(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))
+                        .then(literal("sprinting").executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSprinting(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))))
+                .then(literal("sneaking").executes(c -> manipulate(c, ap -> {
+                    if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                    if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                    ap.setSneaking(true);
+                }))
+                    .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSneaking(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))))
+                .then(literal("sprinting").executes(c -> manipulate(c, ap -> {
+                    if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                    if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                    ap.setSprinting(true);
+                }))
+                    .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSprinting(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeItemCdCommand(CommandBuildContext commandBuildContext)
+    {
+        return literal("itemCd")
+                // /player name itemCd  → reset all cooldowns
+                .executes(PlayerCommand::itemCdResetAll)
+                // /player name itemCd <item> → query cooldown
+                .then(argument("item", ItemArgument.item(commandBuildContext))
+                        .executes(PlayerCommand::itemCdQuery)
+                        // /player name itemCd <item> reset → reset that item's cooldown
+                        .then(literal("reset").executes(PlayerCommand::itemCdReset))
+                        // /player name itemCd <item> set → set default cooldown
+                        .then(literal("set")
+                                .executes(PlayerCommand::itemCdSetDefault)
+                                // /player name itemCd <item> set <ticks> → set specific cooldown
+                                .then(argument("ticks", IntegerArgumentType.integer(0))
+                                        .executes(PlayerCommand::itemCdSetTicks))));
+    }
+
+    private static int itemCdResetAll(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        player.getCooldowns().removeAll();
+        Messenger.m(context.getSource(), "g All item cooldowns reset for ", player.getName());
+        return 1;
+    }
+
+    private static int itemCdQuery(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            float pct = player.getCooldowns().getCooldownPercent(item.getDefaultInstance(), 0.0F);
+            int remaining = (int) Math.ceil(pct * 20); // approximate ticks remaining
+            if (pct <= 0.0F)
+            {
+                Messenger.m(context.getSource(), "g No cooldown active for ", item.getDefaultInstance().getDisplayName().getString());
+            }
+            else
+            {
+                Messenger.m(context.getSource(), "g Cooldown for ", item.getDefaultInstance().getDisplayName().getString(),
+                        "g : ~", String.valueOf(remaining), "g  ticks remaining (",
+                        String.format("%.0f%%", pct * 100), "g )");
+            }
+            return remaining;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to query item cooldown: ", e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int itemCdReset(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            player.getCooldowns().removeCooldown(item);
+            Messenger.m(context.getSource(), "g Cooldown reset for ", item.getDefaultInstance().getDisplayName().getString(),
+                    "g  on ", player.getName());
+            return 1;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to reset item cooldown: ", e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int itemCdSetDefault(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            // Default cooldowns: ender pearl = 20 ticks, chorus fruit = 20, shield = 100
+            int defaultTicks = 20;
+            player.getCooldowns().addCooldown(item, defaultTicks);
+            Messenger.m(context.getSource(), "g Set default cooldown (", String.valueOf(defaultTicks), "g  ticks) for ",
+                    item.getDefaultInstance().getDisplayName().getString(), "g  on ", player.getName());
+            return 1;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to set item cooldown: ", e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int itemCdSetTicks(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            int ticks = IntegerArgumentType.getInteger(context, "ticks");
+            player.getCooldowns().addCooldown(item, ticks);
+            Messenger.m(context.getSource(), "g Set cooldown to ", String.valueOf(ticks), "g  ticks for ",
+                    item.getDefaultInstance().getDisplayName().getString(), "g  on ", player.getName());
+            return ticks;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to set item cooldown: ", e.getMessage());
+            return 0;
+        }
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeEquipmentCommands(CommandBuildContext commandBuildContext)
