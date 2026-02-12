@@ -68,6 +68,9 @@ public class EntityPlayerActionPack
 
     private boolean attackCritical;
 
+    // Timed movement: counts down ticks and stops movement when depleted.
+    private int moveTicksRemaining = -1; // -1 = indefinite
+
     private boolean critAwaitingGroundAfterHit;
     private int critPostLandingDelay;
 
@@ -421,6 +424,17 @@ public class EntityPlayerActionPack
         strafing = value;
         return this;
     }
+
+    /**
+     * Set how many ticks movement lasts. -1 = indefinite (default).
+     * After the timer expires, movement is automatically stopped.
+     */
+    public EntityPlayerActionPack setMoveDuration(int ticks)
+    {
+        moveTicksRemaining = ticks;
+        return this;
+    }
+
     public EntityPlayerActionPack look(Direction direction)
     {
         return switch (direction)
@@ -435,7 +449,8 @@ public class EntityPlayerActionPack
     }
     public EntityPlayerActionPack look(Vec2 rotation)
     {
-        return look(rotation.x, rotation.y);
+        // Vec2 from RotationArgument: x=pitch, y=yaw
+        return look(rotation.y, rotation.x);
     }
 
     public EntityPlayerActionPack look(float yaw, float pitch)
@@ -487,7 +502,8 @@ public class EntityPlayerActionPack
 
     public EntityPlayerActionPack turn(Vec2 rotation)
     {
-        return turn(rotation.x, rotation.y);
+        // Vec2 from RotationArgument: x=pitch, y=yaw
+        return turn(rotation.y, rotation.x);
     }
 
     public EntityPlayerActionPack stopMovement()
@@ -496,6 +512,7 @@ public class EntityPlayerActionPack
         setSprinting(false);
         forward = 0.0F;
         strafing = 0.0F;
+        moveTicksRemaining = -1;
         return this;
     }
 
@@ -724,6 +741,17 @@ public class EntityPlayerActionPack
         tickNavigation();
 
         tickGlide();
+
+        // Timed movement countdown
+        if (moveTicksRemaining > 0)
+        {
+            moveTicksRemaining--;
+            if (moveTicksRemaining <= 0)
+            {
+                moveTicksRemaining = -1;
+                stopMovement();
+            }
+        }
 
         float vel = sneaking?0.3F:1.0F;
         vel *= player.isUsingItem()?0.20F:1.0F;
@@ -1614,8 +1642,19 @@ public class EntityPlayerActionPack
             boolean shouldJump = wantUp || (needsPlannedJump && dist <= 1.35D);
             if (shouldJump && player.onGround() && navJumpCooldownTicks <= 0)
             {
-                navJumpCooldownTicks = 8;
-                start(ActionType.JUMP, Action.once());
+                // Check head clearance: don't jump if there's a solid block above the player's head
+                BlockPos headAbove = player.blockPosition().above(2);
+                BlockState headAboveState = player.level().getBlockState(headAbove);
+                if (!headAboveState.getCollisionShape(player.level(), headAbove).isEmpty())
+                {
+                    // Can't jump - ceiling too low; try to path around instead
+                    navNeedsRepath = true;
+                }
+                else
+                {
+                    navJumpCooldownTicks = 8;
+                    start(ActionType.JUMP, Action.once());
+                }
             }
         }
     }
@@ -2043,6 +2082,17 @@ public class EntityPlayerActionPack
                 ItemStack itemStack_1 = player.getItemInHand(InteractionHand.OFF_HAND);
                 player.setItemInHand(InteractionHand.OFF_HAND, player.getItemInHand(InteractionHand.MAIN_HAND));
                 player.setItemInHand(InteractionHand.MAIN_HAND, itemStack_1);
+                return false;
+            }
+        },
+        SWING(true)
+        {
+            @Override
+            boolean execute(ServerPlayer player, Action action)
+            {
+                // Plays the arm swing animation without performing any interaction.
+                player.swing(InteractionHand.MAIN_HAND);
+                player.resetLastActionTime();
                 return false;
             }
         };

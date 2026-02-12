@@ -36,7 +36,9 @@ import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,6 +46,7 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -82,6 +85,13 @@ public class PlayerCommand
                         .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
                         .then(makeDropCommand("dropStack", true))
                         .then(makeActionCommand("swapHands", ActionType.SWAP_HANDS))
+                        .then(makeActionCommand("swing", ActionType.SWING))
+                        .then(literal("animate")
+                                .then(literal("attack").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                                .then(literal("continuous").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.continuous()))))
+                                .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c, ap -> ap.start(ActionType.SWING, Action.interval(IntegerArgumentType.getInteger(c, "ticks"))))))))
                         .then(literal("hotbar")
                                 .then(argument("slot", IntegerArgumentType.integer(1, 9))
                                         .executes(c -> manipulate(c, ap -> ap.setSlot(IntegerArgumentType.getInteger(c, "slot"))))))
