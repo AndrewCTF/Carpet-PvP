@@ -33,8 +33,12 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.food.FoodData;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -133,6 +137,18 @@ public class EntityPlayerActionPack
     private int navNoProgressTicks = 0;
     private int navJumpCooldownTicks = 0;
     private boolean navWaterJumping = false;
+
+    // Navigation behavior overrides (null = use Carpet rules).
+    private Boolean navAllowBreakBlocks;
+    private Boolean navAllowPlaceBlocks;
+    private Boolean navAutoTool;
+    private Boolean navAutoEat;
+    private Integer navAutoEatBelow;
+    private Boolean navAvoidLava;
+    private Boolean navAvoidFire;
+    private Boolean navAvoidCobwebs;
+    private Boolean navBreakCobwebs;
+    private Boolean navAvoidPowderSnow;
 
     public EntityPlayerActionPack(ServerPlayer playerIn)
     {
@@ -541,6 +557,47 @@ public class EntityPlayerActionPack
         return navArrivalRadius;
     }
 
+    public void resetNavOptions()
+    {
+        navAllowBreakBlocks = null;
+        navAllowPlaceBlocks = null;
+        navAutoTool = null;
+        navAutoEat = null;
+        navAutoEatBelow = null;
+        navAvoidLava = null;
+        navAvoidFire = null;
+        navAvoidCobwebs = null;
+        navBreakCobwebs = null;
+        navAvoidPowderSnow = null;
+    }
+
+    public boolean setNavOption(String option, boolean value)
+    {
+        return switch (option)
+        {
+            case "breakBlocks" -> { navAllowBreakBlocks = value; yield true; }
+            case "placeBlocks" -> { navAllowPlaceBlocks = value; yield true; }
+            case "autoTool" -> { navAutoTool = value; yield true; }
+            case "autoEat" -> { navAutoEat = value; yield true; }
+            case "avoidLava" -> { navAvoidLava = value; yield true; }
+            case "avoidFire" -> { navAvoidFire = value; yield true; }
+            case "avoidCobwebs" -> { navAvoidCobwebs = value; yield true; }
+            case "breakCobwebs" -> { navBreakCobwebs = value; yield true; }
+            case "avoidPowderSnow" -> { navAvoidPowderSnow = value; yield true; }
+            default -> false;
+        };
+    }
+
+    public boolean setNavOption(String option, int value)
+    {
+        if ("autoEatBelow".equals(option))
+        {
+            navAutoEatBelow = Mth.clamp(value, 0, 20);
+            return true;
+        }
+        return false;
+    }
+
     public EntityPlayerActionPack setNavGoto(Vec3 targetPos, BotNavMode mode, double arrivalRadius)
     {
         navEnabled = true;
@@ -630,6 +687,12 @@ public class EntityPlayerActionPack
 
     public void onUpdate()
     {
+        if (maybeAutoEat())
+        {
+            stopMovement();
+            return;
+        }
+
         Map<ActionType, Boolean> actionAttempts = new HashMap<>();
         actions.values().removeIf(e -> e.done);
         for (Map.Entry<ActionType, Action> e : actions.entrySet())
@@ -921,6 +984,312 @@ public class EntityPlayerActionPack
         player.setDeltaMovement(desiredVel);
     }
 
+    private boolean maybeAutoEat()
+    {
+        if (!(player instanceof EntityPlayerMPFake))
+        {
+            return false;
+        }
+        if (!navEnabled || !allowAutoEat())
+        {
+            return false;
+        }
+        FoodData foodData = player.getFoodData();
+        if (foodData == null || foodData.getFoodLevel() > autoEatBelow())
+        {
+            return false;
+        }
+        if (player.isUsingItem())
+        {
+            return true;
+        }
+        int slot = findBestFoodSlot();
+        if (slot < 0)
+        {
+            return false;
+        }
+        if (!switchToSlotWithSwap(slot))
+        {
+            return false;
+        }
+        ItemStack stack = player.getItemInHand(InteractionHand.MAIN_HAND);
+        if (!stack.isEdible())
+        {
+            return false;
+        }
+        InteractionResult result = player.gameMode.useItem(player, player.level(), stack, InteractionHand.MAIN_HAND);
+        if (result.consumesAction())
+        {
+            itemUseCooldown = 3;
+            return true;
+        }
+        return player.isUsingItem();
+    }
+
+    private int findBestFoodSlot()
+    {
+        Inventory inv = player.getInventory();
+        int bestSlot = -1;
+        double bestScore = -1.0D;
+        for (int i = 0; i < inv.getContainerSize(); i++)
+        {
+            ItemStack stack = inv.getItem(i);
+            if (stack.isEmpty() || !stack.isEdible()) continue;
+            FoodProperties props = stack.getFoodProperties(player);
+            if (props == null) continue;
+            double saturation = props.getNutrition() * props.getSaturationModifier() * 2.0D;
+            double score = saturation + props.getNutrition();
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestSlot = i;
+            }
+        }
+        return bestSlot;
+    }
+
+    private boolean switchToSlotWithSwap(int slot)
+    {
+        Inventory inv = player.getInventory();
+        if (slot < 0 || slot >= inv.getContainerSize()) return false;
+
+        int selected = inv.getSelectedSlot();
+        if (slot >= 0 && slot <= 8)
+        {
+            inv.setSelectedSlot(slot);
+            player.connection.send(new ClientboundSetHeldSlotPacket(slot));
+            return true;
+        }
+
+        // Swap from main inventory into hotbar selected slot.
+        ItemStack selectedStack = inv.getItem(selected);
+        ItemStack targetStack = inv.getItem(slot);
+        inv.setItem(selected, targetStack);
+        inv.setItem(slot, selectedStack);
+        inv.setSelectedSlot(selected);
+        player.connection.send(new ClientboundSetHeldSlotPacket(selected));
+        return true;
+    }
+
+    private boolean selectBestToolFor(BlockState state)
+    {
+        if (!allowAutoTool()) return false;
+        Inventory inv = player.getInventory();
+        int bestSlot = -1;
+        float bestScore = 0.0F;
+        for (int i = 0; i < inv.getContainerSize(); i++)
+        {
+            ItemStack stack = inv.getItem(i);
+            if (stack.isEmpty()) continue;
+            float speed = stack.getDestroySpeed(state);
+            if (stack.isCorrectToolForDrops(state))
+            {
+                speed += 5.0F;
+            }
+            if (speed > bestScore)
+            {
+                bestScore = speed;
+                bestSlot = i;
+            }
+        }
+        if (bestSlot < 0) return false;
+        return switchToSlotWithSwap(bestSlot);
+    }
+
+    private boolean tryBreakBlock(BlockPos pos, Direction side)
+    {
+        if (blockHitDelay > 0)
+        {
+            blockHitDelay--;
+            return false;
+        }
+
+        BlockState state = player.level().getBlockState(pos);
+        if (state.isAir())
+        {
+            currentBlock = null;
+            return true;
+        }
+
+        selectBestToolFor(state);
+
+        if (player.gameMode.getGameModeForPlayer().isCreative())
+        {
+            player.gameMode.handleBlockBreakAction(pos, ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, side, player.level().getMaxY(), -1);
+            blockHitDelay = 5;
+            return true;
+        }
+
+        if (currentBlock == null || !currentBlock.equals(pos))
+        {
+            if (currentBlock != null)
+            {
+                player.gameMode.handleBlockBreakAction(currentBlock, ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, side, player.level().getMaxY(), -1);
+            }
+            player.gameMode.handleBlockBreakAction(pos, ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, side, player.level().getMaxY(), -1);
+            boolean notAir = !state.isAir();
+            if (notAir && curBlockDamageMP == 0)
+            {
+                state.attack(player.level(), pos, player);
+            }
+            if (notAir && state.getDestroyProgress(player, player.level(), pos) >= 1)
+            {
+                currentBlock = null;
+                return true;
+            }
+            currentBlock = pos;
+            curBlockDamageMP = 0;
+        }
+        else
+        {
+            curBlockDamageMP += state.getDestroyProgress(player, player.level(), pos);
+            if (curBlockDamageMP >= 1)
+            {
+                player.gameMode.handleBlockBreakAction(pos, ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, player.level().getMaxY(), -1);
+                currentBlock = null;
+                blockHitDelay = 5;
+                return true;
+            }
+            player.level().destroyBlockProgress(-1, pos, (int) (curBlockDamageMP * 10));
+        }
+        player.resetLastActionTime();
+        player.swing(InteractionHand.MAIN_HAND);
+        return false;
+    }
+
+    private int findPlaceableBlockSlot()
+    {
+        Inventory inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++)
+        {
+            ItemStack stack = inv.getItem(i);
+            if (stack.isEmpty()) continue;
+            if (!(stack.getItem() instanceof BlockItem blockItem)) continue;
+            BlockState state = blockItem.getBlock().defaultBlockState();
+            if (state.isAir()) continue;
+            if (state.getCollisionShape(player.level(), BlockPos.ZERO).isEmpty()) continue;
+            return i;
+        }
+        return -1;
+    }
+
+    private boolean tryPlaceBridgeBlock(BlockPos targetFeet)
+    {
+        if (!allowPlaceBlocks()) return false;
+        BlockPos placePos = targetFeet.below();
+        BlockState placeState = player.level().getBlockState(placePos);
+        if (!placeState.isAir()) return false;
+
+        BlockPos supportPos = placePos.below();
+        BlockState supportState = player.level().getBlockState(supportPos);
+        if (supportState.getCollisionShape(player.level(), supportPos).isEmpty()) return false;
+
+        int slot = findPlaceableBlockSlot();
+        if (slot < 0) return false;
+        if (!switchToSlotWithSwap(slot)) return false;
+
+        Vec3 hitVec = new Vec3(supportPos.getX() + 0.5D, supportPos.getY() + 1.0D, supportPos.getZ() + 0.5D);
+        BlockHitResult hit = new BlockHitResult(hitVec, Direction.UP, supportPos, false);
+        InteractionResult result = player.gameMode.useItemOn(player, (ServerLevel) player.level(), player.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
+        if (result.consumesAction())
+        {
+            player.swing(InteractionHand.MAIN_HAND);
+            itemUseCooldown = 3;
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isCobweb(BlockState state)
+    {
+        return state.is(Blocks.COBWEB);
+    }
+
+    private boolean isLava(BlockState state)
+    {
+        return state.getFluidState().is(FluidTags.LAVA) || state.is(Blocks.LAVA);
+    }
+
+    private boolean isFire(BlockState state)
+    {
+        return state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE);
+    }
+
+    private boolean isPowderSnow(BlockState state)
+    {
+        return state.is(Blocks.POWDER_SNOW);
+    }
+
+    private boolean tryBreakBlockingAhead()
+    {
+        BlockHitResult hit = Tracer.rayTraceBlocks(player, 1, 4.5D, false);
+        if (hit == null) return false;
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = player.level().getBlockState(pos);
+        if (state.isAir()) return false;
+        return tryBreakBlock(pos, hit.getDirection());
+    }
+
+    private boolean navOpt(Boolean overrideValue, boolean ruleValue)
+    {
+        return overrideValue != null ? overrideValue : ruleValue;
+    }
+
+    private int navOpt(Integer overrideValue, int ruleValue)
+    {
+        return overrideValue != null ? overrideValue : ruleValue;
+    }
+
+    private boolean allowBreakBlocks()
+    {
+        return navOpt(navAllowBreakBlocks, CarpetSettings.fakePlayerNavBreakBlocks);
+    }
+
+    private boolean allowPlaceBlocks()
+    {
+        return navOpt(navAllowPlaceBlocks, CarpetSettings.fakePlayerNavPlaceBlocks);
+    }
+
+    private boolean allowAutoTool()
+    {
+        return navOpt(navAutoTool, CarpetSettings.fakePlayerNavAutoTool);
+    }
+
+    private boolean allowAutoEat()
+    {
+        return navOpt(navAutoEat, CarpetSettings.fakePlayerNavAutoEat);
+    }
+
+    private int autoEatBelow()
+    {
+        return navOpt(navAutoEatBelow, CarpetSettings.fakePlayerNavAutoEatBelow);
+    }
+
+    private boolean avoidLava()
+    {
+        return navOpt(navAvoidLava, CarpetSettings.fakePlayerNavAvoidLava);
+    }
+
+    private boolean avoidFire()
+    {
+        return navOpt(navAvoidFire, CarpetSettings.fakePlayerNavAvoidFire);
+    }
+
+    private boolean avoidCobwebs()
+    {
+        return navOpt(navAvoidCobwebs, CarpetSettings.fakePlayerNavAvoidCobwebs);
+    }
+
+    private boolean allowBreakCobwebs()
+    {
+        return navOpt(navBreakCobwebs, CarpetSettings.fakePlayerNavBreakCobwebs);
+    }
+
+    private boolean avoidPowderSnow()
+    {
+        return navOpt(navAvoidPowderSnow, CarpetSettings.fakePlayerNavAvoidPowderSnow);
+    }
+
     private void tickNavigation()
     {
         if (!navEnabled)
@@ -963,6 +1332,19 @@ public class EntityPlayerActionPack
         {
             stopNavigation();
             return;
+        }
+
+        BlockPos feetPos = player.blockPosition();
+        if (allowBreakCobwebs())
+        {
+            BlockState feetState = player.level().getBlockState(feetPos);
+            BlockState headState = player.level().getBlockState(feetPos.above());
+            if (isCobweb(feetState) || isCobweb(headState))
+            {
+                tryBreakBlock(isCobweb(headState) ? feetPos.above() : feetPos, Direction.UP);
+                navNeedsRepath = true;
+                return;
+            }
         }
 
         BotNavMode effectiveMode = navMode;
@@ -1068,7 +1450,22 @@ public class EntityPlayerActionPack
 
             BlockPos start = player.blockPosition();
             BlockPos goal = BlockPos.containing(navTargetPos);
-            NavAStarPathfinder.Settings settings = NavAStarPathfinder.Settings.defaults();
+                NavAStarPathfinder.Settings base = NavAStarPathfinder.Settings.defaults();
+                NavAStarPathfinder.Settings settings = new NavAStarPathfinder.Settings(
+                    base.maxExpanded(),
+                    base.maxQueued(),
+                    base.maxRangeXZ(),
+                    base.maxRangeY(),
+                    base.maxFall(),
+                    base.maxStepUp(),
+                    base.allowDiagonal(),
+                    base.allowJumps(),
+                    base.maxJumpLength(),
+                    avoidLava(),
+                    avoidFire(),
+                    avoidPowderSnow(),
+                    avoidCobwebs()
+                );
             NavAStarPathfinder.Traversal traversal = (effectiveMode == BotNavMode.WATER) ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
             List<BlockPos> raw = NAV_ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, settings);
             if (raw == null)
@@ -1102,6 +1499,47 @@ public class EntityPlayerActionPack
 
         Vec3 next = navWaypoints.get(navWaypointIndex);
         double dist = player.position().distanceTo(next);
+
+        BlockPos nextFeet = BlockPos.containing(next);
+        BlockState nextState = player.level().getBlockState(nextFeet);
+        BlockState nextBelow = player.level().getBlockState(nextFeet.below());
+        boolean cobwebAhead = isCobweb(nextState) || isCobweb(nextBelow);
+        if (avoidCobwebs() && !allowBreakCobwebs() && cobwebAhead)
+        {
+            navNeedsRepath = true;
+            return;
+        }
+        if (avoidLava() && (isLava(nextState) || isLava(nextBelow)))
+        {
+            navNeedsRepath = true;
+            return;
+        }
+        if (avoidFire() && (isFire(nextState) || isFire(nextBelow)))
+        {
+            navNeedsRepath = true;
+            return;
+        }
+        if (avoidPowderSnow() && (isPowderSnow(nextState) || isPowderSnow(nextBelow)))
+        {
+            navNeedsRepath = true;
+            return;
+        }
+
+        if (allowBreakCobwebs() && cobwebAhead && dist <= 2.0D)
+        {
+            tryBreakBlock(isCobweb(nextState) ? nextFeet : nextFeet.below(), Direction.UP);
+            navNeedsRepath = true;
+            return;
+        }
+
+        if (allowPlaceBlocks() && dist <= 1.6D)
+        {
+            if (tryPlaceBridgeBlock(nextFeet))
+            {
+                navNeedsRepath = true;
+                return;
+            }
+        }
         if (dist <= 0.85D)
         {
             navWaypointIndex++;
@@ -1128,6 +1566,11 @@ public class EntityPlayerActionPack
         if (navNoProgressTicks > 60)
         {
             navNoProgressTicks = 0;
+            if (allowBreakBlocks() && tryBreakBlockingAhead())
+            {
+                navNeedsRepath = true;
+                return;
+            }
             navNeedsRepath = true;
             return;
         }
