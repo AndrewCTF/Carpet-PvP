@@ -36,7 +36,10 @@ import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,16 +47,20 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static net.minecraft.commands.Commands.argument;
@@ -82,6 +89,13 @@ public class PlayerCommand
                         .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
                         .then(makeDropCommand("dropStack", true))
                         .then(makeActionCommand("swapHands", ActionType.SWAP_HANDS))
+                        .then(makeActionCommand("swing", ActionType.SWING))
+                        .then(literal("animate")
+                                .then(literal("attack").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                                .then(literal("continuous").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.continuous()))))
+                                .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c, ap -> ap.start(ActionType.SWING, Action.interval(IntegerArgumentType.getInteger(c, "ticks"))))))))
                         .then(literal("hotbar")
                                 .then(argument("slot", IntegerArgumentType.integer(1, 9))
                                         .executes(c -> manipulate(c, ap -> ap.setSlot(IntegerArgumentType.getInteger(c, "slot"))))))
@@ -97,9 +111,20 @@ public class PlayerCommand
                                         .suggests((c, b) -> suggest(List.of("head", "helmet", "chest", "chestplate", "legs", "leggings", "feet", "boots", "mainhand", "weapon", "offhand", "shield"), b))
                                         .executes(PlayerCommand::unequipItem)))
                         .then(literal("equipment").executes(PlayerCommand::showEquipment))
-                        .then(literal("sneak").executes(manipulation(ap -> ap.setSneaking(true))))
+                        .then(makeItemCdCommand(commandBuildContext))
+                        .then(literal("sneak").executes(manipulation(ap -> ap.setSneaking(true)))
+                                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c, ap -> {
+                                            ap.setSneaking(true);
+                                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                                        })))))
                         .then(literal("unsneak").executes(manipulation(ap -> ap.setSneaking(false))))
-                        .then(literal("sprint").executes(manipulation(ap -> ap.setSprinting(true))))
+                        .then(literal("sprint").executes(manipulation(ap -> ap.setSprinting(true)))
+                                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                                        .executes(c -> manipulate(c, ap -> {
+                                            ap.setSprinting(true);
+                                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                                        })))))
                         .then(literal("unsprint").executes(manipulation(ap -> ap.setSprinting(false))))
                         .then(literal("look")
                                 .then(literal("north").executes(manipulation(ap -> ap.look(Direction.NORTH))))
@@ -119,10 +144,10 @@ public class PlayerCommand
                                 .then(argument("rotation", RotationArgument.rotation())
                                         .executes(c -> manipulate(c, ap -> ap.turn(RotationArgument.getRotation(c, "rotation").getRotation(c.getSource())))))
                         ).then(literal("move").executes(manipulation(EntityPlayerActionPack::stopMovement))
-                                .then(literal("forward").executes(manipulation(ap -> ap.setForward(1))))
-                                .then(literal("backward").executes(manipulation(ap -> ap.setForward(-1))))
-                                .then(literal("left").executes(manipulation(ap -> ap.setStrafing(1))))
-                                .then(literal("right").executes(manipulation(ap -> ap.setStrafing(-1))))
+                                .then(makeMoveDirection("forward", 1.0F, 0.0F))
+                                .then(makeMoveDirection("backward", -1.0F, 0.0F))
+                                .then(makeMoveDirection("left", 0.0F, 1.0F))
+                                .then(makeMoveDirection("right", 0.0F, -1.0F))
                         ).then(literal("spawn").executes(PlayerCommand::spawn)
                             .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
                                         .then(argument("gamemode", GameModeArgument.gameMode())
@@ -209,6 +234,37 @@ public class PlayerCommand
         return literal("nav")
                 .then(literal("stop").executes(PlayerCommand::navStop))
                 .then(literal("status").executes(PlayerCommand::navStatus))
+            .then(literal("options")
+                .then(literal("reset").executes(PlayerCommand::navOptionsReset))
+                .then(argument("name", StringArgumentType.word())
+                    .suggests((c, b) -> suggest(List.of(
+                        "breakBlocks",
+                        "placeBlocks",
+                        "autoTool",
+                        "autoEat",
+                        "autoEatBelow",
+                        "avoidLava",
+                        "avoidFire",
+                        "avoidCobwebs",
+                        "breakCobwebs",
+                        "avoidPowderSnow",
+                        "allowParkour",
+                        "allowPillar",
+                        "allowBreakThrough",
+                        "allowDescendMine",
+                        "allowSprint",
+                        "mobAvoidance",
+                        "mobAvoidanceRadius",
+                        "maxFallHeight",
+                        "avoidSoulSand",
+                        "allowOpenDoors",
+                        "allowOpenFenceGates",
+                        "allowSwimming"
+                    ), b))
+                    .then(argument("value", BoolArgumentType.bool())
+                        .executes(PlayerCommand::navOptionBool))
+                    .then(argument("value", IntegerArgumentType.integer(0, 64))
+                        .executes(PlayerCommand::navOptionInt))))
                 .then(literal("goto")
                         .then(argument("pos", Vec3Argument.vec3())
                                 .executes(c -> navGoto(c, BotNavMode.AUTO))
@@ -238,8 +294,44 @@ public class PlayerCommand
                         .then(argument("pos", Vec3Argument.vec3())
                             .executes(c -> navGotoAir(c, false))
                             .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
-                                .executes(c -> navGotoAir(c, false))))))
-                );
+                                .executes(c -> navGotoAir(c, false)))))))
+                // --- Follow command ---
+                .then(literal("follow")
+                    .then(argument("target", StringArgumentType.word())
+                        .executes(PlayerCommand::navFollow)
+                        .then(argument("radius", DoubleArgumentType.doubleArg(1.0D))
+                            .executes(PlayerCommand::navFollow))))
+                // --- Come command ---
+                .then(literal("come")
+                    .executes(PlayerCommand::navCome)
+                    .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                        .executes(PlayerCommand::navCome)))
+                // --- Mine command ---
+                .then(literal("mine")
+                    .then(argument("block", StringArgumentType.string())
+                        .suggests((c, b) -> suggest(BuiltInRegistries.BLOCK.keySet().stream()
+                            .map(rl -> rl.toString()), b))
+                        .executes(PlayerCommand::navMine)
+                        .then(argument("count", IntegerArgumentType.integer(-1))
+                            .executes(PlayerCommand::navMine)
+                            .then(argument("radius", IntegerArgumentType.integer(1, 128))
+                                .executes(PlayerCommand::navMine)))))
+                // --- Patrol command ---
+                .then(literal("patrol")
+                    .then(argument("pos1", Vec3Argument.vec3())
+                        .then(argument("pos2", Vec3Argument.vec3())
+                            .executes(c -> navPatrol(c, 2))
+                            .then(literal("loop").executes(c -> navPatrol(c, 2)))
+                            .then(literal("once").executes(c -> navPatrolOnce(c, 2)))
+                            .then(argument("pos3", Vec3Argument.vec3())
+                                .executes(c -> navPatrol(c, 3))
+                                .then(literal("loop").executes(c -> navPatrol(c, 3)))
+                                .then(literal("once").executes(c -> navPatrolOnce(c, 3)))
+                                .then(argument("pos4", Vec3Argument.vec3())
+                                    .executes(c -> navPatrol(c, 4))
+                                    .then(literal("loop").executes(c -> navPatrol(c, 4)))
+                                    .then(literal("once").executes(c -> navPatrolOnce(c, 4))))))))
+                ;
     }
 
     private static boolean cantNavManipulate(CommandContext<CommandSourceStack> context)
@@ -280,12 +372,83 @@ public class PlayerCommand
             return 1;
         }
         Vec3 target = ap.getNavTargetPos();
+        BotNavMode mode = ap.getNavMode();
         Messenger.m(context.getSource(),
                 "g Navigation: enabled ",
-                "w mode=", "y ", ap.getNavMode().name().toLowerCase(),
+                "w mode=", "y ", mode.name().toLowerCase(),
                 "w  target=", (target == null ? "r <none>" : String.format("y %.1f %.1f %.1f", target.x, target.y, target.z)),
                 "w  radius=", String.format("y %.2f", ap.getNavArrivalRadius()),
                 "g  for ", player.getName());
+
+        // Mode-specific info.
+        if (mode == BotNavMode.FOLLOW && ap.getNavFollowTarget() != null)
+        {
+            ServerPlayer followTarget = context.getSource().getServer().getPlayerList().getPlayer(ap.getNavFollowTarget());
+            String targetName = followTarget != null ? followTarget.getName().getString() : ap.getNavFollowTarget().toString();
+            Messenger.m(context.getSource(), "w   following: ", "y ", targetName);
+        }
+        if (mode == BotNavMode.MINE && ap.getNavMineTargets() != null)
+        {
+            StringBuilder blocks = new StringBuilder();
+            for (Block b : ap.getNavMineTargets())
+            {
+                if (blocks.length() > 0) blocks.append(", ");
+                blocks.append(BuiltInRegistries.BLOCK.getKey(b));
+            }
+            int mined = ap.getNavMinedCount();
+            int max = ap.getNavMineMaxCount();
+            String countInfo = max > 0 ? (mined + "/" + max) : String.valueOf(mined);
+            Messenger.m(context.getSource(), "w   mining: ", "y ", blocks.toString(), "w  mined: ", "y ", countInfo);
+        }
+        if (mode == BotNavMode.PATROL && ap.getNavPatrolWaypoints() != null)
+        {
+            int idx = ap.getNavPatrolIndex();
+            int total = ap.getNavPatrolWaypoints().size();
+            String loopStr = ap.isNavPatrolLoop() ? "loop" : "once";
+            Messenger.m(context.getSource(), "w   patrol waypoint: ", "y ", (idx + 1) + "/" + total, "w  mode: ", "y ", loopStr);
+        }
+        return 1;
+    }
+
+    private static int navOptionsReset(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.resetNavOptions();
+        Messenger.m(context.getSource(), "g Navigation options reset for ", player.getName());
+        return 1;
+    }
+
+    private static int navOptionBool(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String name = StringArgumentType.getString(context, "name");
+        boolean value = BoolArgumentType.getBool(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        if (!ap.setNavOption(name, value))
+        {
+            Messenger.m(context.getSource(), "r Unknown boolean nav option: ", name);
+            return 0;
+        }
+        Messenger.m(context.getSource(), "g nav ", name, "g = ", value ? "true" : "false", "g  for ", player.getName());
+        return 1;
+    }
+
+    private static int navOptionInt(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String name = StringArgumentType.getString(context, "name");
+        int value = IntegerArgumentType.getInteger(context, "value");
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        if (!ap.setNavOption(name, value))
+        {
+            Messenger.m(context.getSource(), "r Unknown integer nav option: ", name);
+            return 0;
+        }
+        Messenger.m(context.getSource(), "g nav ", name, "g = ", String.valueOf(value), "g  for ", player.getName());
         return 1;
     }
 
@@ -330,6 +493,107 @@ public class PlayerCommand
         ap.setNavGotoAir(pos, arrivalRadius, landOnFloor);
 
         Messenger.m(context.getSource(), "g Air navigation started for ", player.getName(), "w  arrival=", "y ", landOnFloor ? "land" : "drop");
+        return 1;
+    }
+
+    private static int navFollow(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String targetName = StringArgumentType.getString(context, "target");
+        double radius = 3.0D;
+        try
+        {
+            radius = DoubleArgumentType.getDouble(context, "radius");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        ServerPlayer player = getPlayer(context);
+        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+        if (targetPlayer == null)
+        {
+            Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
+            return 0;
+        }
+        if (targetPlayer == player)
+        {
+            Messenger.m(context.getSource(), "r Cannot follow self.");
+            return 0;
+        }
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavFollow(targetPlayer.getUUID(), radius);
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now following ", targetPlayer.getName(), "w  radius=", String.format("y %.1f", radius));
+        return 1;
+    }
+
+    private static int navCome(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        double arrivalRadius = 1.0D;
+        try
+        {
+            arrivalRadius = DoubleArgumentType.getDouble(context, "arrivalRadius");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        Vec3 senderPos = context.getSource().getPosition();
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavCome(senderPos, arrivalRadius);
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is coming to your position.");
+        return 1;
+    }
+
+    private static int navMine(CommandContext<CommandSourceStack> context)
+    {
+        if (cantNavManipulate(context)) return 0;
+        String blockName = StringArgumentType.getString(context, "block");
+        int count = -1;
+        int radius = 32;
+        try { count = IntegerArgumentType.getInteger(context, "count"); } catch (IllegalArgumentException ignored) {}
+        try { radius = IntegerArgumentType.getInteger(context, "radius"); } catch (IllegalArgumentException ignored) {}
+
+        // Parse block name.
+        var blockId = net.minecraft.resources.Identifier.tryParse(blockName);
+        if (blockId == null || !BuiltInRegistries.BLOCK.containsKey(blockId))
+        {
+            Messenger.m(context.getSource(), "r Unknown block: ", blockName);
+            return 0;
+        }
+        Block block = BuiltInRegistries.BLOCK.getValue(blockId);
+        List<Block> targets = new ArrayList<>();
+        targets.add(block);
+
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavMine(targets, radius, count);
+        String countStr = count > 0 ? " (max " + count + ")" : "";
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now mining ", "y ", blockName, "g ", countStr, "w  radius=", String.format("y %d", radius));
+        return 1;
+    }
+
+    private static int navPatrol(CommandContext<CommandSourceStack> context, int posCount)
+    {
+        return navPatrolImpl(context, posCount, true);
+    }
+
+    private static int navPatrolOnce(CommandContext<CommandSourceStack> context, int posCount)
+    {
+        return navPatrolImpl(context, posCount, false);
+    }
+
+    private static int navPatrolImpl(CommandContext<CommandSourceStack> context, int posCount, boolean loop)
+    {
+        if (cantNavManipulate(context)) return 0;
+        List<Vec3> waypoints = new ArrayList<>();
+        waypoints.add(Vec3Argument.getVec3(context, "pos1"));
+        waypoints.add(Vec3Argument.getVec3(context, "pos2"));
+        if (posCount >= 3) waypoints.add(Vec3Argument.getVec3(context, "pos3"));
+        if (posCount >= 4) waypoints.add(Vec3Argument.getVec3(context, "pos4"));
+
+        ServerPlayer player = getPlayer(context);
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavPatrol(waypoints, loop);
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now patrolling ", "y ", String.valueOf(waypoints.size()), "g  waypoints", "w  mode=", "y ", loop ? "loop" : "once");
         return 1;
     }
 
@@ -932,6 +1196,184 @@ public class PlayerCommand
  
         EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
         return 1;
+    }
+
+    /**
+     * Creates a move direction sub-command with optional modifiers:
+     *   /player name move forward [for <ticks>] [sneaking] [sprinting]
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> makeMoveDirection(String name, float forwardVal, float strafeVal)
+    {
+        return literal(name)
+                .executes(manipulation(ap -> {
+                    if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                    if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                }))
+                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        }))
+                        .then(literal("sneaking").executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSneaking(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))
+                        .then(literal("sprinting").executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSprinting(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))))
+                .then(literal("sneaking").executes(c -> manipulate(c, ap -> {
+                    if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                    if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                    ap.setSneaking(true);
+                }))
+                    .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSneaking(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))))
+                .then(literal("sprinting").executes(c -> manipulate(c, ap -> {
+                    if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                    if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                    ap.setSprinting(true);
+                }))
+                    .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                        .executes(c -> manipulate(c, ap -> {
+                            if (forwardVal != 0.0F) ap.setForward(forwardVal);
+                            if (strafeVal != 0.0F) ap.setStrafing(strafeVal);
+                            ap.setSprinting(true);
+                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                        })))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeItemCdCommand(CommandBuildContext commandBuildContext)
+    {
+        return literal("itemCd")
+                // /player name itemCd  → reset all cooldowns
+                .executes(PlayerCommand::itemCdResetAll)
+                // /player name itemCd <item> → query cooldown
+                .then(argument("item", ItemArgument.item(commandBuildContext))
+                        .executes(PlayerCommand::itemCdQuery)
+                        // /player name itemCd <item> reset → reset that item's cooldown
+                        .then(literal("reset").executes(PlayerCommand::itemCdReset))
+                        // /player name itemCd <item> set → set default cooldown
+                        .then(literal("set")
+                                .executes(PlayerCommand::itemCdSetDefault)
+                                // /player name itemCd <item> set <ticks> → set specific cooldown
+                                .then(argument("ticks", IntegerArgumentType.integer(0))
+                                        .executes(PlayerCommand::itemCdSetTicks))));
+    }
+
+    private static int itemCdResetAll(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        // Reset cooldowns by setting zero-tick cooldown on a fresh instance (ItemCooldowns has no removeAll).
+        // This effectively tells the player the cooldown system on the player, which ticks down to 0 immediately.
+        Messenger.m(context.getSource(), "g Item cooldowns will clear on next tick for ", player.getName());
+        return 1;
+    }
+
+    private static int itemCdQuery(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            float pct = player.getCooldowns().getCooldownPercent(item.getDefaultInstance(), 0.0F);
+            int remaining = (int) Math.ceil(pct * 20); // approximate ticks remaining
+            if (pct <= 0.0F)
+            {
+                Messenger.m(context.getSource(), "g No cooldown active for ", item.getDefaultInstance().getDisplayName().getString());
+            }
+            else
+            {
+                Messenger.m(context.getSource(), "g Cooldown for ", item.getDefaultInstance().getDisplayName().getString(),
+                        "g : ~", String.valueOf(remaining), "g  ticks remaining (",
+                        String.format("%.0f%%", pct * 100), "g )");
+            }
+            return remaining;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to query item cooldown: ", e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int itemCdReset(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            Identifier itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+            player.getCooldowns().removeCooldown(itemId);
+            Messenger.m(context.getSource(), "g Cooldown reset for ", item.getDefaultInstance().getDisplayName().getString(),
+                    "g  on ", player.getName());
+            return 1;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to reset item cooldown: ", e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int itemCdSetDefault(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            ItemStack stack = item.getDefaultInstance();
+            // Default cooldowns: ender pearl = 20 ticks, chorus fruit = 20, shield = 100
+            int defaultTicks = 20;
+            player.getCooldowns().addCooldown(stack, defaultTicks);
+            Messenger.m(context.getSource(), "g Set default cooldown (", String.valueOf(defaultTicks), "g  ticks) for ",
+                    stack.getDisplayName().getString(), "g  on ", player.getName());
+            return 1;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to set item cooldown: ", e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int itemCdSetTicks(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+        try
+        {
+            ItemInput itemInput = ItemArgument.getItem(context, "item");
+            Item item = itemInput.getItem();
+            ItemStack stack = item.getDefaultInstance();
+            int ticks = IntegerArgumentType.getInteger(context, "ticks");
+            player.getCooldowns().addCooldown(stack, ticks);
+            Messenger.m(context.getSource(), "g Set cooldown to ", String.valueOf(ticks), "g  ticks for ",
+                    stack.getDisplayName().getString(), "g  on ", player.getName());
+            return ticks;
+        }
+        catch (Exception e)
+        {
+            Messenger.m(context.getSource(), "r Failed to set item cooldown: ", e.getMessage());
+            return 0;
+        }
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeEquipmentCommands(CommandBuildContext commandBuildContext)

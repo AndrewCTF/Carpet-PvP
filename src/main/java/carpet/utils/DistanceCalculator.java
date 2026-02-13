@@ -38,7 +38,11 @@ public class DistanceCalculator
     public static int distance(CommandSourceStack source, Vec3 pos1, Vec3 pos2)
     {
         Messenger.send(source, findDistanceBetweenTwoPoints(pos1, pos2));
-        return 1;
+        // Return spherical distance as an integer (rounded) so it can be stored via /execute store
+        double dx = pos1.x - pos2.x;
+        double dy = pos1.y - pos2.y;
+        double dz = pos1.z - pos2.z;
+        return (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
     }
 
     public static int setStart(CommandSourceStack source, Vec3 pos)
@@ -57,7 +61,12 @@ public class DistanceCalculator
             Messenger.m(source,"gi Initial point set to: ", Messenger.tp("g",pos));
             return 0;
         }
-        Messenger.send(source, findDistanceBetweenTwoPoints( START_POINT_STORAGE.get(source.getTextName()), pos));
-        return 1;
+        Vec3 start = START_POINT_STORAGE.get(source.getTextName());
+        Messenger.send(source, findDistanceBetweenTwoPoints(start, pos));
+        // Return spherical distance as integer for /execute store
+        double dx = start.x - pos.x;
+        double dy = start.y - pos.y;
+        double dz = start.z - pos.z;
+        return Math.max(1, (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)));
     }
 }

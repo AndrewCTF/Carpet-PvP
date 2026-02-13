@@ -153,6 +153,72 @@ public class CarpetSettings
             @Rule(desc = "Allows fake players to use built-in navigation/pathfinding via /player <name> nav ...", category = {CREATIVE})
             public static boolean fakePlayerNavigation = false;
 
+            @Rule(desc = "Allow fake-player navigation to break blocks in its way", category = {FEATURE})
+            public static boolean fakePlayerNavBreakBlocks = false;
+
+            @Rule(desc = "Allow fake-player navigation to place blocks to bridge gaps", category = {FEATURE})
+            public static boolean fakePlayerNavPlaceBlocks = false;
+
+            @Rule(desc = "Auto-select the best tool when bots break blocks", category = {FEATURE})
+            public static boolean fakePlayerNavAutoTool = true;
+
+            @Rule(desc = "Auto-eat food when bots get hungry", category = {FEATURE})
+            public static boolean fakePlayerNavAutoEat = true;
+
+            @Rule(desc = "Hunger threshold (0-20) for bot auto-eating", category = {FEATURE}, options = {"6", "10", "14"})
+            public static int fakePlayerNavAutoEatBelow = 10;
+
+            @Rule(desc = "Avoid lava while navigating", category = {FEATURE})
+            public static boolean fakePlayerNavAvoidLava = true;
+
+            @Rule(desc = "Avoid fire while navigating", category = {FEATURE})
+            public static boolean fakePlayerNavAvoidFire = true;
+
+            @Rule(desc = "Avoid cobwebs while navigating", category = {FEATURE})
+            public static boolean fakePlayerNavAvoidCobwebs = true;
+
+            @Rule(desc = "Allow breaking cobwebs when navigating", category = {FEATURE})
+            public static boolean fakePlayerNavBreakCobwebs = true;
+
+            @Rule(desc = "Avoid powder snow while navigating", category = {FEATURE})
+            public static boolean fakePlayerNavAvoidPowderSnow = true;
+
+            @Rule(desc = "Allow parkour (gap-jumping) during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowParkour = true;
+
+            @Rule(desc = "Allow pillar-jumping (placing blocks at feet to go up) during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowPillar = false;
+
+            @Rule(desc = "Allow mining through obstacles during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowBreakThrough = false;
+
+            @Rule(desc = "Allow downward mining during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowDescendMine = false;
+
+            @Rule(desc = "Allow sprinting during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowSprint = true;
+
+            @Rule(desc = "Enable mob avoidance during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavMobAvoidance = false;
+
+            @Rule(desc = "Radius for mob avoidance during navigation", category = {FEATURE}, options = {"4", "8", "12", "16"})
+            public static int fakePlayerNavMobAvoidanceRadius = 8;
+
+            @Rule(desc = "Maximum safe fall height (blocks) during navigation", category = {FEATURE}, options = {"3", "4", "8", "16"})
+            public static int fakePlayerNavMaxFallHeight = 4;
+
+            @Rule(desc = "Penalize soul sand paths during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAvoidSoulSand = false;
+
+            @Rule(desc = "Allow opening doors during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowOpenDoors = true;
+
+            @Rule(desc = "Allow opening fence gates during navigation", category = {FEATURE})
+            public static boolean fakePlayerNavAllowOpenFenceGates = true;
+
+            @Rule(desc = "Allow underwater swimming during navigation (default: false = float on surface)", category = {FEATURE})
+            public static boolean fakePlayerNavAllowSwimming = false;
+
             @Rule(desc = "Enable fall damage for real players", category = {SURVIVAL, FEATURE})
             public static boolean playerFallDamage = true;
 
