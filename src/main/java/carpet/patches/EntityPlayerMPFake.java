@@ -33,13 +33,17 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.ScoreAccess;
+import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.util.Mth;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.utils.Messenger;
@@ -59,6 +63,8 @@ import java.util.concurrent.TimeUnit;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 
 @SuppressWarnings("EntityConstructor")
 public class EntityPlayerMPFake extends ServerPlayer
@@ -485,8 +491,34 @@ public class EntityPlayerMPFake extends ServerPlayer
         this.setHealth(1.0F);
         this.setPose(Pose.STANDING);
 
+        this.level().getScoreboard().forAllObjectives(ObjectiveCriteria.DEATH_COUNT, this, ScoreAccess::increment);
+
+        if (CarpetSettings.fakePlayerDropInventoryOnDeath) {
+            this.dropAllDeathLoot(this.level(), cause);
+        }
+
         // Keep fake players in-world and immediately schedule a respawn.
         EntityPlayerMPFake.executor.schedule(this::respawn, 1L, TimeUnit.MILLISECONDS);
+    }
+
+    protected void dropAllDeathLoot(ServerLevel serverLevel, DamageSource damageSource) {
+        boolean keepInventory = ((net.minecraft.server.level.ServerLevel) this.level()).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
+
+        if (!keepInventory) {
+            this.destroyVanishingCursedItems();
+            //((ServerPlayerInterface)this).getActionPack().drop(-2, true);
+            this.getInventory().dropAll();
+        }
+    }
+
+    protected void destroyVanishingCursedItems() {
+        Inventory inventory = this.getInventory();
+        for(int i = 0; i < inventory.getContainerSize(); ++i) {
+            ItemStack itemStack = inventory.getItem(i);
+            if (!itemStack.isEmpty() && EnchantmentHelper.has(itemStack, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP)) {
+                inventory.removeItemNoUpdate(i);
+            }
+        }
     }
     
     /**
