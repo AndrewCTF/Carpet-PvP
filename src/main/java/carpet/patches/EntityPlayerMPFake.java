@@ -502,11 +502,11 @@ public class EntityPlayerMPFake extends ServerPlayer
     }
 
     protected void dropAllDeathLoot(ServerLevel serverLevel, DamageSource damageSource) {
-        boolean keepInventory = ((net.minecraft.server.level.ServerLevel) this.level()).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
+        boolean keepInventory = serverLevel.getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
 
         if (!keepInventory) {
+            this.clearSavedEquipmentState();
             this.destroyVanishingCursedItems();
-            //((ServerPlayerInterface)this).getActionPack().drop(-2, true);
             this.getInventory().dropAll();
         }
     }
