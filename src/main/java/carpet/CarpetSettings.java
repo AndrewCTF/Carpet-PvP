@@ -563,7 +563,7 @@ public class CarpetSettings
     public static boolean punishWrongToolHits = true;
 
     @Rule(
-        desc = "When enabled, fake players will drop their inventory on death (can be disabled)",
+        desc = "When enabled, fake players will drop their inventory on death",
         category = {SURVIVAL}
     )
     public static boolean fakePlayerDropInventoryOnDeath = false;
