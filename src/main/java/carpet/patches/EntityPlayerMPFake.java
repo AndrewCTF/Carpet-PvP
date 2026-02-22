@@ -750,7 +750,7 @@ public class EntityPlayerMPFake extends ServerPlayer
                 if (blocksAttacks != null) {
                     Optional<TagKey<DamageType>> var10000 = blocksAttacks.bypassedBy();
                     java.util.Objects.requireNonNull(damageSource);
-                    if (!(Boolean)var10000.map(damageSource::is).orElse(false)) {
+                    if (!var10000.map(damageSource::is).orElse(false)) {
                         Entity var7 = damageSource.getDirectEntity();
                         if (var7 instanceof AbstractArrow) {
                             AbstractArrow abstractArrow = (AbstractArrow)var7;
