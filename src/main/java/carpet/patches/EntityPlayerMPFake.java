@@ -7,6 +7,7 @@ import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -26,13 +27,17 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.players.ProfileResolver;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.stats.Stats;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
@@ -63,6 +68,7 @@ import java.util.concurrent.TimeUnit;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.BlocksAttacks;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 
@@ -727,5 +733,65 @@ public class EntityPlayerMPFake extends ServerPlayer
             return false;
         }
         return super.hurtServer(serverLevel, source, f);
+    }
+
+    public float applyItemBlocking(ServerLevel serverLevel, DamageSource damageSource, float f) {
+        // Bringing LivingEntity applyItemBlocking() code into EntityPlayerMPFake to disable the
+        // odd knockback when the fake player is holding a shield that is hit (see blockUsingItem())
+        // below).
+        if (f <= 0.0F) {
+            return 0.0F;
+        } else {
+            ItemStack itemStack = this.getItemBlockingWith();
+            if (itemStack == null) {
+                return 0.0F;
+            } else {
+                BlocksAttacks blocksAttacks = (BlocksAttacks)itemStack.get(DataComponents.BLOCKS_ATTACKS);
+                if (blocksAttacks != null) {
+                    Optional<TagKey<DamageType>> var10000 = blocksAttacks.bypassedBy();
+                    java.util.Objects.requireNonNull(damageSource);
+                    if (!var10000.map(damageSource::is).orElse(false)) {
+                        Entity var7 = damageSource.getDirectEntity();
+                        if (var7 instanceof AbstractArrow) {
+                            AbstractArrow abstractArrow = (AbstractArrow)var7;
+                            if (abstractArrow.getPierceLevel() > 0) {
+                                return 0.0F;
+                            }
+                        }
+
+                        Vec3 vec3 = damageSource.getSourcePosition();
+                        double d;
+                        if (vec3 != null) {
+                            Vec3 vec32 = this.calculateViewVector(0.0F, this.getYHeadRot());
+                            Vec3 vec33 = vec3.subtract(this.position());
+                            vec33 = (new Vec3(vec33.x, 0.0, vec33.z)).normalize();
+                            d = Math.acos(vec33.dot(vec32));
+                        } else {
+                            d = Math.PI;
+                        }
+
+                        float g = blocksAttacks.resolveBlockedDamage(damageSource, f, d);
+                        blocksAttacks.hurtBlockingItem(this.level(), itemStack, this, this.getUsedItemHand(), g);
+                        if (g > 0.0F && !damageSource.is(DamageTypeTags.IS_PROJECTILE)) {
+                            Entity entity = damageSource.getDirectEntity();
+                            if (entity instanceof LivingEntity) {
+                                LivingEntity livingEntity = (LivingEntity)entity;
+                                this.blockUsingItem(serverLevel, livingEntity);
+                            }
+                        }
+
+                        return g;
+                    }
+                }
+
+                return 0.0F;
+            }
+        }
+    }
+
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity) {
+        // Commenting out original LivingEntity shield blocking knockback code that
+        // caused the fake player to jump forward when holding a shield that was hit.
+        //this.knockback(0.5, livingEntity.getX() - this.getX(), livingEntity.getZ() - this.getZ());
     }
 }
