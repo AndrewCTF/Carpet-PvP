@@ -767,7 +767,7 @@ public class EntityPlayerMPFake extends ServerPlayer
                             vec33 = (new Vec3(vec33.x, 0.0, vec33.z)).normalize();
                             d = Math.acos(vec33.dot(vec32));
                         } else {
-                            d = 3.1415927410125732;
+                            d = Math.PI;
                         }
 
                         float g = blocksAttacks.resolveBlockedDamage(damageSource, f, d);
