@@ -20,7 +20,7 @@ public abstract class Player_fakePlayerCritMixin {
         Player player = (Player)(Object)this;
         if (player instanceof EntityPlayerMPFake) {
             // Check critical hit conditions for fake player
-            return player.fallDistance > 0.0D
+            return player.fallDistance > 0.0F
                 && !player.onGround()
                 && !player.onClimbable()
                 && !player.isInWater()
