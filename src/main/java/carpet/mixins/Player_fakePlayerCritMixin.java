@@ -16,7 +16,7 @@ public abstract class Player_fakePlayerCritMixin {
         ordinal = 0         // Use the first occurrence
     )
     private boolean modifyCriticalHitResult(boolean originalCanCritical) {
-        // Modify the result of canCriticalAttack(), e.g., always return true for critical hits
+        // Modify the result of canCriticalAttack() for fake players based on fall distance and player state
         Player player = (Player)(Object)this;
         if (player instanceof EntityPlayerMPFake) {
             // Check critical hit conditions for fake player
