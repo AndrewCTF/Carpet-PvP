@@ -560,7 +560,7 @@ public class CarpetSettings
         desc = "When enabled, players without correct tools will be damaged when hitting tool-required blocks (can be disabled)",
         category = {SURVIVAL}
     )
-    public static boolean punishWrongToolHits = true;
+    public static boolean punishWrongToolHits = false;
 
     @Rule(
         desc = "When enabled, fake players will drop their inventory on death",
