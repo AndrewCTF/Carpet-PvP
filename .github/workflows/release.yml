@@ -190,10 +190,10 @@ jobs:
           fail_on_unmatched_files: false
 
       - name: Publish to Modrinth
-        if: inputs.publish_modrinth && secrets.MODRINTH_TOKEN != ''
+        if: inputs.publish_modrinth
         uses: Kir-Antipov/mc-publish@v3.3
         with:
-          modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+          modrinth-id: ${{ secrets.MODRINTH_PROJECT_ID }}
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
 
           files: ${{ steps.artifacts.outputs.main_jar }}
