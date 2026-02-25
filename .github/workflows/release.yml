@@ -19,6 +19,11 @@ on:
         description: 'Additional release notes (optional)'
         required: false
         type: string
+      publish_modrinth:
+        description: 'Publish to Modrinth'
+        required: true
+        type: boolean
+        default: true
 
 # Only allow one release at a time
 concurrency:
@@ -183,3 +188,22 @@ jobs:
             ${{ steps.artifacts.outputs.main_jar }}
             ${{ steps.artifacts.outputs.sources_jar }}
           fail_on_unmatched_files: false
+
+      - name: Publish to Modrinth
+        if: inputs.publish_modrinth && secrets.MODRINTH_TOKEN != ''
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+
+          files: ${{ steps.artifacts.outputs.main_jar }}
+
+          name: "Carpet PvP ${{ steps.version.outputs.full_version }}"
+          version: ${{ steps.version.outputs.full_version }}
+          version-type: ${{ inputs.release_type == 'pre-release' && 'beta' || 'release' }}
+          changelog-file: ${{ steps.notes.outputs.notes_file }}
+
+          loaders: fabric
+          game-versions: ${{ steps.version.outputs.minecraft_version }}
+          dependencies: |
+            fabric-api@${{ steps.version.outputs.fabric_api }}(required)
