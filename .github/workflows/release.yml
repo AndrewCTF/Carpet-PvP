@@ -1,0 +1,185 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      minecraft_version:
+        description: 'Minecraft version (e.g. 1.21.11). Leave empty to use gradle.properties default.'
+        required: false
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - release
+          - pre-release
+        default: 'release'
+      release_notes:
+        description: 'Additional release notes (optional)'
+        required: false
+        type: string
+
+# Only allow one release at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Only run on main branch
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Extract version information
+        id: version
+        run: |
+          # Read mod version from gradle.properties
+          MOD_VERSION=$(grep -E '^\s*mod_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          echo "mod_version=$MOD_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Use input Minecraft version or fall back to gradle.properties
+          if [ -n "${{ inputs.minecraft_version }}" ]; then
+            MC_VERSION="${{ inputs.minecraft_version }}"
+          else
+            MC_VERSION=$(grep -E '^\s*minecraft_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          fi
+          echo "minecraft_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Read other properties
+          FABRIC_LOADER=$(grep -E '^\s*loader_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          FABRIC_API=$(grep -E '^\s*fabric_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          echo "fabric_loader=$FABRIC_LOADER" >> "$GITHUB_OUTPUT"
+          echo "fabric_api=$FABRIC_API" >> "$GITHUB_OUTPUT"
+
+          # Build date stamp matching build.gradle format (yyMMdd)
+          BUILD_DATE=$(date +%y%m%d)
+          echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
+
+          # Full version string matching build.gradle: minecraft_version-mod_version+vyyMMdd
+          FULL_VERSION="${MC_VERSION}-${MOD_VERSION}+v${BUILD_DATE}"
+          echo "full_version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Tag name
+          TAG_NAME="v${FULL_VERSION}"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "=== Version Summary ==="
+          echo "Carpet PvP Version: $MOD_VERSION"
+          echo "Minecraft Version:  $MC_VERSION"
+          echo "Fabric Loader:      $FABRIC_LOADER"
+          echo "Fabric API:         $FABRIC_API"
+          echo "Full Version:       $FULL_VERSION"
+          echo "Tag:                $TAG_NAME"
+
+      - name: Validate version info
+        run: |
+          if [ -z "${{ steps.version.outputs.mod_version }}" ]; then
+            echo "::error::Could not determine Carpet PvP mod version from gradle.properties"
+            exit 1
+          fi
+          if [ -z "${{ steps.version.outputs.minecraft_version }}" ]; then
+            echo "::error::Could not determine Minecraft version"
+            exit 1
+          fi
+          echo "Version validation passed."
+
+      - name: Check tag does not already exist
+        run: |
+          TAG="${{ steps.version.outputs.tag_name }}"
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "::error::Tag $TAG already exists. A release for this version was already created today."
+            exit 1
+          fi
+
+      - name: Build
+        run: ./gradlew --no-daemon build -x test
+
+      - name: Identify built artifacts
+        id: artifacts
+        run: |
+          # Find the main jar (exclude sources and dev jars)
+          MAIN_JAR=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
+          SOURCES_JAR=$(find build/libs -name "*-sources.jar" | head -1)
+
+          if [ -z "$MAIN_JAR" ]; then
+            echo "::error::No build artifact found in build/libs"
+            exit 1
+          fi
+
+          echo "main_jar=$MAIN_JAR" >> "$GITHUB_OUTPUT"
+          echo "main_jar_name=$(basename "$MAIN_JAR")" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$SOURCES_JAR" ]; then
+            echo "sources_jar=$SOURCES_JAR" >> "$GITHUB_OUTPUT"
+            echo "sources_jar_name=$(basename "$SOURCES_JAR")" >> "$GITHUB_OUTPUT"
+            echo "has_sources=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_sources=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "=== Artifacts ==="
+          ls -lh build/libs/
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          NOTES_FILE=$(mktemp)
+          {
+            echo "## Carpet PvP ${{ steps.version.outputs.full_version }}"
+            echo ""
+            echo "### Version Info"
+            echo "| Component | Version |"
+            echo "|-----------|---------|"
+            echo "| **Carpet PvP** | ${{ steps.version.outputs.mod_version }} |"
+            echo "| **Minecraft** | ${{ steps.version.outputs.minecraft_version }} |"
+            echo "| **Fabric Loader** | ${{ steps.version.outputs.fabric_loader }} |"
+            echo "| **Fabric API** | ${{ steps.version.outputs.fabric_api }} |"
+            echo "| **Java** | 21+ |"
+            echo ""
+            if [ -n "${{ inputs.release_notes }}" ]; then
+              echo "### Release Notes"
+              echo "${{ inputs.release_notes }}"
+              echo ""
+            fi
+            echo "### Installation"
+            echo "1. Install [Fabric Loader](https://fabricmc.net/use/) (${{ steps.version.outputs.fabric_loader }}+) for Minecraft ${{ steps.version.outputs.minecraft_version }}"
+            echo "2. Install [Fabric API](https://modrinth.com/mod/fabric-api) (${{ steps.version.outputs.fabric_api }}+)"
+            echo "3. Place \`${{ steps.artifacts.outputs.main_jar_name }}\` in your \`mods\` folder"
+            echo ""
+            echo "---"
+            echo "*Built from [\`$(git rev-parse --short HEAD)\`](https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)) on $(date -u +"%Y-%m-%d %H:%M UTC")*"
+          } > "$NOTES_FILE"
+
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: "Carpet PvP ${{ steps.version.outputs.full_version }}"
+          body_path: ${{ steps.notes.outputs.notes_file }}
+          prerelease: ${{ inputs.release_type == 'pre-release' }}
+          draft: false
+          generate_release_notes: false
+          make_latest: ${{ inputs.release_type == 'release' }}
+          files: |
+            ${{ steps.artifacts.outputs.main_jar }}
+            ${{ steps.artifacts.outputs.sources_jar }}
+          fail_on_unmatched_files: false
