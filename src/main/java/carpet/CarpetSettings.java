@@ -568,6 +568,12 @@ public class CarpetSettings
     )
     public static boolean fakePlayerDropInventoryOnDeath = false;
 
+    @Rule(
+        desc = "Allows /data command to modify fake player entity data",
+        category = {CREATIVE, FEATURE}
+    )
+    public static boolean fakePlayerDataModifiable = false;
+
     private static class ModulePermissionLevel extends Validator<String> {
         @Override public String validate(CommandSourceStack source, CarpetRule<String> currentRule, String newValue, String string) {
             int permissionLevel = switch (newValue) {
