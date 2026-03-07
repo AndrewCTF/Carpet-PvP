@@ -140,8 +140,12 @@ Notes:
 - `/player <name> attack crit [once|continuous|interval <ticks>]`
 
 Crit mode behavior:
-- bot jumps first, then attacks while falling.
-- with modern cooldown enabled (`spamClickCombat = false`), weak spam swings are avoided.
+- Bot jumps, waits until it is falling **and** `fallDistance > 0`, then strikes.
+- While airborne, the bot tracks the target entity and looks at it so the hit connects.
+- Sprinting is automatically disabled before jump and attack (required for vanilla crit detection).
+- After landing, the bot waits at least 3 ticks (or the configured interval) before the next jump.
+- MISS swings are suppressed during crit mode to prevent spam while airborne.
+- With modern cooldown enabled (`spamClickCombat = false`), weak spam swings are avoided.
 
 ### Swing (visual arm animation)
 - `/player <name> swing [once|continuous|interval <ticks>]`
@@ -241,6 +245,22 @@ The navigation system provides Baritone-like pathfinding and movement for fake p
 - `/player <bot> nav follow <playerName> [radius]`
   - Bot will continuously re-path to stay within `radius` blocks of the target player.
   - Default radius: 3 blocks.
+
+**Chase (follow and attack a player):**
+- `/player <bot> nav chase attack [<playerName>]`
+  - Navigates toward the target player and continuously attacks when in range.
+  - If `<playerName>` is omitted and only one other player is online, auto-selects them.
+  - If multiple players are online and no name is given, lists available targets.
+- `/player <bot> nav chase crit [<playerName>]`
+  - Same as `chase attack` but uses crit attacks (jump + hit while falling).
+- `/player <bot> nav chase stop`
+  - Stops chasing (same as `nav stop`).
+
+Chase behavior details:
+- Re-paths to the target every 10 ticks.
+- When within 2.5 blocks, stops moving, faces the target, and attacks.
+- When the target moves out of range, resumes pathfinding.
+- Requires `fakePlayerNavigation` rule enabled.
 
 **Come (navigate to the command sender's position):**
 - `/player <bot> nav come [arrivalRadius]`
@@ -450,8 +470,11 @@ Bot does not move:
 
 Bot does not crit:
 - use `attack crit continuous`
-- ensure target is in reach and in crosshair
-- if modern cooldown is active, avoid too-short intervals
+- ensure target is in reach (within ~3 blocks) and in line of sight
+- the bot automatically looks at the target while airborne; if the target moves behind a wall the ray trace may miss
+- sprinting is disabled automatically; if the bot is still sprinting for some reason, crits won't register
+- if modern cooldown is active, avoid too-short intervals (minimum 3 ticks between crits)
+- check that the bot is not in water, on a ladder, or blind (`canCriticalAttack` conditions)
 
 Navigation stalls:
 - check hazard options (`avoid*`, `breakCobwebs`)
@@ -469,6 +492,6 @@ Navigation stalls:
 - Interaction: `use`, `swapHands`, `hotbar`, `drop`, `dropStack`
 - Equipment: `equip`, `unequip`, `equipment`
 - Riding: `mount`, `dismount`
-- Navigation: `nav ...`
+- Navigation: `nav goto|follow|chase|come|mine|patrol|options|status|stop`
 - Elytra control: `glide ...`
 - Item cooldowns: `itemCd ...`

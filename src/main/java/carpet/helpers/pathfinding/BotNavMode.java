@@ -12,6 +12,7 @@ package carpet.helpers.pathfinding;
  *   MINE   – locate and mine a specific block type
  *   PATROL – walk between a series of waypoints
  *   COME   – navigate to the command sender's position
+ *   CHASE  – follow and attack a player (normal or crit)
  */
 public enum BotNavMode
 {
@@ -22,5 +23,6 @@ public enum BotNavMode
     FOLLOW,
     MINE,
     PATROL,
-    COME
+    COME,
+    CHASE
 }
