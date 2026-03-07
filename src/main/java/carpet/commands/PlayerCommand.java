@@ -331,6 +331,19 @@ public class PlayerCommand
                                     .executes(c -> navPatrol(c, 4))
                                     .then(literal("loop").executes(c -> navPatrol(c, 4)))
                                     .then(literal("once").executes(c -> navPatrolOnce(c, 4))))))))
+                // --- Chase command ---
+                .then(literal("chase")
+                    .then(literal("stop").executes(PlayerCommand::navStop))
+                    // /player <name> nav chase attack [<target>]
+                    .then(literal("attack")
+                        .executes(c -> navChase(c, false))
+                        .then(argument("target", StringArgumentType.word())
+                            .executes(c -> navChase(c, false))))
+                    // /player <name> nav chase crit [<target>]
+                    .then(literal("crit")
+                        .executes(c -> navChase(c, true))
+                        .then(argument("target", StringArgumentType.word())
+                            .executes(c -> navChase(c, true)))))
                 ;
     }
 
@@ -406,6 +419,13 @@ public class PlayerCommand
             int total = ap.getNavPatrolWaypoints().size();
             String loopStr = ap.isNavPatrolLoop() ? "loop" : "once";
             Messenger.m(context.getSource(), "w   patrol waypoint: ", "y ", (idx + 1) + "/" + total, "w  mode: ", "y ", loopStr);
+        }
+        if (mode == BotNavMode.CHASE && ap.getNavChaseTarget() != null)
+        {
+            ServerPlayer chaseTarget = context.getSource().getServer().getPlayerList().getPlayer(ap.getNavChaseTarget());
+            String targetName = chaseTarget != null ? chaseTarget.getName().getString() : ap.getNavChaseTarget().toString();
+            String attackMode = ap.isNavChaseCrit() ? "crit" : "attack";
+            Messenger.m(context.getSource(), "w   chasing: ", "y ", targetName, "w  mode: ", "y ", attackMode);
         }
         return 1;
     }
@@ -522,6 +542,68 @@ public class PlayerCommand
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
         ap.setNavFollow(targetPlayer.getUUID(), radius);
         Messenger.m(context.getSource(), "g ", player.getName(), "g  is now following ", targetPlayer.getName(), "w  radius=", String.format("y %.1f", radius));
+        return 1;
+    }
+
+    private static int navChase(CommandContext<CommandSourceStack> context, boolean crit)
+    {
+        if (cantNavManipulate(context)) return 0;
+        ServerPlayer player = getPlayer(context);
+
+        // Try to get target name from argument.
+        String targetName = null;
+        try
+        {
+            targetName = StringArgumentType.getString(context, "target");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        ServerPlayer targetPlayer;
+        if (targetName != null)
+        {
+            targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+            if (targetPlayer == null)
+            {
+                Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
+                return 0;
+            }
+        }
+        else
+        {
+            // Auto-select: if only one other player exists, target them.
+            List<ServerPlayer> candidates = new ArrayList<>();
+            for (ServerPlayer p : context.getSource().getServer().getPlayerList().getPlayers())
+            {
+                if (p != player)
+                {
+                    candidates.add(p);
+                }
+            }
+            if (candidates.isEmpty())
+            {
+                Messenger.m(context.getSource(), "r No other players to chase.");
+                return 0;
+            }
+            if (candidates.size() > 1)
+            {
+                Messenger.m(context.getSource(), "r Multiple players available. Specify a target: ",
+                        "y ", String.join(", ", candidates.stream().map(p -> p.getName().getString()).toList()));
+                return 0;
+            }
+            targetPlayer = candidates.get(0);
+        }
+
+        if (targetPlayer == player)
+        {
+            Messenger.m(context.getSource(), "r Cannot chase self.");
+            return 0;
+        }
+
+        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+        ap.setNavChase(targetPlayer.getUUID(), crit);
+        String mode = crit ? "crit" : "attack";
+        Messenger.m(context.getSource(), "g ", player.getName(), "g  is now chasing ", targetPlayer.getName(),
+                "w  mode=", "y ", mode);
         return 1;
     }
 

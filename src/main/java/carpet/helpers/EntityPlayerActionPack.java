@@ -78,6 +78,7 @@ public class EntityPlayerActionPack
 
     private boolean critAwaitingGroundAfterHit;
     private int critPostLandingDelay;
+    private int critTargetEntityId = -1; // Entity ID of the target we're crit-attacking
 
     private boolean glideEnabled;
     private boolean glideFrozen;
@@ -179,6 +180,13 @@ public class EntityPlayerActionPack
     private int navFollowRepathInterval = 20;
     private int navFollowRepathTicks = 0;
 
+    // Chase mode fields.
+    private UUID navChaseTarget = null;
+    private boolean navChaseCrit = false;
+    private int navChaseRepathTicks = 0;
+    private static final int NAV_CHASE_REPATH_INTERVAL = 10;
+    private static final double CHASE_ATTACK_RANGE = 3.0D;
+
     // Mine mode fields.
     private List<Block> navMineTargets = null;
     private int navMineRadius = 32;
@@ -225,6 +233,7 @@ public class EntityPlayerActionPack
         {
             critAwaitingGroundAfterHit = false;
             critPostLandingDelay = 0;
+            critTargetEntityId = -1;
         }
         return this;
     }
@@ -564,6 +573,7 @@ public class EntityPlayerActionPack
         actions.clear();
         critAwaitingGroundAfterHit = false;
         critPostLandingDelay = 0;
+        critTargetEntityId = -1;
         setGlideEnabled(false);
         stopNavigation();
         return stopMovement();
@@ -590,6 +600,11 @@ public class EntityPlayerActionPack
         navFollowTarget = null;
         navFollowRadius = 3.0D;
         navFollowRepathTicks = 0;
+
+        // Chase mode
+        navChaseTarget = null;
+        navChaseCrit = false;
+        navChaseRepathTicks = 0;
 
         // Mine mode
         navMineTargets = null;
@@ -754,6 +769,25 @@ public class EntityPlayerActionPack
         navArrivalRadius = radius;
         return this;
     }
+
+    public EntityPlayerActionPack setNavChase(UUID targetUUID, boolean crit)
+    {
+        stopNavigation();
+        stopAll(); // Clear any existing actions
+        navEnabled = true;
+        navMode = BotNavMode.CHASE;
+        navChaseTarget = targetUUID;
+        navChaseCrit = crit;
+        navChaseRepathTicks = 0;
+        navArrivalRadius = CHASE_ATTACK_RANGE;
+        // Start the attack action
+        setAttackCritical(crit);
+        start(ActionType.ATTACK, crit ? Action.continuous() : Action.continuous());
+        return this;
+    }
+
+    public UUID getNavChaseTarget() { return navChaseTarget; }
+    public boolean isNavChaseCrit() { return navChaseCrit; }
 
     public EntityPlayerActionPack setNavMine(List<Block> targets, int radius, int maxCount)
     {
@@ -1548,6 +1582,11 @@ public class EntityPlayerActionPack
             tickNavFollow();
             return;
         }
+        if (navMode == BotNavMode.CHASE)
+        {
+            tickNavChase();
+            return;
+        }
         if (navMode == BotNavMode.MINE)
         {
             tickNavMine();
@@ -2049,6 +2088,81 @@ public class EntityPlayerActionPack
 
         // Execute movement along waypoints (shared logic).
         tickNavWaypointFollowing(BotNavMode.LAND);
+    }
+
+    // --- Chase mode: follow a player and attack them ---
+    private void tickNavChase()
+    {
+        if (navChaseTarget == null)
+        {
+            stopNavigation();
+            return;
+        }
+
+        ServerLevel level = (ServerLevel) player.level();
+        Entity target = level.getEntity(navChaseTarget);
+        if (target == null)
+        {
+            target = level.getServer().getPlayerList().getPlayer(navChaseTarget);
+        }
+        if (target == null || !target.isAlive())
+        {
+            stopNavigation();
+            return;
+        }
+
+        double distToTarget = player.position().distanceTo(target.position());
+
+        // Always look at the target when chasing.
+        lookAt(target.position().add(0, target.getBbHeight() * 0.5, 0));
+
+        // Within attack range — stop moving, face target, let the attack action handle the rest.
+        if (distToTarget <= CHASE_ATTACK_RANGE)
+        {
+            stopMovement();
+            navWaypoints = null;
+            navNodes = null;
+            navMoveTypes = null;
+            navChaseRepathTicks = Math.min(navChaseRepathTicks, 5);
+        }
+
+        // Re-path to target if needed.
+        navChaseRepathTicks--;
+        if (navChaseRepathTicks <= 0 && distToTarget > CHASE_ATTACK_RANGE)
+        {
+            navChaseRepathTicks = NAV_CHASE_REPATH_INTERVAL;
+            navTargetPos = target.position();
+
+            BlockPos start = player.blockPosition();
+            BlockPos goal = BlockPos.containing(navTargetPos);
+            NavAStarPathfinder.Settings settings = buildNavSettings();
+            NavAStarPathfinder.Traversal traversal = isInWaterish() ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
+            NavAStarPathfinder.PathResult result = NAV_ASTAR.findPath(level, start, goal, traversal, settings);
+            if (result == null || result.positions().isEmpty())
+            {
+                navWaypoints = null;
+                navNodes = null;
+                navMoveTypes = null;
+                return;
+            }
+            navNodes = result.positions();
+            navMoveTypes = result.moveTypes();
+            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
+            for (BlockPos p : navNodes)
+            {
+                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
+            }
+            navWaypoints = waypoints;
+            navWaypointIndex = 0;
+            navNoProgressTicks = 0;
+            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        }
+
+        // Execute movement along waypoints (shared logic).
+        if (distToTarget > CHASE_ATTACK_RANGE)
+        {
+            tickNavWaypointFollowing(BotNavMode.LAND);
+        }
     }
 
     // --- Mine mode: find target block, navigate to it, mine it, repeat ---
@@ -2602,45 +2716,77 @@ public class EntityPlayerActionPack
         ATTACK(true) {
             @Override
             boolean execute(ServerPlayer player, Action action) {
+                EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+
+                if (ap.attackCritical)
+                {
+                    // After a successful crit hit, wait until we touch the ground,
+                    // then wait the configured interval on-ground before starting the next jump.
+                    if (ap.critAwaitingGroundAfterHit)
+                    {
+                        if (player.onGround())
+                        {
+                            ap.critAwaitingGroundAfterHit = false;
+                            ap.critPostLandingDelay = Math.max(0, action.interval);
+                        }
+                        return false;
+                    }
+                    if (ap.critPostLandingDelay > 0)
+                    {
+                        if (player.onGround())
+                        {
+                            ap.critPostLandingDelay--;
+                        }
+                        return false;
+                    }
+
+                    // While in the air, look at the stored target entity so the ray trace will hit it.
+                    if (ap.critTargetEntityId != -1 && !player.onGround())
+                    {
+                        Entity tracked = player.level().getEntity(ap.critTargetEntityId);
+                        if (tracked != null && tracked.isAlive())
+                        {
+                            ap.lookAt(tracked.position().add(0, tracked.getBbHeight() * 0.5, 0));
+                        }
+                        else
+                        {
+                            ap.critTargetEntityId = -1;
+                        }
+                    }
+
+                    if (player.onGround())
+                    {
+                        // Before jumping, find and store the target entity to track in the air.
+                        HitResult preHit = getTarget(player);
+                        if (preHit.getType() == HitResult.Type.ENTITY)
+                        {
+                            ap.critTargetEntityId = ((EntityHitResult) preHit).getEntity().getId();
+                        }
+                        // Disable sprinting — canCriticalAttack() requires !isSprinting().
+                        if (player.isSprinting())
+                        {
+                            player.setSprinting(false);
+                        }
+                        player.jumpFromGround();
+                        player.resetLastActionTime();
+                        return false;
+                    }
+                    // Critical hits require falling (not rising)
+                    if (player.getDeltaMovement().y >= 0.0D)
+                    {
+                        return false;
+                    }
+                    // Disable sprinting right before the attack for the mixin check.
+                    if (player.isSprinting())
+                    {
+                        player.setSprinting(false);
+                    }
+                }
+
                 HitResult hit = getTarget(player);
                 switch (hit.getType()) {
                     case ENTITY: {
                         EntityHitResult entityHit = (EntityHitResult) hit;
-                        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
-
-                        if (ap.attackCritical)
-                        {
-                            // After a successful crit hit, wait until we touch the ground,
-                            // then wait the configured interval on-ground before starting the next jump.
-                            if (ap.critAwaitingGroundAfterHit)
-                            {
-                                if (player.onGround())
-                                {
-                                    ap.critAwaitingGroundAfterHit = false;
-                                    ap.critPostLandingDelay = Math.max(0, action.interval);
-                                }
-                                return false;
-                            }
-                            if (ap.critPostLandingDelay > 0)
-                            {
-                                if (player.onGround())
-                                {
-                                    ap.critPostLandingDelay--;
-                                }
-                                return false;
-                            }
-                            if (player.onGround())
-                            {
-                                player.jumpFromGround();
-                                player.resetLastActionTime();
-                                return false;
-                            }
-                            // Critical hits require falling (not rising)
-                            if (player.getDeltaMovement().y >= 0.0D)
-                            {
-                                return false;
-                            }
-                        }
 
                         if (!CarpetSettings.spamClickCombat)
                         {
@@ -2659,6 +2805,7 @@ public class EntityPlayerActionPack
                         if (ap.attackCritical)
                         {
                             ap.critAwaitingGroundAfterHit = true;
+                            ap.critTargetEntityId = -1;
                         }
                         return true;
                     }

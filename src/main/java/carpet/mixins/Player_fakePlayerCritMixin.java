@@ -1,6 +1,7 @@
 package carpet.mixins;
 
 import carpet.patches.EntityPlayerMPFake;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,12 +20,12 @@ public abstract class Player_fakePlayerCritMixin {
         // Modify the result of canCriticalAttack() for fake players based on fall distance and player state
         Player player = (Player)(Object)this;
         if (player instanceof EntityPlayerMPFake) {
-            // Check critical hit conditions for fake player
+            // Check critical hit conditions matching vanilla canCriticalAttack()
             return player.fallDistance > 0.0F
                 && !player.onGround()
                 && !player.onClimbable()
                 && !player.isInWater()
-                && !player.isMobilityRestricted()
+                && !player.hasEffect(MobEffects.BLINDNESS)
                 && !player.isPassenger()
                 && !player.isSprinting();
         }
