@@ -185,7 +185,7 @@ public class EntityPlayerActionPack
     private boolean navChaseCrit = false;
     private int navChaseRepathTicks = 0;
     private static final int NAV_CHASE_REPATH_INTERVAL = 10;
-    private static final double CHASE_ATTACK_RANGE = 3.0D;
+    private static final double CHASE_ATTACK_RANGE = 2.5D;
 
     // Mine mode fields.
     private List<Block> navMineTargets = null;
@@ -2727,7 +2727,7 @@ public class EntityPlayerActionPack
                         if (player.onGround())
                         {
                             ap.critAwaitingGroundAfterHit = false;
-                            ap.critPostLandingDelay = Math.max(0, action.interval);
+                            ap.critPostLandingDelay = Math.max(3, action.interval);
                         }
                         return false;
                     }
@@ -2773,6 +2773,11 @@ public class EntityPlayerActionPack
                     }
                     // Critical hits require falling (not rising)
                     if (player.getDeltaMovement().y >= 0.0D)
+                    {
+                        return false;
+                    }
+                    // Wait until fallDistance is positive so the mixin's canCriticalAttack check passes.
+                    if (player.fallDistance <= 0.0F)
                     {
                         return false;
                     }
@@ -2875,6 +2880,11 @@ public class EntityPlayerActionPack
                     }
                 }
                 // MISS (air): still swing to mimic holding attack.
+                // In crit mode, suppress swings on miss to avoid spam while airborne.
+                if (ap.attackCritical)
+                {
+                    return false;
+                }
                 // In modern combat, avoid spamming weak swings unless spam-click combat is enabled.
                 if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
                 {
