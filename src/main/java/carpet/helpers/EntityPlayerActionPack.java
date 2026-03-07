@@ -2810,7 +2810,6 @@ public class EntityPlayerActionPack
                         return true;
                     }
                     case BLOCK: {
-                        EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                         if (ap.blockHitDelay > 0)
                         {
                             ap.blockHitDelay--;
