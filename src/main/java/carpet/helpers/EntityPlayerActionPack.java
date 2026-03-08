@@ -2769,41 +2769,23 @@ public class EntityPlayerActionPack
 
                     if (ap.attackCritical)
                     {
-                        // Crit state machine for chase mode.
-                        if (ap.critAwaitingGroundAfterHit)
-                        {
-                            if (player.onGround())
-                            {
-                                ap.critAwaitingGroundAfterHit = false;
-                                ap.critPostLandingDelay = Math.max(3, action.interval);
-                            }
-                            return false;
-                        }
-                        if (ap.critPostLandingDelay > 0)
-                        {
-                            if (player.onGround())
-                            {
-                                ap.critPostLandingDelay--;
-                            }
-                            return false;
-                        }
-
-                        // Keep looking at target while airborne.
-                        if (!player.onGround())
-                        {
-                            ap.lookAt(chaseTarget.position().add(0, chaseTarget.getBbHeight() * 0.5, 0));
-                        }
+                        // Fluid crit: jump whenever on ground, attack when falling.
+                        // No delays, no waiting — like a player holding W + jump + attack.
+                        if (player.isSprinting()) player.setSprinting(false);
 
                         if (player.onGround())
                         {
-                            if (player.isSprinting()) player.setSprinting(false);
                             player.jumpFromGround();
                             player.resetLastActionTime();
                             return false;
                         }
+
+                        // Keep looking at target while airborne.
+                        ap.lookAt(chaseTarget.position().add(0, chaseTarget.getBbHeight() * 0.5, 0));
+
+                        // Only attack on the way down with fallDistance > 0.
                         if (player.getDeltaMovement().y >= 0.0D) return false;
                         if (player.fallDistance <= 0.0F) return false;
-                        if (player.isSprinting()) player.setSprinting(false);
                     }
 
                     // Attack strength check for modern combat.
@@ -2817,11 +2799,6 @@ public class EntityPlayerActionPack
                     player.swing(InteractionHand.MAIN_HAND);
                     player.resetAttackStrengthTicker();
                     player.resetLastActionTime();
-
-                    if (ap.attackCritical)
-                    {
-                        ap.critAwaitingGroundAfterHit = true;
-                    }
                     return true;
                 }
 
