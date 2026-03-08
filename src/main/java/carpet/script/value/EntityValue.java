@@ -553,6 +553,22 @@ public class EntityValue extends Value
         put("sprinting", (e, a) -> e.isSprinting() ? Value.TRUE : Value.FALSE);
         put("swimming", (e, a) -> e.isSwimming() ? Value.TRUE : Value.FALSE);
         put("swinging", (e, a) -> e instanceof LivingEntity le ? BooleanValue.of(le.swinging) : Value.NULL);
+        put("is_using_item", (e, a) -> {
+            if (!(e instanceof LivingEntity le)) return Value.NULL;
+            if (!le.isUsingItem()) return a == null ? Value.FALSE : Value.FALSE;
+            if (a == null)
+            {
+                ItemStack useItem = le.getUseItem();
+                return ListValue.of(
+                        ValueConversions.of(useItem, e.level().getServer().registryAccess()),
+                        new StringValue(le.getUsedItemHand() == InteractionHand.MAIN_HAND ? "mainhand" : "offhand")
+                );
+            }
+            String itemName = a.getString();
+            Identifier itemId = InputValidator.identifierOf(itemName);
+            Identifier useItemId = BuiltInRegistries.ITEM.getKey(le.getUseItem().getItem());
+            return BooleanValue.of(useItemId.equals(itemId));
+        });
         put("air", (e, a) -> new NumericValue(e.getAirSupply()));
         put("language", (e, a) -> !(e instanceof ServerPlayer p) ? NULL : StringValue.of(Vanilla.ServerPlayer_getLanguage(p)));
         put("persistence", (e, a) -> e instanceof Mob mob ? BooleanValue.of(mob.isPersistenceRequired()) : Value.NULL);

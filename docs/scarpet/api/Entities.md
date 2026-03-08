@@ -378,6 +378,28 @@ Boolean, true if the entity is jumping.
 Returns `true` if the entity is actively swinging their hand, `false` if not and `null` if swinging is not applicable to
 that entity.
 
+### `query(e, 'is_using_item')`, `query(e, 'is_using_item', item)`
+
+Checks if a living entity is actively using an item (eating food, drawing a bow, blocking with a shield, drinking a potion, etc.).
+
+Without an argument, returns a list `[item_tuple, hand]` if the entity is using an item, where `hand` is `'mainhand'` or
+`'offhand'`. Returns `false` if not using any item, or `null` if not a living entity.
+
+With an item argument (e.g. `'shield'`, `'bow'`, `'minecraft:crossbow'`), returns `true`/`false` whether the entity
+is currently using that specific item.
+
+<pre>
+// Get what item is being used
+result = query(player, 'is_using_item');
+if(result, [item, hand] = result; print(str('Using %s in %s', item, hand)));
+
+// Check if player is blocking with a shield
+if(query(player, 'is_using_item', 'shield'), print('Blocking!'));
+
+// Check if drawing a bow
+if(query(player, 'is_using_item', 'bow'), print('Drawing bow!'));
+</pre>
+
 ### `query(e, 'gamemode')`
 
 String with gamemode, or `null` if not a player.
