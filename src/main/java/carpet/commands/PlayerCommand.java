@@ -334,32 +334,32 @@ public class PlayerCommand
                 // --- Chase command ---
                 .then(literal("chase")
                     .then(literal("stop").executes(PlayerCommand::navStop))
-                    // /player <name> nav chase attack [<target>] [<distance>] [<interval>]
+                    // /player <name> nav chase attack [<distance> [<interval> [<target>]]]
                     .then(literal("attack")
                         .executes(c -> navChase(c, false, "attack"))
-                        .then(argument("target", StringArgumentType.word())
+                        .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
                             .executes(c -> navChase(c, false, "attack"))
-                            .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
+                            .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, false, "attack"))
-                                .then(argument("interval", IntegerArgumentType.integer(0))
+                                .then(argument("target", StringArgumentType.word())
                                     .executes(c -> navChase(c, false, "attack"))))))
-                    // /player <name> nav chase crit [<target>] [<distance>] [<interval>]
+                    // /player <name> nav chase crit [<distance> [<interval> [<target>]]]
                     .then(literal("crit")
                         .executes(c -> navChase(c, true, "crit"))
-                        .then(argument("target", StringArgumentType.word())
+                        .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
                             .executes(c -> navChase(c, true, "crit"))
-                            .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
+                            .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "crit"))
-                                .then(argument("interval", IntegerArgumentType.integer(0))
+                                .then(argument("target", StringArgumentType.word())
                                     .executes(c -> navChase(c, true, "crit"))))))
-                    // /player <name> nav chase jumpreset [<target>] [<distance>] [<interval>]
+                    // /player <name> nav chase jumpreset [<distance> [<interval> [<target>]]]
                     .then(literal("jumpreset")
                         .executes(c -> navChase(c, true, "jumpreset"))
-                        .then(argument("target", StringArgumentType.word())
+                        .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
                             .executes(c -> navChase(c, true, "jumpreset"))
-                            .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
+                            .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "jumpreset"))
-                                .then(argument("interval", IntegerArgumentType.integer(0))
+                                .then(argument("target", StringArgumentType.word())
                                     .executes(c -> navChase(c, true, "jumpreset")))))))
                 ;
     }

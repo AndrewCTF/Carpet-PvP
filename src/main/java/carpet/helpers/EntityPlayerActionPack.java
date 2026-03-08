@@ -186,6 +186,7 @@ public class EntityPlayerActionPack
     private int navChaseRepathTicks = 0;
     private static final int NAV_CHASE_REPATH_INTERVAL = 10;
     private static final double DEFAULT_CHASE_ATTACK_RANGE = 2.5D;
+    private static final int NAV_CHASE_CRIT_JUMP_LEAD_TICKS = 6;
     private double navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
     private int navChaseAttackInterval = 0; // 0 = continuous (every tick)
     private int navChaseAttackCooldown = 0; // ticks remaining until next allowed hit
@@ -2763,14 +2764,26 @@ public class EntityPlayerActionPack
                         return false;
                     }
 
+                    // Interval = ticks between successful hits.
+                    if (ap.navChaseAttackCooldown > 0)
+                    {
+                        ap.navChaseAttackCooldown--;
+                    }
+
+                    boolean strongAttackReady = CarpetSettings.spamClickCombat || player.getAttackStrengthScale(0.5F) >= 0.9F;
+
                     if (ap.attackCritical)
                     {
-                        // Fluid crit: jump whenever on ground, attack when falling.
-                        // No delays, no waiting — like a player holding W + jump + attack.
+                        // Timed crit jump-reset: wait out cooldown on ground,
+                        // then start one jump shortly before the next hit window.
                         if (player.isSprinting()) player.setSprinting(false);
 
                         if (player.onGround())
                         {
+                            if (ap.navChaseAttackCooldown > NAV_CHASE_CRIT_JUMP_LEAD_TICKS || !strongAttackReady)
+                            {
+                                return false;
+                            }
                             player.jumpFromGround();
                             player.resetLastActionTime();
                             return false;
@@ -2779,20 +2792,21 @@ public class EntityPlayerActionPack
                         // Keep looking at target while airborne.
                         ap.lookAt(chaseTarget.position().add(0, chaseTarget.getBbHeight() * 0.5, 0));
 
+                        // Wait until cooldown expires before allowing the hit.
+                        if (ap.navChaseAttackCooldown > 0) return false;
+
                         // Only attack on the way down with fallDistance > 0.
                         if (player.getDeltaMovement().y >= 0.0D) return false;
                         if (player.fallDistance <= 0.0F) return false;
+                        if (!strongAttackReady) return false;
                     }
-
-                    // Interval = ticks between successful hits.
-                    if (ap.navChaseAttackCooldown > 0)
+                    else if (ap.navChaseAttackCooldown > 0)
                     {
-                        ap.navChaseAttackCooldown--;
                         return false;
                     }
 
                     // Attack strength check for modern combat.
-                    if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
+                    if (!strongAttackReady)
                     {
                         return false;
                     }
