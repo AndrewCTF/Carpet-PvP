@@ -185,7 +185,9 @@ public class EntityPlayerActionPack
     private boolean navChaseCrit = false;
     private int navChaseRepathTicks = 0;
     private static final int NAV_CHASE_REPATH_INTERVAL = 10;
-    private static final double CHASE_ATTACK_RANGE = 2.5D;
+    private static final double DEFAULT_CHASE_ATTACK_RANGE = 2.5D;
+    private double navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
+    private int navChaseAttackInterval = 0; // 0 = continuous (every tick)
 
     // Mine mode fields.
     private List<Block> navMineTargets = null;
@@ -605,6 +607,8 @@ public class EntityPlayerActionPack
         navChaseTarget = null;
         navChaseCrit = false;
         navChaseRepathTicks = 0;
+        navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
+        navChaseAttackInterval = 0;
 
         // Mine mode
         navMineTargets = null;
@@ -770,7 +774,7 @@ public class EntityPlayerActionPack
         return this;
     }
 
-    public EntityPlayerActionPack setNavChase(UUID targetUUID, boolean crit)
+    public EntityPlayerActionPack setNavChase(UUID targetUUID, boolean crit, double attackRange, int attackInterval)
     {
         stopNavigation();
         stopAll(); // Clear any existing actions
@@ -779,15 +783,26 @@ public class EntityPlayerActionPack
         navChaseTarget = targetUUID;
         navChaseCrit = crit;
         navChaseRepathTicks = 0;
-        navArrivalRadius = CHASE_ATTACK_RANGE;
+        navChaseAttackRange = Math.max(0.5D, Math.min(attackRange, 3.0D));
+        navChaseAttackInterval = Math.max(0, attackInterval);
+        navArrivalRadius = navChaseAttackRange;
         // Start the attack action
         setAttackCritical(crit);
-        start(ActionType.ATTACK, crit ? Action.continuous() : Action.continuous());
+        if (navChaseAttackInterval > 0)
+        {
+            start(ActionType.ATTACK, crit ? Action.intervalUntilSuccess(navChaseAttackInterval) : Action.interval(navChaseAttackInterval));
+        }
+        else
+        {
+            start(ActionType.ATTACK, Action.continuous());
+        }
         return this;
     }
 
     public UUID getNavChaseTarget() { return navChaseTarget; }
     public boolean isNavChaseCrit() { return navChaseCrit; }
+    public double getNavChaseAttackRange() { return navChaseAttackRange; }
+    public int getNavChaseAttackInterval() { return navChaseAttackInterval; }
 
     public EntityPlayerActionPack setNavMine(List<Block> targets, int radius, int maxCount)
     {
@@ -2117,7 +2132,7 @@ public class EntityPlayerActionPack
         lookAt(target.position().add(0, target.getBbHeight() * 0.5, 0));
 
         // Within attack range — stop moving, face target, let the attack action handle the rest.
-        if (distToTarget <= CHASE_ATTACK_RANGE)
+        if (distToTarget <= navChaseAttackRange)
         {
             stopMovement();
             navWaypoints = null;
@@ -2128,7 +2143,7 @@ public class EntityPlayerActionPack
 
         // Re-path to target if needed.
         navChaseRepathTicks--;
-        if (navChaseRepathTicks <= 0 && distToTarget > CHASE_ATTACK_RANGE)
+        if (navChaseRepathTicks <= 0 && distToTarget > navChaseAttackRange)
         {
             navChaseRepathTicks = NAV_CHASE_REPATH_INTERVAL;
             navTargetPos = target.position();
@@ -2159,7 +2174,7 @@ public class EntityPlayerActionPack
         }
 
         // Execute movement along waypoints (shared logic).
-        if (distToTarget > CHASE_ATTACK_RANGE)
+        if (distToTarget > navChaseAttackRange)
         {
             tickNavWaypointFollowing(BotNavMode.LAND);
         }
