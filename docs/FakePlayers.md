@@ -247,15 +247,17 @@ The navigation system provides Baritone-like pathfinding and movement for fake p
   - Default radius: 3 blocks.
 
 **Chase (follow and attack a player):**
-- `/player <bot> nav chase attack [<playerName>] [<distance>] [<interval>]`
+- `/player <bot> nav chase attack [<distance>] [<interval>] [<playerName>]`
   - Navigates toward the target player and attacks when in range.
   - If `<playerName>` is omitted and only one other player is online, auto-selects them.
   - If multiple players are online and no name is given, lists available targets.
   - `<distance>` (optional, 0.5–3.0): attack range in blocks. Default: 2.5. Lower values make the bot get closer before attacking; max 3.0 uses full reach.
-  - `<interval>` (optional, 0+): ticks between attacks. Default: 0 (continuous/every tick). Use higher values for slower, more deliberate hits.
-- `/player <bot> nav chase crit [<playerName>] [<distance>] [<interval>]`
+  - `<interval>` (optional, 0+): ticks after a successful hit before the next allowed hit window. Default: 0 (continuous).
+- `/player <bot> nav chase crit [<distance>] [<interval>] [<playerName>]`
   - Same as `chase attack` but uses crit attacks (jump + hit while falling).
-  - `<interval>` controls ticks between crit attempts.
+  - Crit chase uses timed jump-reset behavior: it stays grounded during cooldown and jumps once near the next hit window.
+- `/player <bot> nav chase jumpreset [<distance>] [<interval>] [<playerName>]`
+  - Alias of crit chase with the same timed jump-reset behavior.
 - `/player <bot> nav chase stop`
   - Stops chasing (same as `nav stop`).
 
@@ -263,13 +265,15 @@ Chase behavior details:
 - Re-paths to the target every 10 ticks.
 - When within the configured distance, stops moving, faces the target, and attacks.
 - When the target moves out of range, resumes pathfinding.
+- In crit/jumpreset modes, the bot performs a single timed jump per hit cycle instead of constant hopping.
+- If the target dies or disappears, chase and attack actions stop.
 - Requires `fakePlayerNavigation` rule enabled.
 
 Examples:
-- `/player Bot nav chase attack Steve` — chase Steve, default range and speed
-- `/player Bot nav chase crit Steve 2.0` — crit chase Steve from 2 blocks away
-- `/player Bot nav chase attack Steve 1.5 10` — close-range attack every 10 ticks
-- `/player Bot nav chase crit Steve 2.5 5` — crit every 5 ticks at 2.5 blocks
+- `/player Bot nav chase attack` — chase auto-selected target with default range and speed
+- `/player Bot nav chase attack 1.5 10 Steve` — close-range attack with 10-tick post-hit interval
+- `/player Bot nav chase crit 2.5 5 Steve` — timed crit jump-reset at 2.5 range with 5-tick post-hit interval
+- `/player Bot nav chase jumpreset 3 50 Steve` — wait 50 ticks after each successful hit, then timed jump-reset for the next hit
 
 **Come (navigate to the command sender's position):**
 - `/player <bot> nav come [arrivalRadius]`

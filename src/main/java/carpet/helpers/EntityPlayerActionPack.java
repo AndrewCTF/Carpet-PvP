@@ -2770,7 +2770,9 @@ public class EntityPlayerActionPack
                         ap.navChaseAttackCooldown--;
                     }
 
-                    boolean strongAttackReady = CarpetSettings.spamClickCombat || player.getAttackStrengthScale(0.5F) >= 0.9F;
+                    // When interval is set, it fully controls hit cadence.
+                    // Only enforce weapon-cooldown readiness for interval=0 continuous mode.
+                    boolean enforceWeaponCooldown = !CarpetSettings.spamClickCombat && ap.navChaseAttackInterval <= 0;
 
                     if (ap.attackCritical)
                     {
@@ -2780,7 +2782,7 @@ public class EntityPlayerActionPack
 
                         if (player.onGround())
                         {
-                            if (ap.navChaseAttackCooldown > NAV_CHASE_CRIT_JUMP_LEAD_TICKS || !strongAttackReady)
+                            if (ap.navChaseAttackCooldown > NAV_CHASE_CRIT_JUMP_LEAD_TICKS)
                             {
                                 return false;
                             }
@@ -2798,7 +2800,6 @@ public class EntityPlayerActionPack
                         // Only attack on the way down with fallDistance > 0.
                         if (player.getDeltaMovement().y >= 0.0D) return false;
                         if (player.fallDistance <= 0.0F) return false;
-                        if (!strongAttackReady) return false;
                     }
                     else if (ap.navChaseAttackCooldown > 0)
                     {
@@ -2806,7 +2807,7 @@ public class EntityPlayerActionPack
                     }
 
                     // Attack strength check for modern combat.
-                    if (!strongAttackReady)
+                    if (enforceWeaponCooldown && player.getAttackStrengthScale(0.5F) < 0.9F)
                     {
                         return false;
                     }
