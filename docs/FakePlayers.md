@@ -432,7 +432,7 @@ New scheduler command:
 - `/schedule clear`
 
 Examples:
-- `/schedule command 5 clear HerobaneNair`
+- `/schedule command 5 clear Bot`
 - `/execute as example_bot run schedule command 1 function example:example`
 
 Notes:
