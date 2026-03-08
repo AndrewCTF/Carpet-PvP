@@ -188,6 +188,7 @@ public class EntityPlayerActionPack
     private static final double DEFAULT_CHASE_ATTACK_RANGE = 2.5D;
     private double navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
     private int navChaseAttackInterval = 0; // 0 = continuous (every tick)
+    private int navChaseAttackCooldown = 0; // ticks remaining until next allowed hit
     private boolean navChaseInRange = false; // true when target is within attack range
     private int navChaseTargetEntityId = -1; // entity ID for direct attack (bypass ray trace)
 
@@ -611,6 +612,7 @@ public class EntityPlayerActionPack
         navChaseRepathTicks = 0;
         navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
         navChaseAttackInterval = 0;
+        navChaseAttackCooldown = 0;
         navChaseInRange = false;
         navChaseTargetEntityId = -1;
 
@@ -789,19 +791,13 @@ public class EntityPlayerActionPack
         navChaseRepathTicks = 0;
         navChaseAttackRange = Math.max(0.5D, Math.min(attackRange, 3.0D));
         navChaseAttackInterval = Math.max(0, attackInterval);
+        navChaseAttackCooldown = 0;
         navChaseInRange = false;
         navChaseTargetEntityId = -1;
         navArrivalRadius = navChaseAttackRange;
         // Start the attack action
         setAttackCritical(crit);
-        if (navChaseAttackInterval > 0)
-        {
-            start(ActionType.ATTACK, crit ? Action.intervalUntilSuccess(navChaseAttackInterval) : Action.interval(navChaseAttackInterval));
-        }
-        else
-        {
-            start(ActionType.ATTACK, Action.continuous());
-        }
+        start(ActionType.ATTACK, Action.continuous());
         return this;
     }
 
@@ -2788,6 +2784,13 @@ public class EntityPlayerActionPack
                         if (player.fallDistance <= 0.0F) return false;
                     }
 
+                    // Interval = ticks between successful hits.
+                    if (ap.navChaseAttackCooldown > 0)
+                    {
+                        ap.navChaseAttackCooldown--;
+                        return false;
+                    }
+
                     // Attack strength check for modern combat.
                     if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
                     {
@@ -2799,6 +2802,7 @@ public class EntityPlayerActionPack
                     player.swing(InteractionHand.MAIN_HAND);
                     player.resetAttackStrengthTicker();
                     player.resetLastActionTime();
+                    ap.navChaseAttackCooldown = ap.navChaseAttackInterval;
                     return true;
                 }
 
