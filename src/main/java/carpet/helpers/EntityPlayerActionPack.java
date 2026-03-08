@@ -188,6 +188,8 @@ public class EntityPlayerActionPack
     private static final double DEFAULT_CHASE_ATTACK_RANGE = 2.5D;
     private double navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
     private int navChaseAttackInterval = 0; // 0 = continuous (every tick)
+    private boolean navChaseInRange = false; // true when target is within attack range
+    private int navChaseTargetEntityId = -1; // entity ID for direct attack (bypass ray trace)
 
     // Mine mode fields.
     private List<Block> navMineTargets = null;
@@ -609,6 +611,8 @@ public class EntityPlayerActionPack
         navChaseRepathTicks = 0;
         navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
         navChaseAttackInterval = 0;
+        navChaseInRange = false;
+        navChaseTargetEntityId = -1;
 
         // Mine mode
         navMineTargets = null;
@@ -785,6 +789,8 @@ public class EntityPlayerActionPack
         navChaseRepathTicks = 0;
         navChaseAttackRange = Math.max(0.5D, Math.min(attackRange, 3.0D));
         navChaseAttackInterval = Math.max(0, attackInterval);
+        navChaseInRange = false;
+        navChaseTargetEntityId = -1;
         navArrivalRadius = navChaseAttackRange;
         // Start the attack action
         setAttackCritical(crit);
@@ -2110,6 +2116,7 @@ public class EntityPlayerActionPack
     {
         if (navChaseTarget == null)
         {
+            stopAll();
             stopNavigation();
             return;
         }
@@ -2120,8 +2127,11 @@ public class EntityPlayerActionPack
         {
             target = level.getServer().getPlayerList().getPlayer(navChaseTarget);
         }
-        if (target == null || !target.isAlive())
+        if (target == null || !target.isAlive()
+            || (target instanceof ServerPlayer sp && sp.isDeadOrDying()))
         {
+            // Target died, disconnected, or is otherwise gone — stop everything.
+            stopAll();
             stopNavigation();
             return;
         }
@@ -2131,14 +2141,23 @@ public class EntityPlayerActionPack
         // Always look at the target when chasing.
         lookAt(target.position().add(0, target.getBbHeight() * 0.5, 0));
 
-        // Within attack range — stop moving, face target, let the attack action handle the rest.
+        // Update in-range state and entity ID for the ATTACK action.
         if (distToTarget <= navChaseAttackRange)
         {
+            navChaseInRange = true;
+            navChaseTargetEntityId = target.getId();
+
+            // Stop moving, face target, let the attack action handle the rest.
             stopMovement();
             navWaypoints = null;
             navNodes = null;
             navMoveTypes = null;
             navChaseRepathTicks = Math.min(navChaseRepathTicks, 5);
+        }
+        else
+        {
+            navChaseInRange = false;
+            navChaseTargetEntityId = -1;
         }
 
         // Re-path to target if needed.
@@ -2733,6 +2752,80 @@ public class EntityPlayerActionPack
             boolean execute(ServerPlayer player, Action action) {
                 EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
 
+                // --- Chase mode: direct entity attack for 100% accuracy ---
+                if (ap.navMode == BotNavMode.CHASE)
+                {
+                    // Not in range — do nothing (no swing, no attack).
+                    if (!ap.navChaseInRange || ap.navChaseTargetEntityId == -1)
+                    {
+                        return false;
+                    }
+
+                    Entity chaseTarget = player.level().getEntity(ap.navChaseTargetEntityId);
+                    if (chaseTarget == null || !chaseTarget.isAlive())
+                    {
+                        return false;
+                    }
+
+                    if (ap.attackCritical)
+                    {
+                        // Crit state machine for chase mode.
+                        if (ap.critAwaitingGroundAfterHit)
+                        {
+                            if (player.onGround())
+                            {
+                                ap.critAwaitingGroundAfterHit = false;
+                                ap.critPostLandingDelay = Math.max(3, action.interval);
+                            }
+                            return false;
+                        }
+                        if (ap.critPostLandingDelay > 0)
+                        {
+                            if (player.onGround())
+                            {
+                                ap.critPostLandingDelay--;
+                            }
+                            return false;
+                        }
+
+                        // Keep looking at target while airborne.
+                        if (!player.onGround())
+                        {
+                            ap.lookAt(chaseTarget.position().add(0, chaseTarget.getBbHeight() * 0.5, 0));
+                        }
+
+                        if (player.onGround())
+                        {
+                            if (player.isSprinting()) player.setSprinting(false);
+                            player.jumpFromGround();
+                            player.resetLastActionTime();
+                            return false;
+                        }
+                        if (player.getDeltaMovement().y >= 0.0D) return false;
+                        if (player.fallDistance <= 0.0F) return false;
+                        if (player.isSprinting()) player.setSprinting(false);
+                    }
+
+                    // Attack strength check for modern combat.
+                    if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
+                    {
+                        return false;
+                    }
+
+                    // Direct attack — bypass ray trace for 100% accuracy.
+                    player.attack(chaseTarget);
+                    player.swing(InteractionHand.MAIN_HAND);
+                    player.resetAttackStrengthTicker();
+                    player.resetLastActionTime();
+
+                    if (ap.attackCritical)
+                    {
+                        ap.critAwaitingGroundAfterHit = true;
+                    }
+                    return true;
+                }
+
+                // --- Standard (non-chase) attack logic ---
                 if (ap.attackCritical)
                 {
                     // After a successful crit hit, wait until we touch the ground,
