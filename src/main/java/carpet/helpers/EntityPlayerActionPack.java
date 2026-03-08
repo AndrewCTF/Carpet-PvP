@@ -185,7 +185,13 @@ public class EntityPlayerActionPack
     private boolean navChaseCrit = false;
     private int navChaseRepathTicks = 0;
     private static final int NAV_CHASE_REPATH_INTERVAL = 10;
-    private static final double CHASE_ATTACK_RANGE = 2.5D;
+    private static final double DEFAULT_CHASE_ATTACK_RANGE = 2.5D;
+    private static final int NAV_CHASE_CRIT_JUMP_LEAD_TICKS = 6;
+    private double navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
+    private int navChaseAttackInterval = 0; // 0 = continuous (every tick)
+    private int navChaseAttackCooldown = 0; // ticks remaining until next allowed hit
+    private boolean navChaseInRange = false; // true when target is within attack range
+    private int navChaseTargetEntityId = -1; // entity ID for direct attack (bypass ray trace)
 
     // Mine mode fields.
     private List<Block> navMineTargets = null;
@@ -605,6 +611,11 @@ public class EntityPlayerActionPack
         navChaseTarget = null;
         navChaseCrit = false;
         navChaseRepathTicks = 0;
+        navChaseAttackRange = DEFAULT_CHASE_ATTACK_RANGE;
+        navChaseAttackInterval = 0;
+        navChaseAttackCooldown = 0;
+        navChaseInRange = false;
+        navChaseTargetEntityId = -1;
 
         // Mine mode
         navMineTargets = null;
@@ -770,7 +781,7 @@ public class EntityPlayerActionPack
         return this;
     }
 
-    public EntityPlayerActionPack setNavChase(UUID targetUUID, boolean crit)
+    public EntityPlayerActionPack setNavChase(UUID targetUUID, boolean crit, double attackRange, int attackInterval)
     {
         stopNavigation();
         stopAll(); // Clear any existing actions
@@ -779,15 +790,22 @@ public class EntityPlayerActionPack
         navChaseTarget = targetUUID;
         navChaseCrit = crit;
         navChaseRepathTicks = 0;
-        navArrivalRadius = CHASE_ATTACK_RANGE;
+        navChaseAttackRange = Math.max(0.5D, Math.min(attackRange, 3.0D));
+        navChaseAttackInterval = Math.max(0, attackInterval);
+        navChaseAttackCooldown = 0;
+        navChaseInRange = false;
+        navChaseTargetEntityId = -1;
+        navArrivalRadius = navChaseAttackRange;
         // Start the attack action
         setAttackCritical(crit);
-        start(ActionType.ATTACK, crit ? Action.continuous() : Action.continuous());
+        start(ActionType.ATTACK, Action.continuous());
         return this;
     }
 
     public UUID getNavChaseTarget() { return navChaseTarget; }
     public boolean isNavChaseCrit() { return navChaseCrit; }
+    public double getNavChaseAttackRange() { return navChaseAttackRange; }
+    public int getNavChaseAttackInterval() { return navChaseAttackInterval; }
 
     public EntityPlayerActionPack setNavMine(List<Block> targets, int radius, int maxCount)
     {
@@ -2095,6 +2113,7 @@ public class EntityPlayerActionPack
     {
         if (navChaseTarget == null)
         {
+            stopAll();
             stopNavigation();
             return;
         }
@@ -2105,8 +2124,11 @@ public class EntityPlayerActionPack
         {
             target = level.getServer().getPlayerList().getPlayer(navChaseTarget);
         }
-        if (target == null || !target.isAlive())
+        if (target == null || !target.isAlive()
+            || (target instanceof ServerPlayer sp && sp.isDeadOrDying()))
         {
+            // Target died, disconnected, or is otherwise gone — stop everything.
+            stopAll();
             stopNavigation();
             return;
         }
@@ -2116,19 +2138,28 @@ public class EntityPlayerActionPack
         // Always look at the target when chasing.
         lookAt(target.position().add(0, target.getBbHeight() * 0.5, 0));
 
-        // Within attack range — stop moving, face target, let the attack action handle the rest.
-        if (distToTarget <= CHASE_ATTACK_RANGE)
+        // Update in-range state and entity ID for the ATTACK action.
+        if (distToTarget <= navChaseAttackRange)
         {
+            navChaseInRange = true;
+            navChaseTargetEntityId = target.getId();
+
+            // Stop moving, face target, let the attack action handle the rest.
             stopMovement();
             navWaypoints = null;
             navNodes = null;
             navMoveTypes = null;
             navChaseRepathTicks = Math.min(navChaseRepathTicks, 5);
         }
+        else
+        {
+            navChaseInRange = false;
+            navChaseTargetEntityId = -1;
+        }
 
         // Re-path to target if needed.
         navChaseRepathTicks--;
-        if (navChaseRepathTicks <= 0 && distToTarget > CHASE_ATTACK_RANGE)
+        if (navChaseRepathTicks <= 0 && distToTarget > navChaseAttackRange)
         {
             navChaseRepathTicks = NAV_CHASE_REPATH_INTERVAL;
             navTargetPos = target.position();
@@ -2159,7 +2190,7 @@ public class EntityPlayerActionPack
         }
 
         // Execute movement along waypoints (shared logic).
-        if (distToTarget > CHASE_ATTACK_RANGE)
+        if (distToTarget > navChaseAttackRange)
         {
             tickNavWaypointFollowing(BotNavMode.LAND);
         }
@@ -2718,6 +2749,79 @@ public class EntityPlayerActionPack
             boolean execute(ServerPlayer player, Action action) {
                 EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
 
+                // --- Chase mode: direct entity attack for 100% accuracy ---
+                if (ap.navMode == BotNavMode.CHASE)
+                {
+                    // Not in range — do nothing (no swing, no attack).
+                    if (!ap.navChaseInRange || ap.navChaseTargetEntityId == -1)
+                    {
+                        return false;
+                    }
+
+                    Entity chaseTarget = player.level().getEntity(ap.navChaseTargetEntityId);
+                    if (chaseTarget == null || !chaseTarget.isAlive())
+                    {
+                        return false;
+                    }
+
+                    // Interval = ticks between successful hits.
+                    if (ap.navChaseAttackCooldown > 0)
+                    {
+                        ap.navChaseAttackCooldown--;
+                    }
+
+                    // When interval is set, it fully controls hit cadence.
+                    // Only enforce weapon-cooldown readiness for interval=0 continuous mode.
+                    boolean enforceWeaponCooldown = !CarpetSettings.spamClickCombat && ap.navChaseAttackInterval <= 0;
+
+                    if (ap.attackCritical)
+                    {
+                        // Timed crit jump-reset: wait out cooldown on ground,
+                        // then start one jump shortly before the next hit window.
+                        if (player.isSprinting()) player.setSprinting(false);
+
+                        if (player.onGround())
+                        {
+                            if (ap.navChaseAttackCooldown > NAV_CHASE_CRIT_JUMP_LEAD_TICKS)
+                            {
+                                return false;
+                            }
+                            player.jumpFromGround();
+                            player.resetLastActionTime();
+                            return false;
+                        }
+
+                        // Keep looking at target while airborne.
+                        ap.lookAt(chaseTarget.position().add(0, chaseTarget.getBbHeight() * 0.5, 0));
+
+                        // Wait until cooldown expires before allowing the hit.
+                        if (ap.navChaseAttackCooldown > 0) return false;
+
+                        // Only attack on the way down with fallDistance > 0.
+                        if (player.getDeltaMovement().y >= 0.0D) return false;
+                        if (player.fallDistance <= 0.0F) return false;
+                    }
+                    else if (ap.navChaseAttackCooldown > 0)
+                    {
+                        return false;
+                    }
+
+                    // Attack strength check for modern combat.
+                    if (enforceWeaponCooldown && player.getAttackStrengthScale(0.5F) < 0.9F)
+                    {
+                        return false;
+                    }
+
+                    // Direct attack — bypass ray trace for 100% accuracy.
+                    player.attack(chaseTarget);
+                    player.swing(InteractionHand.MAIN_HAND);
+                    player.resetAttackStrengthTicker();
+                    player.resetLastActionTime();
+                    ap.navChaseAttackCooldown = ap.navChaseAttackInterval;
+                    return true;
+                }
+
+                // --- Standard (non-chase) attack logic ---
                 if (ap.attackCritical)
                 {
                     // After a successful crit hit, wait until we touch the ground,

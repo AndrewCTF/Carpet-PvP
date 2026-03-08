@@ -334,16 +334,33 @@ public class PlayerCommand
                 // --- Chase command ---
                 .then(literal("chase")
                     .then(literal("stop").executes(PlayerCommand::navStop))
-                    // /player <name> nav chase attack [<target>]
+                    // /player <name> nav chase attack [<distance> [<interval> [<target>]]]
                     .then(literal("attack")
-                        .executes(c -> navChase(c, false))
-                        .then(argument("target", StringArgumentType.word())
-                            .executes(c -> navChase(c, false))))
-                    // /player <name> nav chase crit [<target>]
+                        .executes(c -> navChase(c, false, "attack"))
+                        .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
+                            .executes(c -> navChase(c, false, "attack"))
+                            .then(argument("interval", IntegerArgumentType.integer(0))
+                                .executes(c -> navChase(c, false, "attack"))
+                                .then(argument("target", StringArgumentType.word())
+                                    .executes(c -> navChase(c, false, "attack"))))))
+                    // /player <name> nav chase crit [<distance> [<interval> [<target>]]]
                     .then(literal("crit")
-                        .executes(c -> navChase(c, true))
-                        .then(argument("target", StringArgumentType.word())
-                            .executes(c -> navChase(c, true)))))
+                        .executes(c -> navChase(c, true, "crit"))
+                        .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
+                            .executes(c -> navChase(c, true, "crit"))
+                            .then(argument("interval", IntegerArgumentType.integer(0))
+                                .executes(c -> navChase(c, true, "crit"))
+                                .then(argument("target", StringArgumentType.word())
+                                    .executes(c -> navChase(c, true, "crit"))))))
+                    // /player <name> nav chase jumpreset [<distance> [<interval> [<target>]]]
+                    .then(literal("jumpreset")
+                        .executes(c -> navChase(c, true, "jumpreset"))
+                        .then(argument("distance", DoubleArgumentType.doubleArg(0.5D, 3.0D))
+                            .executes(c -> navChase(c, true, "jumpreset"))
+                            .then(argument("interval", IntegerArgumentType.integer(0))
+                                .executes(c -> navChase(c, true, "jumpreset"))
+                                .then(argument("target", StringArgumentType.word())
+                                    .executes(c -> navChase(c, true, "jumpreset")))))))
                 ;
     }
 
@@ -425,7 +442,10 @@ public class PlayerCommand
             ServerPlayer chaseTarget = context.getSource().getServer().getPlayerList().getPlayer(ap.getNavChaseTarget());
             String targetName = chaseTarget != null ? chaseTarget.getName().getString() : ap.getNavChaseTarget().toString();
             String attackMode = ap.isNavChaseCrit() ? "crit" : "attack";
-            Messenger.m(context.getSource(), "w   chasing: ", "y ", targetName, "w  mode: ", "y ", attackMode);
+            String intervalStr = ap.getNavChaseAttackInterval() > 0 ? String.valueOf(ap.getNavChaseAttackInterval()) : "continuous";
+            Messenger.m(context.getSource(), "w   chasing: ", "y ", targetName, "w  mode: ", "y ", attackMode,
+                    "w  range: ", String.format("y %.1f", ap.getNavChaseAttackRange()),
+                    "w  interval: ", "y ", intervalStr);
         }
         return 1;
     }
@@ -545,7 +565,7 @@ public class PlayerCommand
         return 1;
     }
 
-    private static int navChase(CommandContext<CommandSourceStack> context, boolean crit)
+    private static int navChase(CommandContext<CommandSourceStack> context, boolean crit, String modeLabel)
     {
         if (cantNavManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
@@ -599,11 +619,26 @@ public class PlayerCommand
             return 0;
         }
 
+        double distance = 2.5D;
+        try
+        {
+            distance = DoubleArgumentType.getDouble(context, "distance");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        int interval = 0;
+        try
+        {
+            interval = IntegerArgumentType.getInteger(context, "interval");
+        }
+        catch (IllegalArgumentException ignored) {}
+
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
-        ap.setNavChase(targetPlayer.getUUID(), crit);
-        String mode = crit ? "crit" : "attack";
+        ap.setNavChase(targetPlayer.getUUID(), crit, distance, interval);
+        String intervalStr = interval > 0 ? String.valueOf(interval) : "continuous";
         Messenger.m(context.getSource(), "g ", player.getName(), "g  is now chasing ", targetPlayer.getName(),
-                "w  mode=", "y ", mode);
+            "w  mode=", "y ", modeLabel, "w  range=", String.format("y %.1f", distance),
+                "w  interval=", "y ", intervalStr);
         return 1;
     }
 
