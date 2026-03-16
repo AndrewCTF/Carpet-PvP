@@ -79,6 +79,7 @@ public class EntityPlayerActionPack
     private boolean critAwaitingGroundAfterHit;
     private int critPostLandingDelay;
     private int critTargetEntityId = -1; // Entity ID of the target we're crit-attacking
+    private double critJumpDistance = 2.8; // Distance to start jump outside of attack range
 
     private boolean glideEnabled;
     private boolean glideFrozen;
@@ -191,6 +192,7 @@ public class EntityPlayerActionPack
     private int navChaseAttackInterval = 0; // 0 = continuous (every tick)
     private int navChaseAttackCooldown = 0; // ticks remaining until next allowed hit
     private boolean navChaseInRange = false; // true when target is within attack range
+    private boolean navChaseInJumpRange = false; // true when target is within jump attack range
     private int navChaseTargetEntityId = -1; // entity ID for direct attack (bypass ray trace)
 
     // Mine mode fields.
@@ -615,6 +617,7 @@ public class EntityPlayerActionPack
         navChaseAttackInterval = 0;
         navChaseAttackCooldown = 0;
         navChaseInRange = false;
+        navChaseInJumpRange = false;
         navChaseTargetEntityId = -1;
 
         // Mine mode
@@ -794,6 +797,7 @@ public class EntityPlayerActionPack
         navChaseAttackInterval = Math.max(0, attackInterval);
         navChaseAttackCooldown = 0;
         navChaseInRange = false;
+        navChaseInJumpRange = false;
         navChaseTargetEntityId = -1;
         navArrivalRadius = navChaseAttackRange;
         // Start the attack action
@@ -2153,6 +2157,7 @@ public class EntityPlayerActionPack
         }
         else
         {
+            navChaseInJumpRange = (distToTarget <= navChaseAttackRange + critJumpDistance);
             navChaseInRange = false;
             navChaseTargetEntityId = -1;
         }
@@ -2752,8 +2757,20 @@ public class EntityPlayerActionPack
                 // --- Chase mode: direct entity attack for 100% accuracy ---
                 if (ap.navMode == BotNavMode.CHASE)
                 {
-                    // Not in range — do nothing (no swing, no attack).
-                    if (!ap.navChaseInRange || ap.navChaseTargetEntityId == -1)
+                    // Not in range — do nothing (no swing, no attack) except jump if
+                    // close enough.
+                    if (!ap.navChaseInRange)
+                    {
+                        if (ap.attackCritical && ap.navChaseInJumpRange && player.onGround())
+                        {
+                            player.setSprinting(true);
+                            player.jumpFromGround();
+                            player.resetLastActionTime();
+                        }
+
+                        return false;
+                    }
+                    if (ap.navChaseTargetEntityId == -1)
                     {
                         return false;
                     }
