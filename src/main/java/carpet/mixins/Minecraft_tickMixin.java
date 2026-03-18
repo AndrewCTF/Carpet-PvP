@@ -35,10 +35,13 @@ public class Minecraft_tickMixin
     private void syncCameraEntityRotation(CallbackInfo ci)
     {
         if (!CarpetSettings.smoothClientAnimations) return;
+
         Minecraft mc = (Minecraft) (Object) this;
         Entity camera = mc.getCameraEntity();
         if (camera instanceof LivingEntity living && camera == player)
         {
+            if (player.isPassenger()) return; // Camera sync will cause stuttering for passengers
+
             living.yBodyRotO = living.yBodyRot;
             living.yHeadRotO = living.yHeadRot;
         }
