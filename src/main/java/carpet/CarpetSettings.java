@@ -685,10 +685,10 @@ public class CarpetSettings
     )
     public static boolean missingTools = false;
 
-    @Rule(desc = "fill/clone/setblock and structure blocks cause block updates", category = CREATIVE)
+    @Rule(desc = "Fill/clone/setblock and structure blocks cause block updates", category = CREATIVE)
     public static boolean fillUpdates = true;
 
-    @Rule(desc = "placing blocks cause block updates", category = CREATIVE)
+    @Rule(desc = "Placing blocks cause block updates", category = CREATIVE)
     public static boolean interactionUpdates = true;
 
     @Rule(desc = "Disables breaking of blocks caused by flowing liquids", category = CREATIVE)
@@ -696,11 +696,11 @@ public class CarpetSettings
 
 
     @Rule(
-            desc = "smooth client animations with low tps settings",
-            extra = "works only in SP, and will slow down players",
+            desc = "Smooth client animations with low tps settings",
+            extra = "Works only in SP, and will slow down players",
             category = {CREATIVE, SURVIVAL, CLIENT}
     )
-    public static boolean smoothClientAnimations = true;
+    public static boolean smoothClientAnimations = false;
 
     private static class PushLimitLimits extends Validator<Integer> {
         @Override public Integer validate(CommandSourceStack source, CarpetRule<Integer> currentRule, Integer newValue, String string) {
