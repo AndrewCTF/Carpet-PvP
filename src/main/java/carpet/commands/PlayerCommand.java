@@ -570,7 +570,7 @@ public class PlayerCommand
 
         if (targetPlayer == null)
         {
-            Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
+            Messenger.m(context.getSource(), "r No other players to chase.");
             return 0;
         }
         else if (targetPlayer == player)
@@ -1786,7 +1786,7 @@ public class PlayerCommand
 
         for (ServerPlayer p : context.getSource().getServer().getPlayerList().getPlayers())
         {
-            if (p != player)
+            if (p != player && p.level() == player.level())
             {
                 double distToCurrentTarget = player.position().distanceTo(p.position());
                 if (targetPlayer == null || distToCurrentTarget < distToTarget)
@@ -1795,10 +1795,6 @@ public class PlayerCommand
                     distToTarget = distToCurrentTarget;
                 }
             }
-        }
-        if (targetPlayer == null)
-        {
-            Messenger.m(context.getSource(), "r No other players to chase.");
         }
 
         return targetPlayer;
