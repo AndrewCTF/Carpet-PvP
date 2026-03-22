@@ -297,6 +297,7 @@ public class PlayerCommand
                                 .executes(c -> navGotoAir(c, false)))))))
                 // --- Follow command ---
                 .then(literal("follow")
+                    .executes(PlayerCommand::navFollow)
                     .then(argument("target", StringArgumentType.word())
                         .executes(PlayerCommand::navFollow)
                         .then(argument("radius", DoubleArgumentType.doubleArg(1.0D))
@@ -539,8 +540,16 @@ public class PlayerCommand
     private static int navFollow(CommandContext<CommandSourceStack> context)
     {
         if (cantNavManipulate(context)) return 0;
-        String targetName = StringArgumentType.getString(context, "target");
-        double radius = 3.0D;
+
+        // Try to get target name from argument.
+        String targetName = null;
+        try
+        {
+            targetName = StringArgumentType.getString(context, "target");
+        }
+        catch (IllegalArgumentException ignored) {}
+
+        double radius = 1.0D;
         try
         {
             radius = DoubleArgumentType.getDouble(context, "radius");
@@ -548,17 +557,28 @@ public class PlayerCommand
         catch (IllegalArgumentException ignored) {}
 
         ServerPlayer player = getPlayer(context);
-        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+        ServerPlayer targetPlayer;
+
+        if (targetName != null)
+        {
+            targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+        }
+        else
+        {
+            targetPlayer = getNearestPlayerForCommand(context);
+        }
+
         if (targetPlayer == null)
         {
             Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
             return 0;
         }
-        if (targetPlayer == player)
+        else if (targetPlayer == player)
         {
             Messenger.m(context.getSource(), "r Cannot follow self.");
             return 0;
         }
+
         EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
         ap.setNavFollow(targetPlayer.getUUID(), radius);
         Messenger.m(context.getSource(), "g ", player.getName(), "g  is now following ", targetPlayer.getName(), "w  radius=", String.format("y %.1f", radius));
@@ -1756,5 +1776,31 @@ public class PlayerCommand
             LOGGER.error("Failed to display equipment for player {} (requested by {}): {}", player.getName().getString(), source.getTextName(), e.getMessage(), e);
             return 0;
         }
+    }
+
+    private static ServerPlayer getNearestPlayerForCommand(CommandContext<CommandSourceStack> context)
+    {
+        ServerPlayer targetPlayer = null;
+        ServerPlayer player = getPlayer(context);
+        double distToTarget = 0;
+
+        for (ServerPlayer p : context.getSource().getServer().getPlayerList().getPlayers())
+        {
+            if (p != player)
+            {
+                double distToCurrentTarget = player.position().distanceTo(p.position());
+                if (targetPlayer == null || distToCurrentTarget < distToTarget)
+                {
+                    targetPlayer = p;
+                    distToTarget = distToCurrentTarget;
+                }
+            }
+        }
+        if (targetPlayer == null)
+        {
+            Messenger.m(context.getSource(), "r No other players to chase.");
+        }
+
+        return targetPlayer;
     }
 }
