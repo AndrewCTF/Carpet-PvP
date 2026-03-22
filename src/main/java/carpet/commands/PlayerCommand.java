@@ -570,7 +570,7 @@ public class PlayerCommand
 
         if (targetPlayer == null)
         {
-            Messenger.m(context.getSource(), "r No other players to chase.");
+            Messenger.m(context.getSource(), "r No other players to follow.");
             return 0;
         }
         else if (targetPlayer == player)
