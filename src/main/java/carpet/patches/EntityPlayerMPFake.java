@@ -758,57 +758,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     }
 
     public float applyItemBlocking(ServerLevel serverLevel, DamageSource damageSource, float f) {
-        // Bringing LivingEntity applyItemBlocking() code into EntityPlayerMPFake to disable the
-        // odd knockback when the fake player is holding a shield that is hit (see blockUsingItem())
-        // below).
-        if (f <= 0.0F) {
-            return 0.0F;
-        } else {
-            ItemStack itemStack = this.getItemBlockingWith();
-            if (itemStack == null) {
-                return 0.0F;
-            } else {
-                BlocksAttacks blocksAttacks = (BlocksAttacks)itemStack.get(DataComponents.BLOCKS_ATTACKS);
-                if (blocksAttacks != null) {
-                    Optional<TagKey<DamageType>> var10000 = blocksAttacks.bypassedBy();
-                    java.util.Objects.requireNonNull(damageSource);
-                    if (!var10000.map(damageSource::is).orElse(false)) {
-                        Entity var7 = damageSource.getDirectEntity();
-                        if (var7 instanceof AbstractArrow) {
-                            AbstractArrow abstractArrow = (AbstractArrow)var7;
-                            if (abstractArrow.getPierceLevel() > 0) {
-                                return 0.0F;
-                            }
-                        }
-
-                        Vec3 vec3 = damageSource.getSourcePosition();
-                        double d;
-                        if (vec3 != null) {
-                            Vec3 vec32 = this.calculateViewVector(0.0F, this.getYHeadRot());
-                            Vec3 vec33 = vec3.subtract(this.position());
-                            vec33 = (new Vec3(vec33.x, 0.0, vec33.z)).normalize();
-                            d = Math.acos(vec33.dot(vec32));
-                        } else {
-                            d = Math.PI;
-                        }
-
-                        float g = blocksAttacks.resolveBlockedDamage(damageSource, f, d);
-                        blocksAttacks.hurtBlockingItem(this.level(), itemStack, this, this.getUsedItemHand(), g);
-                        if (g > 0.0F && !damageSource.is(DamageTypeTags.IS_PROJECTILE)) {
-                            Entity entity = damageSource.getDirectEntity();
-                            if (entity instanceof LivingEntity) {
-                                LivingEntity livingEntity = (LivingEntity)entity;
-                                this.blockUsingItem(serverLevel, livingEntity);
-                            }
-                        }
-
-                        return g;
-                    }
-                }
-
-                return 0.0F;
-            }
-        }
+        return super.applyItemBlocking(serverLevel, damageSource, f);
     }
 
     protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity) {
