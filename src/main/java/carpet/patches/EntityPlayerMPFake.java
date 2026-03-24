@@ -50,6 +50,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.component.Weapon;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.utils.Messenger;
 import org.slf4j.Logger;
@@ -93,6 +94,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     private final Map<EquipmentSlot, ItemStack> persistentEquipment = new HashMap<>();
     private static final Map<String, Map<EquipmentSlot, ItemStack>> globalEquipmentStorage = new HashMap<>();
     private double disableBlockingForSeconds = DEFAULT_SHIELD_DISABLE_TICKS / TICKS_PER_SECOND;
+    private boolean disableBlockingForSecondsOverridden = false;
 
     public void setDisableBlockingForSeconds(double seconds)
     {
@@ -100,7 +102,13 @@ public class EntityPlayerMPFake extends ServerPlayer
         {
             return;
         }
+        disableBlockingForSecondsOverridden = true;
         disableBlockingForSeconds = Math.max(0.0D, seconds);
+    }
+
+    public boolean hasDisableBlockingForSecondsOverride()
+    {
+        return disableBlockingForSecondsOverridden;
     }
 
     public int getDisableBlockingTicks()
@@ -725,13 +733,28 @@ public class EntityPlayerMPFake extends ServerPlayer
             if (blockedDamage <= 0.0f) return super.hurtServer(serverLevel, source, f);
 
             ItemStack stack = this.getItemBlockingWith();
-            // Check if this is an attack that can disable shields (axes can disable shields)
-            boolean canDisable = source.getEntity() instanceof LivingEntity le && 
-                                le.getMainHandItem().getItem().toString().contains("axe");
+            float weaponDisableSeconds = 0.0F;
+            if (source.getEntity() instanceof LivingEntity attacker)
+            {
+                Weapon weapon = attacker.getMainHandItem().get(DataComponents.WEAPON);
+                if (weapon != null)
+                {
+                    weaponDisableSeconds = weapon.disableBlockingForSeconds();
+                }
+            }
+            boolean canDisable = weaponDisableSeconds > 0.0F;
             if(canDisable){
                 this.playSound(SoundEvents.SHIELD_BREAK.value(), 0.8F, 0.8F + this.level().random.nextFloat() * 0.4F);
                 this.stopUsingItem();
-                int disableTicks = this.getDisableBlockingTicks();
+                int disableTicks;
+                if (this.hasDisableBlockingForSecondsOverride())
+                {
+                    disableTicks = this.getDisableBlockingTicks();
+                }
+                else
+                {
+                    disableTicks = Math.round(weaponDisableSeconds * 20.0F);
+                }
                 if (disableTicks > 0)
                 {
                     this.getCooldowns().addCooldown(stack, disableTicks);
