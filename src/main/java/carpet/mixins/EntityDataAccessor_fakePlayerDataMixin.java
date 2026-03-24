@@ -30,17 +30,19 @@ public class EntityDataAccessor_fakePlayerDataMixin
     {
         if (CarpetSettings.fakePlayerDataModifiable && this.entity instanceof EntityPlayerMPFake)
         {
-            Tag disableBlockingTag = tag.get("disable_blocking_for_seconds");
+            CompoundTag mutableTag = tag.copy();
+            Tag disableBlockingTag = mutableTag.get("disable_blocking_for_seconds");
             if (disableBlockingTag instanceof NumericTag numericTag)
             {
                 ((EntityPlayerMPFake) this.entity).setDisableBlockingForSeconds(numericTag.doubleValue());
             }
+            mutableTag.remove("disable_blocking_for_seconds");
             UUID uuid = this.entity.getUUID();
             try (ProblemReporter.ScopedCollector collector = new ProblemReporter.ScopedCollector(
                     this.entity.problemPath(),
                     org.slf4j.LoggerFactory.getLogger(EntityDataAccessor.class)))
             {
-                this.entity.load(TagValueInput.create(collector, this.entity.registryAccess(), tag));
+                this.entity.load(TagValueInput.create(collector, this.entity.registryAccess(), mutableTag));
             }
             this.entity.setUUID(uuid);
             ci.cancel();
