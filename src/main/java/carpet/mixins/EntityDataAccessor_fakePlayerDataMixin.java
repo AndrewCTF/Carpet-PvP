@@ -3,6 +3,8 @@ package carpet.mixins;
 import carpet.CarpetSettings;
 import carpet.patches.EntityPlayerMPFake;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NumericTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -28,6 +30,11 @@ public class EntityDataAccessor_fakePlayerDataMixin
     {
         if (CarpetSettings.fakePlayerDataModifiable && this.entity instanceof EntityPlayerMPFake)
         {
+            Tag disableBlockingTag = tag.get("disable_blocking_for_seconds");
+            if (disableBlockingTag instanceof NumericTag numericTag)
+            {
+                ((EntityPlayerMPFake) this.entity).setDisableBlockingForSeconds(numericTag.doubleValue());
+            }
             UUID uuid = this.entity.getUUID();
             try (ProblemReporter.ScopedCollector collector = new ProblemReporter.ScopedCollector(
                     this.entity.problemPath(),
