@@ -78,6 +78,8 @@ public class EntityPlayerMPFake extends ServerPlayer
     private static final Logger LOGGER = LoggerFactory.getLogger(EntityPlayerMPFake.class);
     private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private static final Set<String> spawning = new HashSet<>();
+    private static final int DEFAULT_SHIELD_DISABLE_TICKS = 100;
+    private static final double TICKS_PER_SECOND = 20.0D;
 
     public Runnable fixStartingPosition = () -> {};
     public boolean isAShadow;
@@ -90,6 +92,22 @@ public class EntityPlayerMPFake extends ServerPlayer
     // Equipment persistence storage
     private final Map<EquipmentSlot, ItemStack> persistentEquipment = new HashMap<>();
     private static final Map<String, Map<EquipmentSlot, ItemStack>> globalEquipmentStorage = new HashMap<>();
+    private double disableBlockingForSeconds = DEFAULT_SHIELD_DISABLE_TICKS / TICKS_PER_SECOND;
+
+    public void setDisableBlockingForSeconds(double seconds)
+    {
+        if (!Double.isFinite(seconds))
+        {
+            return;
+        }
+        disableBlockingForSeconds = Math.max(0.0D, seconds);
+    }
+
+    public int getDisableBlockingTicks()
+    {
+        long disableTicks = Math.round(disableBlockingForSeconds * TICKS_PER_SECOND);
+        return (int) Mth.clamp(disableTicks, 0L, Integer.MAX_VALUE);
+    }
 
     // Returns true if it was successful, false if couldn't spawn due to the player not existing in Mojang servers
     public static boolean createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
@@ -713,7 +731,11 @@ public class EntityPlayerMPFake extends ServerPlayer
             if(canDisable){
                 this.playSound(SoundEvents.SHIELD_BREAK.value(), 0.8F, 0.8F + this.level().random.nextFloat() * 0.4F);
                 this.stopUsingItem();
-                this.getCooldowns().addCooldown(stack, 100);
+                int disableTicks = this.getDisableBlockingTicks();
+                if (disableTicks > 0)
+                {
+                    this.getCooldowns().addCooldown(stack, disableTicks);
+                }
                 if(!CarpetSettings.shieldStunning) {
                     this.invulnerableTime = 20;
                 }
