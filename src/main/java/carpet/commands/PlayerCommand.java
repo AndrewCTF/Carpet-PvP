@@ -27,7 +27,6 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.commands.arguments.GameModeArgument;
 import net.minecraft.commands.arguments.coordinates.RotationArgument;
@@ -46,7 +45,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
@@ -78,7 +76,8 @@ public class PlayerCommand
     {
         LiteralArgumentBuilder<CommandSourceStack> command = literal("player")
                 .requires((player) -> CommandHelper.canUseCommand(player, CarpetSettings.commandPlayer))
-            .then(argument("player", EntityArgument.entities())
+            .then(argument("player", StringArgumentType.word())
+                .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
                         .then(literal("stop").executes(manipulation(EntityPlayerActionPack::stopAll)))
                         .then(makeActionCommand("use", ActionType.USE))
                         .then(makeActionCommand("jump", ActionType.JUMP))
@@ -306,7 +305,8 @@ public class PlayerCommand
                 // --- Follow command ---
                 .then(literal("follow")
                     .executes(PlayerCommand::navFollow)
-                    .then(argument("target", EntityArgument.entities())
+                    .then(argument("target", StringArgumentType.word())
+                        .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
                         .executes(PlayerCommand::navFollow)
                         .then(argument("radius", DoubleArgumentType.doubleArg(1.0D))
                             .executes(PlayerCommand::navFollow))))
@@ -350,7 +350,8 @@ public class PlayerCommand
                             .executes(c -> navChase(c, false, "attack"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, false, "attack"))
-                                .then(argument("target", EntityArgument.entities())
+                                .then(argument("target", StringArgumentType.word())
+                                    .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
                                     .executes(c -> navChase(c, false, "attack"))))))
                     // /player <name> nav chase crit [<distance> [<interval> [<target>]]]
                     .then(literal("crit")
@@ -359,7 +360,8 @@ public class PlayerCommand
                             .executes(c -> navChase(c, true, "crit"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "crit"))
-                                .then(argument("target", EntityArgument.entities())
+                                .then(argument("target", StringArgumentType.word())
+                                    .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
                                     .executes(c -> navChase(c, true, "crit"))))))
                     // /player <name> nav chase jumpreset [<distance> [<interval> [<target>]]]
                     .then(literal("jumpreset")
@@ -368,7 +370,8 @@ public class PlayerCommand
                             .executes(c -> navChase(c, true, "jumpreset"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "jumpreset"))
-                                .then(argument("target", EntityArgument.entities())
+                                .then(argument("target", StringArgumentType.word())
+                                    .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
                                     .executes(c -> navChase(c, true, "jumpreset")))))))
                 ;
     }
@@ -549,13 +552,13 @@ public class PlayerCommand
     {
         if (cantNavManipulate(context)) return 0;
 
-        // Try to get target selector from argument.
-        Collection<? extends Entity> targetEntities = null;
+        // Try to get target name from argument.
+        String targetName = null;
         try
         {
-            targetEntities = EntityArgument.getOptionalEntities(context, "target");
+            targetName = StringArgumentType.getString(context, "target");
         }
-        catch (IllegalArgumentException | CommandSyntaxException ignored) {}
+        catch (IllegalArgumentException ignored) {}
 
         double radius = 1.0D;
         try
@@ -567,15 +570,12 @@ public class PlayerCommand
         ServerPlayer player = getPlayer(context);
         ServerPlayer targetPlayer;
 
-        if (targetEntities != null)
+        if (targetName != null)
         {
-            List<ServerPlayer> resolvedTargets = targetEntities.stream()
-                    .filter(entity -> entity instanceof ServerPlayer)
-                    .map(entity -> (ServerPlayer) entity)
-                    .toList();
+            List<ServerPlayer> resolvedTargets = resolvePlayersByName(context.getSource(), targetName);
             if (resolvedTargets.isEmpty())
             {
-                Messenger.m(context.getSource(), "r No players matched the specified target.");
+                Messenger.m(context.getSource(), "r No players matched target '", targetName, "r '.");
                 return 0;
             }
             targetPlayer = resolvedTargets.stream()
@@ -615,24 +615,21 @@ public class PlayerCommand
         if (cantNavManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
 
-        // Try to get target selector from argument.
-        Collection<? extends Entity> targetEntities = null;
+        // Try to get target name from argument.
+        String targetName = null;
         try
         {
-            targetEntities = EntityArgument.getOptionalEntities(context, "target");
+            targetName = StringArgumentType.getString(context, "target");
         }
-        catch (IllegalArgumentException | CommandSyntaxException ignored) {}
+        catch (IllegalArgumentException ignored) {}
 
         ServerPlayer targetPlayer;
-        if (targetEntities != null)
+        if (targetName != null)
         {
-            List<ServerPlayer> resolvedTargets = targetEntities.stream()
-                    .filter(entity -> entity instanceof ServerPlayer)
-                    .map(entity -> (ServerPlayer) entity)
-                    .toList();
+            List<ServerPlayer> resolvedTargets = resolvePlayersByName(context.getSource(), targetName);
             if (resolvedTargets.isEmpty())
             {
-                Messenger.m(context.getSource(), "r No players matched the specified target.");
+                Messenger.m(context.getSource(), "r No players matched target '", targetName, "r '.");
                 return 0;
             }
             targetPlayer = resolvedTargets.stream()
@@ -1145,27 +1142,23 @@ public class PlayerCommand
                         executes(c -> manipulate(c, ap -> ap.drop(IntegerArgumentType.getInteger(c, "slot"), dropAll))));
     }
 
+    private static Collection<String> getPlayerSuggestions(CommandSourceStack source)
+    {
+        Set<String> players = new LinkedHashSet<>(List.of("Bot", "@s", "@p", "@a", "@e[type=player]"));
+        players.addAll(source.getOnlinePlayerNames());
+        return players;
+    }
+
+    private static List<ServerPlayer> resolvePlayersByName(CommandSourceStack source, String target)
+    {
+        ServerPlayer player = source.getServer().getPlayerList().getPlayerByName(target);
+        return player == null ? List.of() : List.of(player);
+    }
+
     private static List<ServerPlayer> getPlayers(CommandContext<CommandSourceStack> context)
     {
-        Collection<? extends Entity> entities;
-        try
-        {
-            entities = EntityArgument.getOptionalEntities(context, "player");
-        }
-        catch (IllegalArgumentException | CommandSyntaxException ignored)
-        {
-            return List.of();
-        }
-
-        List<ServerPlayer> players = new ArrayList<>();
-        for (Entity entity : entities)
-        {
-            if (entity instanceof ServerPlayer serverPlayer)
-            {
-                players.add(serverPlayer);
-            }
-        }
-        return players;
+        String playerName = StringArgumentType.getString(context, "player");
+        return resolvePlayersByName(context.getSource(), playerName);
     }
 
     private static ServerPlayer getPlayer(CommandContext<CommandSourceStack> context)
