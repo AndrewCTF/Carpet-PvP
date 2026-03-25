@@ -180,19 +180,24 @@ public class PlayerCommand
 
     private static LiteralArgumentBuilder<CommandSourceStack> makePlayerSpawnSubcommand()
     {
-    return literal("spawn").executes(PlayerCommand::spawn)
-        .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
-            .then(argument("gamemode", GameModeArgument.gameMode())
-                .executes(PlayerCommand::spawn)))
-        .then(literal("at").then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
-            .then(literal("facing").then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
-                .then(literal("in").then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
-                    .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
-                        .then(argument("gamemode", GameModeArgument.gameMode())
-                            .executes(PlayerCommand::spawn)
-                        )))
-                )))
-            )));
+        LiteralArgumentBuilder<CommandSourceStack> spawn = literal("spawn")
+            .executes(PlayerCommand::spawn)
+            .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
+                .then(argument("gamemode", GameModeArgument.gameMode())
+                    .executes(PlayerCommand::spawn)));
+
+        spawn.then(literal("at")
+            .then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
+                .then(literal("facing")
+                    .then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
+                        .then(literal("in")
+                            .then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
+                                .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
+                                    .then(argument("gamemode", GameModeArgument.gameMode())
+                                        .executes(PlayerCommand::spawn)
+                                    ))))))));
+
+        return spawn;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeGlideCommand()
