@@ -154,28 +154,6 @@ public class PlayerCommand
             .then(makePlayerSpawnSubcommand())
         );
     dispatcher.register(command);
-
-    LiteralArgumentBuilder<CommandSourceStack> spawnPlayer = literal("spawnplayer")
-        .executes(c -> {
-            Messenger.m(c.getSource(), "w Usage: /spawnplayer <name> [at <x y z>] [facing <yaw> <pitch>] [in <dimension>] [in <gamemode>]");
-            return 1;
-        })
-        .then(argument("player", StringArgumentType.word())
-            .executes(PlayerCommand::spawn)
-            .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
-                .then(argument("gamemode", GameModeArgument.gameMode())
-                    .executes(PlayerCommand::spawn)))
-            .then(literal("at").then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
-                .then(literal("facing").then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
-                    .then(literal("in").then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
-                        .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
-                            .then(argument("gamemode", GameModeArgument.gameMode())
-                                .executes(PlayerCommand::spawn)
-                            )))
-                    )))
-                ))
-        );
-    dispatcher.register(spawnPlayer);
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makePlayerSpawnSubcommand()

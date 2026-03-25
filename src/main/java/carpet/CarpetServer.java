@@ -18,6 +18,7 @@ import carpet.commands.ProfileCommand;
 import carpet.commands.ScheduleCommand;
 import carpet.script.ScriptCommand;
 import carpet.commands.SpawnCommand;
+import carpet.commands.SpawnPlayerCommand;
 import carpet.commands.TestCommand;
 import carpet.network.ServerNetworkHandler;
 import carpet.helpers.HopperCounter;
@@ -121,6 +122,7 @@ public class CarpetServer
         LogCommand.register(dispatcher, commandBuildContext);
         SpawnCommand.register(dispatcher, commandBuildContext);
         PlayerCommand.register(dispatcher, commandBuildContext);
+        SpawnPlayerCommand.register(dispatcher, commandBuildContext);
         InfoCommand.register(dispatcher, commandBuildContext);
         DistanceCommand.register(dispatcher, commandBuildContext);
         PerimeterInfoCommand.register(dispatcher, commandBuildContext);
