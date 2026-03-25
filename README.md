@@ -8,7 +8,7 @@
 Carpet PvP is a fork of TheobaldTheBird's Carpet PvP, we aim to provide frequent updates so that Carpet PvP will be supported as soon as possible.
 
 Discord: [Carpet PvP Support](https://discord.gg/PAbydjFxKs)\
-Support this project: [Buy Me a Cup of Coffee](https://buymeacoffee.com/andrewyong)
+Support this project: [Buy Me a Coffee](https://buymeacoffee.com/andrewyong)
 
 ## Supported versions:
 
