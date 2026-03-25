@@ -665,7 +665,7 @@ public class CarpetSettings
 
 
     @Rule(desc = "Enables /player command to control/spawn players", category = COMMAND)
-    public static String commandPlayer = "ops";
+    public static String commandPlayer = "true";
 
     @Rule(desc = "Spawn offline players in online mode if online-mode player with specified name does not exist", category = COMMAND)
     public static boolean allowSpawningOfflinePlayers = true;

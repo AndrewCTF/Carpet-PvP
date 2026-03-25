@@ -23,10 +23,12 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.context.ParsedCommandNode;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.commands.arguments.GameModeArgument;
 import net.minecraft.commands.arguments.coordinates.RotationArgument;
@@ -45,6 +47,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
@@ -56,10 +59,8 @@ import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -74,96 +75,108 @@ public class PlayerCommand
     // TODO: allow any order like execute
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext commandBuildContext)
     {
-        LiteralArgumentBuilder<CommandSourceStack> command = literal("player")
-                .requires((player) -> CommandHelper.canUseCommand(player, CarpetSettings.commandPlayer))
-                .then(argument("player", StringArgumentType.word())
-                        .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
-                        .then(literal("stop").executes(manipulation(EntityPlayerActionPack::stopAll)))
-                        .then(makeActionCommand("use", ActionType.USE))
-                        .then(makeActionCommand("jump", ActionType.JUMP))
-                        .then(makeAttackCommand())
-                    .then(makeGlideCommand())
-                    .then(makeNavCommand())
-                        .then(makeActionCommand("drop", ActionType.DROP_ITEM))
-                        .then(makeDropCommand("drop", false))
-                        .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
-                        .then(makeDropCommand("dropStack", true))
-                        .then(makeActionCommand("swapHands", ActionType.SWAP_HANDS))
-                        .then(makeActionCommand("swing", ActionType.SWING))
-                        .then(literal("animate")
-                                .then(literal("attack").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
-                                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
-                                .then(literal("continuous").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.continuous()))))
-                                .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
-                                        .executes(c -> manipulate(c, ap -> ap.start(ActionType.SWING, Action.interval(IntegerArgumentType.getInteger(c, "ticks"))))))))
-                        .then(literal("hotbar")
-                                .then(argument("slot", IntegerArgumentType.integer(1, 9))
-                                        .executes(c -> manipulate(c, ap -> ap.setSlot(IntegerArgumentType.getInteger(c, "slot"))))))
-                        .then(literal("kill").executes(PlayerCommand::kill))
-                        .then(literal("disconnect").executes(PlayerCommand::disconnect))
-                        .then(literal("shadow"). executes(PlayerCommand::shadow))
-                        .then(literal("mount").executes(manipulation(ap -> ap.mount(true)))
-                                .then(literal("anything").executes(manipulation(ap -> ap.mount(false)))))
-                        .then(literal("dismount").executes(manipulation(EntityPlayerActionPack::dismount)))
-                        .then(makeEquipmentCommands(commandBuildContext))
-                        .then(literal("unequip")
-                                .then(argument("slot", StringArgumentType.word())
-                                        .suggests((c, b) -> suggest(List.of("head", "helmet", "chest", "chestplate", "legs", "leggings", "feet", "boots", "mainhand", "weapon", "offhand", "shield"), b))
-                                        .executes(PlayerCommand::unequipItem)))
-                        .then(literal("equipment").executes(PlayerCommand::showEquipment))
-                        .then(makeItemCdCommand(commandBuildContext))
-                        .then(literal("sneak").executes(manipulation(ap -> ap.setSneaking(true)))
-                                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
-                                        .executes(c -> manipulate(c, ap -> {
-                                            ap.setSneaking(true);
-                                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
-                                        })))))
-                        .then(literal("unsneak").executes(manipulation(ap -> ap.setSneaking(false))))
-                        .then(literal("sprint").executes(manipulation(ap -> ap.setSprinting(true)))
-                                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
-                                        .executes(c -> manipulate(c, ap -> {
-                                            ap.setSprinting(true);
-                                            ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
-                                        })))))
-                        .then(literal("unsprint").executes(manipulation(ap -> ap.setSprinting(false))))
-                        .then(literal("look")
-                                .then(literal("north").executes(manipulation(ap -> ap.look(Direction.NORTH))))
-                                .then(literal("south").executes(manipulation(ap -> ap.look(Direction.SOUTH))))
-                                .then(literal("east").executes(manipulation(ap -> ap.look(Direction.EAST))))
-                                .then(literal("west").executes(manipulation(ap -> ap.look(Direction.WEST))))
-                                .then(literal("up").executes(manipulation(ap -> ap.look(Direction.UP))))
-                                .then(literal("down").executes(manipulation(ap -> ap.look(Direction.DOWN))))
-                                .then(literal("at").then(argument("position", Vec3Argument.vec3())
-                                        .executes(c -> manipulate(c, ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"))))))
-                                .then(argument("direction", RotationArgument.rotation())
-                                        .executes(c -> manipulate(c, ap -> ap.look(RotationArgument.getRotation(c, "direction").getRotation(c.getSource())))))
-                        ).then(literal("turn")
-                                .then(literal("left").executes(manipulation(ap -> ap.turn(-90, 0))))
-                                .then(literal("right").executes(manipulation(ap -> ap.turn(90, 0))))
-                                .then(literal("back").executes(manipulation(ap -> ap.turn(180, 0))))
-                                .then(argument("rotation", RotationArgument.rotation())
-                                        .executes(c -> manipulate(c, ap -> ap.turn(RotationArgument.getRotation(c, "rotation").getRotation(c.getSource())))))
-                        ).then(literal("move").executes(manipulation(EntityPlayerActionPack::stopMovement))
-                                .then(makeMoveDirection("forward", 1.0F, 0.0F))
-                                .then(makeMoveDirection("backward", -1.0F, 0.0F))
-                                .then(makeMoveDirection("left", 0.0F, 1.0F))
-                                .then(makeMoveDirection("right", 0.0F, -1.0F))
-                        ).then(literal("spawn").executes(PlayerCommand::spawn)
-                            .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
-                                        .then(argument("gamemode", GameModeArgument.gameMode())
-                                        .executes(PlayerCommand::spawn)))
-                                .then(literal("at").then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
-                                        .then(literal("facing").then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
-                                                .then(literal("in").then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
-                                        .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
-                                                                .then(argument("gamemode", GameModeArgument.gameMode())
-                                                                .executes(PlayerCommand::spawn)
-                                                        )))
-                                        )))
-                                ))
-                        )
-                );
-        dispatcher.register(command);
+    LiteralArgumentBuilder<CommandSourceStack> command = literal("player")
+        .then(argument("player", EntityArgument.entities())
+            .then(literal("stop").executes(manipulation(EntityPlayerActionPack::stopAll)))
+            .then(makeActionCommand("use", ActionType.USE))
+            .then(makeActionCommand("jump", ActionType.JUMP))
+            .then(makeAttackCommand())
+            .then(makeGlideCommand())
+            .then(makeNavCommand())
+            .then(makeActionCommand("drop", ActionType.DROP_ITEM))
+            .then(makeDropCommand("drop", false))
+            .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
+            .then(makeDropCommand("dropStack", true))
+            .then(makeActionCommand("swapHands", ActionType.SWAP_HANDS))
+            .then(makeActionCommand("swing", ActionType.SWING))
+            .then(literal("animate")
+                .then(literal("attack").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                .then(literal("continuous").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.continuous()))))
+                .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
+                    .executes(c -> manipulate(c, ap -> ap.start(ActionType.SWING, Action.interval(IntegerArgumentType.getInteger(c, "ticks"))))))))
+            .then(literal("hotbar")
+                .then(argument("slot", IntegerArgumentType.integer(1, 9))
+                    .executes(c -> manipulate(c, ap -> ap.setSlot(IntegerArgumentType.getInteger(c, "slot"))))))
+            .then(literal("kill").executes(PlayerCommand::kill))
+            .then(literal("disconnect").executes(PlayerCommand::disconnect))
+            .then(literal("shadow").executes(PlayerCommand::shadow))
+            .then(literal("mount").executes(manipulation(ap -> ap.mount(true)))
+                .then(literal("anything").executes(manipulation(ap -> ap.mount(false)))))
+            .then(literal("dismount").executes(manipulation(EntityPlayerActionPack::dismount)))
+            .then(makeEquipmentCommands(commandBuildContext))
+            .then(literal("unequip")
+                .then(argument("slot", StringArgumentType.word())
+                    .suggests((c, b) -> suggest(List.of("head", "helmet", "chest", "chestplate", "legs", "leggings", "feet", "boots", "mainhand", "weapon", "offhand", "shield"), b))
+                    .executes(PlayerCommand::unequipItem)))
+            .then(literal("equipment").executes(PlayerCommand::showEquipment))
+            .then(makeItemCdCommand(commandBuildContext))
+            .then(literal("sneak").executes(manipulation(ap -> ap.setSneaking(true)))
+                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                    .executes(c -> manipulate(c, ap -> {
+                        ap.setSneaking(true);
+                        ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                    })))))
+            .then(literal("unsneak").executes(manipulation(ap -> ap.setSneaking(false))))
+            .then(literal("sprint").executes(manipulation(ap -> ap.setSprinting(true)))
+                .then(literal("for").then(argument("ticks", IntegerArgumentType.integer(1))
+                    .executes(c -> manipulate(c, ap -> {
+                        ap.setSprinting(true);
+                        ap.setMoveDuration(IntegerArgumentType.getInteger(c, "ticks"));
+                    })))))
+            .then(literal("unsprint").executes(manipulation(ap -> ap.setSprinting(false))))
+            .then(literal("look")
+                .then(literal("north").executes(manipulation(ap -> ap.look(Direction.NORTH))))
+                .then(literal("south").executes(manipulation(ap -> ap.look(Direction.SOUTH))))
+                .then(literal("east").executes(manipulation(ap -> ap.look(Direction.EAST))))
+                .then(literal("west").executes(manipulation(ap -> ap.look(Direction.WEST))))
+                .then(literal("up").executes(manipulation(ap -> ap.look(Direction.UP))))
+                .then(literal("down").executes(manipulation(ap -> ap.look(Direction.DOWN))))
+                .then(literal("at").then(argument("position", Vec3Argument.vec3())
+                    .executes(c -> manipulate(c, ap -> ap.lookAt(Vec3Argument.getVec3(c, "position"))))))
+                .then(argument("direction", RotationArgument.rotation())
+                    .executes(c -> manipulate(c, ap -> ap.look(RotationArgument.getRotation(c, "direction").getRotation(c.getSource())))))
+            )
+            .then(literal("turn")
+                .then(literal("left").executes(manipulation(ap -> ap.turn(-90, 0))))
+                .then(literal("right").executes(manipulation(ap -> ap.turn(90, 0))))
+                .then(literal("back").executes(manipulation(ap -> ap.turn(180, 0))))
+                .then(argument("rotation", RotationArgument.rotation())
+                    .executes(c -> manipulate(c, ap -> ap.turn(RotationArgument.getRotation(c, "rotation").getRotation(c.getSource())))))
+            )
+            .then(literal("move").executes(manipulation(EntityPlayerActionPack::stopMovement))
+                .then(makeMoveDirection("forward", 1.0F, 0.0F))
+                .then(makeMoveDirection("backward", -1.0F, 0.0F))
+                .then(makeMoveDirection("left", 0.0F, 1.0F))
+                .then(makeMoveDirection("right", 0.0F, -1.0F))
+            )
+        )
+        .then(argument("player_name", StringArgumentType.word())
+            .then(makePlayerSpawnSubcommand())
+        );
+    dispatcher.register(command);
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makePlayerSpawnSubcommand()
+    {
+        LiteralArgumentBuilder<CommandSourceStack> spawn = literal("spawn")
+            .executes(PlayerCommand::spawn)
+            .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
+                .then(argument("gamemode", GameModeArgument.gameMode())
+                    .executes(PlayerCommand::spawn)));
+
+        spawn.then(literal("at")
+            .then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
+                .then(literal("facing")
+                    .then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
+                        .then(literal("in")
+                            .then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
+                                .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
+                                    .then(argument("gamemode", GameModeArgument.gameMode())
+                                        .executes(PlayerCommand::spawn)
+                                    ))))))));
+
+        return spawn;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeGlideCommand()
@@ -298,7 +311,7 @@ public class PlayerCommand
                 // --- Follow command ---
                 .then(literal("follow")
                     .executes(PlayerCommand::navFollow)
-                    .then(argument("target", StringArgumentType.word())
+                    .then(argument("target", EntityArgument.entities())
                         .executes(PlayerCommand::navFollow)
                         .then(argument("radius", DoubleArgumentType.doubleArg(1.0D))
                             .executes(PlayerCommand::navFollow))))
@@ -342,7 +355,7 @@ public class PlayerCommand
                             .executes(c -> navChase(c, false, "attack"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, false, "attack"))
-                                .then(argument("target", StringArgumentType.word())
+                                .then(argument("target", EntityArgument.entities())
                                     .executes(c -> navChase(c, false, "attack"))))))
                     // /player <name> nav chase crit [<distance> [<interval> [<target>]]]
                     .then(literal("crit")
@@ -351,7 +364,7 @@ public class PlayerCommand
                             .executes(c -> navChase(c, true, "crit"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "crit"))
-                                .then(argument("target", StringArgumentType.word())
+                                .then(argument("target", EntityArgument.entities())
                                     .executes(c -> navChase(c, true, "crit"))))))
                     // /player <name> nav chase jumpreset [<distance> [<interval> [<target>]]]
                     .then(literal("jumpreset")
@@ -360,7 +373,7 @@ public class PlayerCommand
                             .executes(c -> navChase(c, true, "jumpreset"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "jumpreset"))
-                                .then(argument("target", StringArgumentType.word())
+                                .then(argument("target", EntityArgument.entities())
                                     .executes(c -> navChase(c, true, "jumpreset")))))))
                 ;
     }
@@ -541,13 +554,13 @@ public class PlayerCommand
     {
         if (cantNavManipulate(context)) return 0;
 
-        // Try to get target name from argument.
-        String targetName = null;
+        // Try to get target selector from argument.
+        Collection<? extends Entity> targetEntities = null;
         try
         {
-            targetName = StringArgumentType.getString(context, "target");
+            targetEntities = EntityArgument.getOptionalEntities(context, "target");
         }
-        catch (IllegalArgumentException ignored) {}
+        catch (IllegalArgumentException | CommandSyntaxException ignored) {}
 
         double radius = 1.0D;
         try
@@ -559,9 +572,26 @@ public class PlayerCommand
         ServerPlayer player = getPlayer(context);
         ServerPlayer targetPlayer;
 
-        if (targetName != null)
+        if (targetEntities != null)
         {
-            targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+            List<ServerPlayer> resolvedTargets = targetEntities.stream()
+                    .filter(entity -> entity instanceof ServerPlayer)
+                    .map(entity -> (ServerPlayer) entity)
+                    .toList();
+            if (resolvedTargets.isEmpty())
+            {
+                Messenger.m(context.getSource(), "r No players matched the specified target.");
+                return 0;
+            }
+            targetPlayer = resolvedTargets.stream()
+                    .filter(p -> p != player)
+                    .min((a, b) -> Double.compare(a.distanceToSqr(player), b.distanceToSqr(player)))
+                    .orElse(resolvedTargets.getFirst());
+
+            if (resolvedTargets.size() > 1)
+            {
+                Messenger.m(context.getSource(), "y Multiple targets matched. Following nearest: ", targetPlayer.getName());
+            }
         }
         else
         {
@@ -590,22 +620,34 @@ public class PlayerCommand
         if (cantNavManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
 
-        // Try to get target name from argument.
-        String targetName = null;
+        // Try to get target selector from argument.
+        Collection<? extends Entity> targetEntities = null;
         try
         {
-            targetName = StringArgumentType.getString(context, "target");
+            targetEntities = EntityArgument.getOptionalEntities(context, "target");
         }
-        catch (IllegalArgumentException ignored) {}
+        catch (IllegalArgumentException | CommandSyntaxException ignored) {}
 
         ServerPlayer targetPlayer;
-        if (targetName != null)
+        if (targetEntities != null)
         {
-            targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
-            if (targetPlayer == null)
+            List<ServerPlayer> resolvedTargets = targetEntities.stream()
+                    .filter(entity -> entity instanceof ServerPlayer)
+                    .map(entity -> (ServerPlayer) entity)
+                    .toList();
+            if (resolvedTargets.isEmpty())
             {
-                Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
+                Messenger.m(context.getSource(), "r No players matched the specified target.");
                 return 0;
+            }
+            targetPlayer = resolvedTargets.stream()
+                    .filter(p -> p != player)
+                    .min((a, b) -> Double.compare(a.distanceToSqr(player), b.distanceToSqr(player)))
+                    .orElse(resolvedTargets.getFirst());
+
+            if (resolvedTargets.size() > 1)
+            {
+                Messenger.m(context.getSource(), "y Multiple targets matched. Chasing nearest: ", targetPlayer.getName());
             }
         }
         else
@@ -1108,24 +1150,76 @@ public class PlayerCommand
                         executes(c -> manipulate(c, ap -> ap.drop(IntegerArgumentType.getInteger(c, "slot"), dropAll))));
     }
 
-    private static Collection<String> getPlayerSuggestions(CommandSourceStack source)
+    private static List<ServerPlayer> getPlayers(CommandContext<CommandSourceStack> context)
     {
-        //using s instead of @s because making it parse selectors properly was a pain in the ass
-        Set<String> players = new LinkedHashSet<>(List.of("Bot", "s"));
-        players.addAll(source.getOnlinePlayerNames());
+        Collection<? extends Entity> entities;
+        try
+        {
+            entities = EntityArgument.getOptionalEntities(context, "player");
+        }
+        catch (IllegalArgumentException | CommandSyntaxException ignored)
+        {
+            return getSelfTargetFallback(context);
+        }
+
+        List<ServerPlayer> players = new ArrayList<>();
+        for (Entity entity : entities)
+        {
+            if (entity instanceof ServerPlayer serverPlayer)
+            {
+                players.add(serverPlayer);
+            }
+        }
+        if (players.isEmpty())
+        {
+            List<ServerPlayer> selfFallback = getSelfTargetFallback(context);
+            if (!selfFallback.isEmpty())
+            {
+                return selfFallback;
+            }
+        }
         return players;
+    }
+
+    private static List<ServerPlayer> getSelfTargetFallback(CommandContext<CommandSourceStack> context)
+    {
+        String rawTarget = getRawPlayerTarget(context);
+        if (!"@s".equals(rawTarget) && !"s".equals(rawTarget))
+        {
+            return List.of();
+        }
+
+        Entity sourceEntity = context.getSource().getEntity();
+        if (sourceEntity instanceof ServerPlayer serverPlayer)
+        {
+            return List.of(serverPlayer);
+        }
+        return List.of();
+    }
+
+    private static String getRawPlayerTarget(CommandContext<CommandSourceStack> context)
+    {
+        for (ParsedCommandNode<CommandSourceStack> node : context.getNodes())
+        {
+            if (!"player".equals(node.getNode().getName()))
+            {
+                continue;
+            }
+
+            int start = node.getRange().getStart();
+            int end = node.getRange().getEnd();
+            if (start >= 0 && end >= start && end <= context.getInput().length())
+            {
+                return context.getInput().substring(start, end).trim();
+            }
+        }
+        return "";
     }
 
     private static ServerPlayer getPlayer(CommandContext<CommandSourceStack> context)
     {
-        String playerName = StringArgumentType.getString(context, "player");
-        CommandSourceStack source = context.getSource();
-        MinecraftServer server = source.getServer();
-
-        //we can just use '/execute as' when we want proper target selectors
-        if (playerName.equals("s") && source.isPlayer()) return source.getPlayer();
-
-        return server.getPlayerList().getPlayerByName(playerName);
+        List<ServerPlayer> players = getPlayers(context);
+        return players.isEmpty() ? null : players.getFirst();
     }
 
     private static NameAndId nameAndId(GameProfile profile)
@@ -1135,9 +1229,18 @@ public class PlayerCommand
 
     private static boolean cantManipulate(CommandContext<CommandSourceStack> context)
     {
-        Player player = getPlayer(context);
+        return cantManipulate(context, getPlayers(context));
+    }
+
+    private static boolean cantManipulate(CommandContext<CommandSourceStack> context, List<ServerPlayer> players)
+    {
         CommandSourceStack source = context.getSource();
-        if (player == null)
+        if (!CommandHelper.canUseCommand(source, CarpetSettings.commandPlayer))
+        {
+            Messenger.m(source, "r You don't have permission to use /player commands");
+            return true;
+        }
+        if (players.isEmpty())
         {
             Messenger.m(source, "r Can only manipulate existing players");
             return true;
@@ -1150,10 +1253,13 @@ public class PlayerCommand
 
         if (!source.getServer().getPlayerList().isOp(nameAndId(sender.getGameProfile())))
         {
-            if (sender != player && !(player instanceof EntityPlayerMPFake))
+            for (Player player : players)
             {
-                Messenger.m(source, "r Non OP players can't control other real players");
-                return true;
+                if (sender != player && !(player instanceof EntityPlayerMPFake))
+                {
+                    Messenger.m(source, "r Non OP players can't control other real players");
+                    return true;
+                }
             }
         }
         return false;
@@ -1161,16 +1267,32 @@ public class PlayerCommand
 
     private static boolean cantReMove(CommandContext<CommandSourceStack> context)
     {
-        if (cantManipulate(context)) return true;
-        Player player = getPlayer(context);
-        if (player instanceof EntityPlayerMPFake) return false;
-        Messenger.m(context.getSource(), "r Only fake players can be moved or killed");
-        return true;
+        List<ServerPlayer> players = getPlayers(context);
+        if (cantManipulate(context, players)) return true;
+        for (Player player : players)
+        {
+            if (!(player instanceof EntityPlayerMPFake))
+            {
+                Messenger.m(context.getSource(), "r Only fake players can be moved or killed");
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean cantSpawn(CommandContext<CommandSourceStack> context)
     {
-        String playerName = StringArgumentType.getString(context, "player");
+        if (!CommandHelper.canUseCommand(context.getSource(), CarpetSettings.commandPlayer))
+        {
+            Messenger.m(context.getSource(), "r You don't have permission to use /spawnplayer");
+            return true;
+        }
+            String playerName = getSpawnPlayerName(context);
+        if (playerName.startsWith("@"))
+        {
+            Messenger.m(context.getSource(), "r Spawn target must be a single player name, not a selector");
+            return true;
+        }
         MinecraftServer server = context.getSource().getServer();
         PlayerList manager = server.getPlayerList();
 
@@ -1211,20 +1333,24 @@ public class PlayerCommand
 
     private static int kill(CommandContext<CommandSourceStack> context) {
         if (cantReMove(context)) return 0;
-        ServerPlayer player = getPlayer(context);
-        player.kill((net.minecraft.server.level.ServerLevel) player.level());
-        return 1;
+        int killed = 0;
+        for (ServerPlayer player : getPlayers(context))
+        {
+            player.kill((net.minecraft.server.level.ServerLevel) player.level());
+            killed++;
+        }
+        return killed;
     }
 
     private static int disconnect(CommandContext<CommandSourceStack> context) {
-        Player player = getPlayer(context);
-        if (player instanceof EntityPlayerMPFake)
+        if (cantReMove(context)) return 0;
+        int disconnected = 0;
+        for (ServerPlayer player : getPlayers(context))
         {
             ((EntityPlayerMPFake) player).fakePlayerDisconnect(Messenger.s(""));
-            return 1;
+            disconnected++;
         }
-        Messenger.m(context.getSource(), "r Cannot disconnect real players");
-        return 0;
+        return disconnected;
     }
 
     @FunctionalInterface
@@ -1277,7 +1403,7 @@ public class PlayerCommand
             // Force override flying to false for survival-like players, or they will fly too
             flying = false;
         }
-        String playerName = StringArgumentType.getString(context, "player");
+        String playerName = getSpawnPlayerName(context);
         if (playerName.length() > maxNameLength(source.getServer()))
         {
             Messenger.m(source, "rb Player name: " + playerName + " is too long");
@@ -1298,6 +1424,18 @@ public class PlayerCommand
         return 1;
     }
 
+    private static String getSpawnPlayerName(CommandContext<CommandSourceStack> context)
+    {
+        try
+        {
+            return StringArgumentType.getString(context, "player");
+        }
+        catch (IllegalArgumentException ignored)
+        {
+            return StringArgumentType.getString(context, "player_name");
+        }
+    }
+
     private static int maxNameLength(MinecraftServer server)
     {
         return server.getPort() >= 0 ? SharedConstants.MAX_PLAYER_NAME_LENGTH : 40;
@@ -1305,10 +1443,16 @@ public class PlayerCommand
 
     private static int manipulate(CommandContext<CommandSourceStack> context, Consumer<EntityPlayerActionPack> action)
     {
-        if (cantManipulate(context)) return 0;
-        ServerPlayer player = getPlayer(context);
-        action.accept(((ServerPlayerInterface) player).getActionPack());
-        return 1;
+        List<ServerPlayer> players = getPlayers(context);
+        if (cantManipulate(context, players)) return 0;
+
+        int manipulated = 0;
+        for (ServerPlayer player : players)
+        {
+            action.accept(((ServerPlayerInterface) player).getActionPack());
+            manipulated++;
+        }
+        return manipulated;
     }
 
     private static Command<CommandSourceStack> manipulation(Consumer<EntityPlayerActionPack> action)
@@ -1318,21 +1462,29 @@ public class PlayerCommand
 
     private static int shadow(CommandContext<CommandSourceStack> context)
     {
-        if (cantManipulate(context)) return 0;
+        List<ServerPlayer> players = getPlayers(context);
+        if (cantManipulate(context, players)) return 0;
 
-        ServerPlayer player = getPlayer(context);
-        if (player instanceof EntityPlayerMPFake)
+        for (ServerPlayer player : players)
         {
-            Messenger.m(context.getSource(), "r Cannot shadow fake players");
-            return 0;
+            if (player instanceof EntityPlayerMPFake)
+            {
+                Messenger.m(context.getSource(), "r Cannot shadow fake players");
+                return 0;
+            }
+            if (((ServerLevel) player.level()).getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
+                Messenger.m(context.getSource(), "r Cannot shadow single-player server owner");
+                return 0;
+            }
         }
-        if (((ServerLevel) player.level()).getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
-            Messenger.m(context.getSource(), "r Cannot shadow single-player server owner");
-            return 0;
+
+        int shadowed = 0;
+        for (ServerPlayer player : players)
+        {
+            EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
+            shadowed++;
         }
- 
-        EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
-        return 1;
+        return shadowed;
     }
 
     /**

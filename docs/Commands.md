@@ -29,22 +29,34 @@ Legend:
 - Permission: op
 - Summary: Spawn/manage fake players for testing, combat automation, nav/glide control, item cooldown control, and animation control. See also: [FakePlayers.md](FakePlayers.md)
 - Usage:
-  - /player <name> spawn [at <x> <y> <z>] [facing <yaw> <pitch>]
-  - /player <name> kill
-  - /player <name> move <forward|backward|left|right> [for <ticks>] [sneaking|sprinting]
-  - /player <name> attack [crit] [once|continuous|interval <ticks>]
-  - /player <name> swing [once|continuous|interval <ticks>]
-  - /player <name> animate <attack|use|continuous|interval <ticks>>
-  - /player <name> nav stop|status
-  - /player <name> nav goto [land|water|air [land|drop]] <x> <y> <z> [arrivalRadius]
-  - /player <name> nav follow <playerName> [radius]
-  - /player <name> nav come [arrivalRadius]
-  - /player <name> nav mine <block> [count] [radius]
-  - /player <name> nav patrol <pos1> <pos2> [pos3] [pos4] [loop|once]
-  - /player <name> nav options [reset|<name> <value>]
-  - /player <name> glide ...
-  - /player <name> itemCd [<item> [reset|set [ticks]]]
-  - /player <name> <action...>
+  - /player <target> spawn [at <x> <y> <z>] [facing <yaw> <pitch>]
+  - /player <target> kill
+  - /player <target> move <forward|backward|left|right> [for <ticks>] [sneaking|sprinting]
+  - /player <target> attack [crit] [once|continuous|interval <ticks>]
+  - /player <target> swing [once|continuous|interval <ticks>]
+  - /player <target> animate <attack|use|continuous|interval <ticks>>
+  - /player <target> nav stop|status
+  - /player <target> nav goto [land|water|air [land|drop]] <x> <y> <z> [arrivalRadius]
+  - /player <target> nav follow <playerName> [radius]
+  - /player <target> nav come [arrivalRadius]
+  - /player <target> nav mine <block> [count] [radius]
+  - /player <target> nav patrol <pos1> <pos2> [pos3] [pos4] [loop|once]
+  - /player <target> nav options [reset|<name> <value>]
+  - /player <target> glide ...
+  - /player <target> itemCd [<item> [reset|set [ticks]]]
+  - /player <target> <action...>
+  - target supports player selectors like @s, @p, @r, @a[tag=bot]
+  - execute-context example: /execute as @a[tag=bot] run player @s attack continuous
+
+## /spawnplayer
+- Permission: op
+- Summary: Dedicated fake-player spawn alias for /player <name> spawn.
+- Usage:
+  - /spawnplayer <name>
+  - /spawnplayer <name> at <x> <y> <z>
+  - /spawnplayer <name> at <x> <y> <z> facing <yaw> <pitch>
+  - /spawnplayer <name> at <x> <y> <z> facing <yaw> <pitch> in <dimension>
+  - /spawnplayer <name> at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>
 
 ## /counter
 - Permission: any (requires rule hopperCounters)
