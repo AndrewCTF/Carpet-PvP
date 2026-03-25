@@ -98,7 +98,6 @@ public class PlayerCommand
                                 .then(argument("slot", IntegerArgumentType.integer(1, 9))
                                         .executes(c -> manipulate(c, ap -> ap.setSlot(IntegerArgumentType.getInteger(c, "slot"))))))
                         .then(literal("kill").executes(PlayerCommand::kill))
-                        .then(literal("despawn").executes(PlayerCommand::disconnect))
                         .then(literal("disconnect").executes(PlayerCommand::disconnect))
                         .then(literal("shadow"). executes(PlayerCommand::shadow))
                         .then(literal("mount").executes(manipulation(ap -> ap.mount(true)))
@@ -150,8 +149,14 @@ public class PlayerCommand
                         )
                 );
         dispatcher.register(command);
-
+            )
+            .then(argument("player_name", StringArgumentType.word())
+                .then(makePlayerSpawnSubcommand())
                 LiteralArgumentBuilder<CommandSourceStack> spawnPlayer = literal("spawnplayer")
+                    .executes(c -> {
+                        Messenger.m(c.getSource(), "w Usage: /spawnplayer <name> [at <x y z>] [facing <yaw> <pitch>] [in <dimension>] [in <gamemode>]");
+                        return 1;
+                    })
                     .then(argument("player", StringArgumentType.word())
                         .executes(PlayerCommand::spawn)
                         .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
@@ -169,6 +174,23 @@ public class PlayerCommand
                     );
                 dispatcher.register(spawnPlayer);
     }
+
+            private static LiteralArgumentBuilder<CommandSourceStack> makePlayerSpawnSubcommand()
+            {
+            return literal("spawn").executes(PlayerCommand::spawn)
+                .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
+                    .then(argument("gamemode", GameModeArgument.gameMode())
+                        .executes(PlayerCommand::spawn)))
+                .then(literal("at").then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
+                    .then(literal("facing").then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
+                        .then(literal("in").then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
+                            .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
+                                .then(argument("gamemode", GameModeArgument.gameMode())
+                                    .executes(PlayerCommand::spawn)
+                                )))
+                        )))
+                    )));
+            }
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeGlideCommand()
     {
@@ -1235,7 +1257,7 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r You don't have permission to use /spawnplayer");
             return true;
         }
-        String playerName = StringArgumentType.getString(context, "player");
+            String playerName = getSpawnPlayerName(context);
         if (playerName.startsWith("@"))
         {
             Messenger.m(context.getSource(), "r Spawn target must be a single player name, not a selector");
@@ -1351,11 +1373,23 @@ public class PlayerCommand
             // Force override flying to false for survival-like players, or they will fly too
             flying = false;
         }
-        String playerName = StringArgumentType.getString(context, "player");
+        String playerName = getSpawnPlayerName(context);
         if (playerName.length() > maxNameLength(source.getServer()))
         {
             Messenger.m(source, "rb Player name: " + playerName + " is too long");
             return 0;
+
+            private static String getSpawnPlayerName(CommandContext<CommandSourceStack> context)
+            {
+                try
+                {
+                    return StringArgumentType.getString(context, "player");
+                }
+                catch (IllegalArgumentException ignored)
+                {
+                    return StringArgumentType.getString(context, "player_name");
+                }
+            }
         }
 
         if (!Level.isInSpawnableBounds(BlockPos.containing(pos)))
