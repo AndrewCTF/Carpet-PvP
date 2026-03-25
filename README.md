@@ -1,12 +1,14 @@
-# Carpet PvP
-![Carpet PvP logo](assets/icon.png)
+# Carpet PvP 
+<img src="https://github.com/AndrewCTF/Carpet-PvP/blob/main/icon.png" alt="Carpet PvP Practice" width="50" height="50">
+
 ![GitHub all releases](https://img.shields.io/github/downloads/AndrewCTF/Carpet-PvP/total?style=for-the-badge)
 ![GitHub Repo stars](https://img.shields.io/github/stars/AndrewCTF/Carpet-PvP?style=for-the-badge)
 ![GitHub forks](https://img.shields.io/github/forks/AndrewCTF/Carpet-PvP?style=for-the-badge)
 
 Carpet PvP is a fork of TheobaldTheBird's Carpet PvP, we aim to provide frequent updates so that Carpet PvP will be supported as soon as possible.
 
-Discord: [Carpet PvP Support](https://discord.gg/PAbydjFxKs)
+Discord: [Carpet PvP Support](https://discord.gg/PAbydjFxKs)\
+Support this project: [Buy Me a Cup of Coffee](https://buymeacoffee.com/andrewyong)
 
 ## Supported versions:
 
@@ -23,7 +25,7 @@ Discord: [Carpet PvP Support](https://discord.gg/PAbydjFxKs)
 1. Download the latest release from the [Releases](https://github.com/AndrewCTF/Carpet-PvP/releases) page
 2. Place the `.jar` file in your `mods` folder
 3. Ensure you have Fabric Loader and Fabric API installed
-4. Supported: Minecraft [1.21.10] (fabric.mod.json range: 1.21–1.22)
+4. Supported: Minecraft 1.21.11
 
 ## Contributing
 

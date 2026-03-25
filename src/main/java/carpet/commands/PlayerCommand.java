@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -27,6 +28,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.selector.EntitySelectorParser;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.commands.arguments.GameModeArgument;
 import net.minecraft.commands.arguments.coordinates.RotationArgument;
@@ -45,6 +47,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
@@ -76,7 +79,7 @@ public class PlayerCommand
     {
         LiteralArgumentBuilder<CommandSourceStack> command = literal("player")
                 .requires((player) -> CommandHelper.canUseCommand(player, CarpetSettings.commandPlayer))
-                .then(argument("player", StringArgumentType.word())
+                .then(argument("player", StringArgumentType.string())
                         .suggests((c, b) -> suggest(getPlayerSuggestions(c.getSource()), b))
                         .then(literal("stop").executes(manipulation(EntityPlayerActionPack::stopAll)))
                         .then(makeActionCommand("use", ActionType.USE))
@@ -298,7 +301,7 @@ public class PlayerCommand
                 // --- Follow command ---
                 .then(literal("follow")
                     .executes(PlayerCommand::navFollow)
-                    .then(argument("target", StringArgumentType.word())
+                    .then(argument("target", StringArgumentType.string())
                         .executes(PlayerCommand::navFollow)
                         .then(argument("radius", DoubleArgumentType.doubleArg(1.0D))
                             .executes(PlayerCommand::navFollow))))
@@ -342,7 +345,7 @@ public class PlayerCommand
                             .executes(c -> navChase(c, false, "attack"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, false, "attack"))
-                                .then(argument("target", StringArgumentType.word())
+                                .then(argument("target", StringArgumentType.string())
                                     .executes(c -> navChase(c, false, "attack"))))))
                     // /player <name> nav chase crit [<distance> [<interval> [<target>]]]
                     .then(literal("crit")
@@ -351,7 +354,7 @@ public class PlayerCommand
                             .executes(c -> navChase(c, true, "crit"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "crit"))
-                                .then(argument("target", StringArgumentType.word())
+                                .then(argument("target", StringArgumentType.string())
                                     .executes(c -> navChase(c, true, "crit"))))))
                     // /player <name> nav chase jumpreset [<distance> [<interval> [<target>]]]
                     .then(literal("jumpreset")
@@ -360,7 +363,7 @@ public class PlayerCommand
                             .executes(c -> navChase(c, true, "jumpreset"))
                             .then(argument("interval", IntegerArgumentType.integer(0))
                                 .executes(c -> navChase(c, true, "jumpreset"))
-                                .then(argument("target", StringArgumentType.word())
+                                .then(argument("target", StringArgumentType.string())
                                     .executes(c -> navChase(c, true, "jumpreset")))))))
                 ;
     }
@@ -561,7 +564,21 @@ public class PlayerCommand
 
         if (targetName != null)
         {
-            targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
+            List<ServerPlayer> resolvedTargets = resolvePlayers(context.getSource(), targetName);
+            if (resolvedTargets.isEmpty())
+            {
+                Messenger.m(context.getSource(), "r No players matched target '", targetName, "r '.");
+                return 0;
+            }
+            targetPlayer = resolvedTargets.stream()
+                    .filter(p -> p != player)
+                    .min((a, b) -> Double.compare(a.distanceToSqr(player), b.distanceToSqr(player)))
+                    .orElse(resolvedTargets.getFirst());
+
+            if (resolvedTargets.size() > 1)
+            {
+                Messenger.m(context.getSource(), "y Multiple targets matched. Following nearest: ", targetPlayer.getName());
+            }
         }
         else
         {
@@ -601,11 +618,20 @@ public class PlayerCommand
         ServerPlayer targetPlayer;
         if (targetName != null)
         {
-            targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(targetName);
-            if (targetPlayer == null)
+            List<ServerPlayer> resolvedTargets = resolvePlayers(context.getSource(), targetName);
+            if (resolvedTargets.isEmpty())
             {
-                Messenger.m(context.getSource(), "r Player '", targetName, "' not found.");
+                Messenger.m(context.getSource(), "r No players matched target '", targetName, "r '.");
                 return 0;
+            }
+            targetPlayer = resolvedTargets.stream()
+                    .filter(p -> p != player)
+                    .min((a, b) -> Double.compare(a.distanceToSqr(player), b.distanceToSqr(player)))
+                    .orElse(resolvedTargets.getFirst());
+
+            if (resolvedTargets.size() > 1)
+            {
+                Messenger.m(context.getSource(), "y Multiple targets matched. Chasing nearest: ", targetPlayer.getName());
             }
         }
         else
@@ -1111,21 +1137,57 @@ public class PlayerCommand
     private static Collection<String> getPlayerSuggestions(CommandSourceStack source)
     {
         //using s instead of @s because making it parse selectors properly was a pain in the ass
-        Set<String> players = new LinkedHashSet<>(List.of("Bot", "s"));
+        Set<String> players = new LinkedHashSet<>(List.of("Bot", "s", "@s", "@p", "@a"));
         players.addAll(source.getOnlinePlayerNames());
         return players;
     }
 
-    private static ServerPlayer getPlayer(CommandContext<CommandSourceStack> context)
+    private static List<ServerPlayer> resolvePlayers(CommandSourceStack source, String target)
     {
-        String playerName = StringArgumentType.getString(context, "player");
-        CommandSourceStack source = context.getSource();
         MinecraftServer server = source.getServer();
 
-        //we can just use '/execute as' when we want proper target selectors
-        if (playerName.equals("s") && source.isPlayer()) return source.getPlayer();
+        // Legacy shorthand kept for backwards compatibility.
+        if (target.equals("s") && source.isPlayer())
+        {
+            return List.of(source.getPlayer());
+        }
 
-        return server.getPlayerList().getPlayerByName(playerName);
+        if (target.startsWith("@"))
+        {
+            try
+            {
+                var selector = new EntitySelectorParser(new StringReader(target), true).parse();
+                // Allow selector syntax whenever /player itself is permitted.
+                List<ServerPlayer> selectedPlayers = new ArrayList<>();
+                for (Entity entity : selector.findEntities(source.withMaximumPermission(CommandHelper.permissionSetForLevel(4))))
+                {
+                    if (entity instanceof ServerPlayer serverPlayer)
+                    {
+                        selectedPlayers.add(serverPlayer);
+                    }
+                }
+                return selectedPlayers;
+            }
+            catch (CommandSyntaxException ignored)
+            {
+                return List.of();
+            }
+        }
+
+        ServerPlayer player = server.getPlayerList().getPlayerByName(target);
+        return player == null ? List.of() : List.of(player);
+    }
+
+    private static List<ServerPlayer> getPlayers(CommandContext<CommandSourceStack> context)
+    {
+        String playerName = StringArgumentType.getString(context, "player");
+        return resolvePlayers(context.getSource(), playerName);
+    }
+
+    private static ServerPlayer getPlayer(CommandContext<CommandSourceStack> context)
+    {
+        List<ServerPlayer> players = getPlayers(context);
+        return players.isEmpty() ? null : players.getFirst();
     }
 
     private static NameAndId nameAndId(GameProfile profile)
@@ -1135,11 +1197,23 @@ public class PlayerCommand
 
     private static boolean cantManipulate(CommandContext<CommandSourceStack> context)
     {
-        Player player = getPlayer(context);
+        return cantManipulate(context, getPlayers(context));
+    }
+
+    private static boolean cantManipulate(CommandContext<CommandSourceStack> context, List<ServerPlayer> players)
+    {
         CommandSourceStack source = context.getSource();
-        if (player == null)
+        if (players.isEmpty())
         {
-            Messenger.m(source, "r Can only manipulate existing players");
+            String requestedTarget = StringArgumentType.getString(context, "player");
+            if (requestedTarget.startsWith("@"))
+            {
+                Messenger.m(source, "r Selector matched no players: ", "rb " + requestedTarget);
+            }
+            else
+            {
+                Messenger.m(source, "r Can only manipulate existing players");
+            }
             return true;
         }
         Player sender = source.getPlayer();
@@ -1150,10 +1224,13 @@ public class PlayerCommand
 
         if (!source.getServer().getPlayerList().isOp(nameAndId(sender.getGameProfile())))
         {
-            if (sender != player && !(player instanceof EntityPlayerMPFake))
+            for (Player player : players)
             {
-                Messenger.m(source, "r Non OP players can't control other real players");
-                return true;
+                if (sender != player && !(player instanceof EntityPlayerMPFake))
+                {
+                    Messenger.m(source, "r Non OP players can't control other real players");
+                    return true;
+                }
             }
         }
         return false;
@@ -1161,16 +1238,27 @@ public class PlayerCommand
 
     private static boolean cantReMove(CommandContext<CommandSourceStack> context)
     {
-        if (cantManipulate(context)) return true;
-        Player player = getPlayer(context);
-        if (player instanceof EntityPlayerMPFake) return false;
-        Messenger.m(context.getSource(), "r Only fake players can be moved or killed");
-        return true;
+        List<ServerPlayer> players = getPlayers(context);
+        if (cantManipulate(context, players)) return true;
+        for (Player player : players)
+        {
+            if (!(player instanceof EntityPlayerMPFake))
+            {
+                Messenger.m(context.getSource(), "r Only fake players can be moved or killed");
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean cantSpawn(CommandContext<CommandSourceStack> context)
     {
         String playerName = StringArgumentType.getString(context, "player");
+        if (playerName.startsWith("@"))
+        {
+            Messenger.m(context.getSource(), "r Spawn target must be a single player name, not a selector");
+            return true;
+        }
         MinecraftServer server = context.getSource().getServer();
         PlayerList manager = server.getPlayerList();
 
@@ -1211,20 +1299,24 @@ public class PlayerCommand
 
     private static int kill(CommandContext<CommandSourceStack> context) {
         if (cantReMove(context)) return 0;
-        ServerPlayer player = getPlayer(context);
-        player.kill((net.minecraft.server.level.ServerLevel) player.level());
-        return 1;
+        int killed = 0;
+        for (ServerPlayer player : getPlayers(context))
+        {
+            player.kill((net.minecraft.server.level.ServerLevel) player.level());
+            killed++;
+        }
+        return killed;
     }
 
     private static int disconnect(CommandContext<CommandSourceStack> context) {
-        Player player = getPlayer(context);
-        if (player instanceof EntityPlayerMPFake)
+        if (cantReMove(context)) return 0;
+        int disconnected = 0;
+        for (ServerPlayer player : getPlayers(context))
         {
             ((EntityPlayerMPFake) player).fakePlayerDisconnect(Messenger.s(""));
-            return 1;
+            disconnected++;
         }
-        Messenger.m(context.getSource(), "r Cannot disconnect real players");
-        return 0;
+        return disconnected;
     }
 
     @FunctionalInterface
@@ -1305,10 +1397,16 @@ public class PlayerCommand
 
     private static int manipulate(CommandContext<CommandSourceStack> context, Consumer<EntityPlayerActionPack> action)
     {
-        if (cantManipulate(context)) return 0;
-        ServerPlayer player = getPlayer(context);
-        action.accept(((ServerPlayerInterface) player).getActionPack());
-        return 1;
+        List<ServerPlayer> players = getPlayers(context);
+        if (cantManipulate(context, players)) return 0;
+
+        int manipulated = 0;
+        for (ServerPlayer player : players)
+        {
+            action.accept(((ServerPlayerInterface) player).getActionPack());
+            manipulated++;
+        }
+        return manipulated;
     }
 
     private static Command<CommandSourceStack> manipulation(Consumer<EntityPlayerActionPack> action)
@@ -1318,21 +1416,29 @@ public class PlayerCommand
 
     private static int shadow(CommandContext<CommandSourceStack> context)
     {
-        if (cantManipulate(context)) return 0;
+        List<ServerPlayer> players = getPlayers(context);
+        if (cantManipulate(context, players)) return 0;
 
-        ServerPlayer player = getPlayer(context);
-        if (player instanceof EntityPlayerMPFake)
+        for (ServerPlayer player : players)
         {
-            Messenger.m(context.getSource(), "r Cannot shadow fake players");
-            return 0;
+            if (player instanceof EntityPlayerMPFake)
+            {
+                Messenger.m(context.getSource(), "r Cannot shadow fake players");
+                return 0;
+            }
+            if (((ServerLevel) player.level()).getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
+                Messenger.m(context.getSource(), "r Cannot shadow single-player server owner");
+                return 0;
+            }
         }
-        if (((ServerLevel) player.level()).getServer().isSingleplayerOwner(nameAndId(player.getGameProfile()))) {
-            Messenger.m(context.getSource(), "r Cannot shadow single-player server owner");
-            return 0;
+
+        int shadowed = 0;
+        for (ServerPlayer player : players)
+        {
+            EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
+            shadowed++;
         }
- 
-        EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
-        return 1;
+        return shadowed;
     }
 
     /**
