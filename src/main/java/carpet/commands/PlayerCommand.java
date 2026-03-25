@@ -1381,18 +1381,6 @@ public class PlayerCommand
         {
             Messenger.m(source, "rb Player name: " + playerName + " is too long");
             return 0;
-
-            private static String getSpawnPlayerName(CommandContext<CommandSourceStack> context)
-            {
-                try
-                {
-                    return StringArgumentType.getString(context, "player");
-                }
-                catch (IllegalArgumentException ignored)
-                {
-                    return StringArgumentType.getString(context, "player_name");
-                }
-            }
         }
 
         if (!Level.isInSpawnableBounds(BlockPos.containing(pos)))
@@ -1407,6 +1395,18 @@ public class PlayerCommand
             return 0;
         };
         return 1;
+    }
+
+    private static String getSpawnPlayerName(CommandContext<CommandSourceStack> context)
+    {
+        try
+        {
+            return StringArgumentType.getString(context, "player");
+        }
+        catch (IllegalArgumentException ignored)
+        {
+            return StringArgumentType.getString(context, "player_name");
+        }
     }
 
     private static int maxNameLength(MinecraftServer server)
