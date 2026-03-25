@@ -12,7 +12,7 @@ Syntax conventions:
 
 ## Overview
 
-Fake players are server-side players controlled through `/player <name> ...`.
+Fake players are server-side players controlled through `/player <target> ...`.
 
 Typical uses:
 - PvP behavior testing (combat timings, crits, movement, shield interactions)
@@ -21,6 +21,8 @@ Typical uses:
 
 Key permission notes:
 - `/player` is gated by the `commandPlayer` rule.
+- `<target>` accepts player names and player selectors (`@s`, `@p`, `@r`, `@a[...]`).
+- Selector targets can fan out to multiple players (for example `@a[tag=bot]`).
 - non-OP users cannot control other real players.
 - `s` can be used as self-target when command source is a player.
 
@@ -41,6 +43,9 @@ Key permission notes:
 4) Stop everything
 - `/player Bot stop`
 
+5) Use selectors with execute context
+- `/execute as @a[tag=bot] run player @s attack continuous`
+
 ---
 
 ## Lifecycle Commands
@@ -52,6 +57,12 @@ Spawn variants:
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch>`
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension>`
 - `/player <name> spawn at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>`
+- `/spawnplayer <name> [at <x> <y> <z>] [facing <yaw> <pitch>] [in <dimension>] [in <gamemode>]` (alias for spawn)
+
+Selector-targeting variants (for control commands):
+- `/player @s stop`
+- `/player @a[tag=bot] move forward`
+- `/execute as @a[tag=bot] run player @s look at ~ ~ ~`
 
 Removal and session:
 - `/player <name> kill` (fake players only)
