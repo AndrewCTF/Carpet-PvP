@@ -23,6 +23,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.context.ParsedCommandNode;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
@@ -1158,7 +1159,7 @@ public class PlayerCommand
         }
         catch (IllegalArgumentException | CommandSyntaxException ignored)
         {
-            return List.of();
+            return getSelfTargetFallback(context);
         }
 
         List<ServerPlayer> players = new ArrayList<>();
@@ -1169,7 +1170,50 @@ public class PlayerCommand
                 players.add(serverPlayer);
             }
         }
+        if (players.isEmpty())
+        {
+            List<ServerPlayer> selfFallback = getSelfTargetFallback(context);
+            if (!selfFallback.isEmpty())
+            {
+                return selfFallback;
+            }
+        }
         return players;
+    }
+
+    private static List<ServerPlayer> getSelfTargetFallback(CommandContext<CommandSourceStack> context)
+    {
+        String rawTarget = getRawPlayerTarget(context);
+        if (!"@s".equals(rawTarget) && !"s".equals(rawTarget))
+        {
+            return List.of();
+        }
+
+        Entity sourceEntity = context.getSource().getEntity();
+        if (sourceEntity instanceof ServerPlayer serverPlayer)
+        {
+            return List.of(serverPlayer);
+        }
+        return List.of();
+    }
+
+    private static String getRawPlayerTarget(CommandContext<CommandSourceStack> context)
+    {
+        for (ParsedCommandNode<CommandSourceStack> node : context.getNodes())
+        {
+            if (!"player".equals(node.getNode().getName()))
+            {
+                continue;
+            }
+
+            int start = node.getRange().getStart();
+            int end = node.getRange().getEnd();
+            if (start >= 0 && end >= start && end <= context.getInput().length())
+            {
+                return context.getInput().substring(start, end).trim();
+            }
+        }
+        return "";
     }
 
     private static ServerPlayer getPlayer(CommandContext<CommandSourceStack> context)
