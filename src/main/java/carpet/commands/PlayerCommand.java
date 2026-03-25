@@ -75,7 +75,6 @@ public class PlayerCommand
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext commandBuildContext)
     {
         LiteralArgumentBuilder<CommandSourceStack> command = literal("player")
-                .requires((player) -> CommandHelper.canUseCommand(player, CarpetSettings.commandPlayer))
             .then(argument("player", EntityArgument.entities())
                         .then(literal("stop").executes(manipulation(EntityPlayerActionPack::stopAll)))
                         .then(makeActionCommand("use", ActionType.USE))
@@ -153,7 +152,6 @@ public class PlayerCommand
         dispatcher.register(command);
 
                 LiteralArgumentBuilder<CommandSourceStack> spawnPlayer = literal("spawnplayer")
-                    .requires((player) -> CommandHelper.canUseCommand(player, CarpetSettings.commandPlayer))
                     .then(argument("player", StringArgumentType.word())
                         .executes(PlayerCommand::spawn)
                         .then(literal("in").requires((player) -> CommandHelper.hasPermissionLevel(player, 2))
@@ -1185,6 +1183,11 @@ public class PlayerCommand
     private static boolean cantManipulate(CommandContext<CommandSourceStack> context, List<ServerPlayer> players)
     {
         CommandSourceStack source = context.getSource();
+        if (!CommandHelper.canUseCommand(source, CarpetSettings.commandPlayer))
+        {
+            Messenger.m(source, "r You don't have permission to use /player commands");
+            return true;
+        }
         if (players.isEmpty())
         {
             Messenger.m(source, "r Can only manipulate existing players");
@@ -1227,6 +1230,11 @@ public class PlayerCommand
 
     private static boolean cantSpawn(CommandContext<CommandSourceStack> context)
     {
+        if (!CommandHelper.canUseCommand(context.getSource(), CarpetSettings.commandPlayer))
+        {
+            Messenger.m(context.getSource(), "r You don't have permission to use /spawnplayer");
+            return true;
+        }
         String playerName = StringArgumentType.getString(context, "player");
         if (playerName.startsWith("@"))
         {
