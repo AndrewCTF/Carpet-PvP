@@ -555,7 +555,7 @@ public class PlayerCommand
         {
             targetEntities = EntityArgument.getOptionalEntities(context, "target");
         }
-        catch (IllegalArgumentException ignored) {}
+        catch (IllegalArgumentException | CommandSyntaxException ignored) {}
 
         double radius = 1.0D;
         try
@@ -621,7 +621,7 @@ public class PlayerCommand
         {
             targetEntities = EntityArgument.getOptionalEntities(context, "target");
         }
-        catch (IllegalArgumentException ignored) {}
+        catch (IllegalArgumentException | CommandSyntaxException ignored) {}
 
         ServerPlayer targetPlayer;
         if (targetEntities != null)
@@ -1152,7 +1152,7 @@ public class PlayerCommand
         {
             entities = EntityArgument.getOptionalEntities(context, "player");
         }
-        catch (IllegalArgumentException ignored)
+        catch (IllegalArgumentException | CommandSyntaxException ignored)
         {
             return List.of();
         }
