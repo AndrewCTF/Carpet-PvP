@@ -14,7 +14,7 @@ import java.util.NoSuchElementException;
 
 import net.minecraft.core.BlockPos;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class BlockArgument extends Argument
 {

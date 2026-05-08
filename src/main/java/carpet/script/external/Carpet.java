@@ -5,7 +5,6 @@ import carpet.CarpetSettings;
 import carpet.api.settings.CarpetRule;
 import carpet.api.settings.RuleHelper;
 import carpet.api.settings.SettingsManager;
-import carpet.fakes.MinecraftServerInterface;
 import carpet.logging.HUDController;
 import carpet.network.ServerNetworkHandler;
 import carpet.patches.EntityPlayerMPFake;
@@ -33,7 +32,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
@@ -87,7 +86,8 @@ public class Carpet
 
     public static void MinecraftServer_addScriptServer(MinecraftServer server, CarpetScriptServer scriptServer)
     {
-        ((MinecraftServerInterface) server).addScriptServer(scriptServer);
+        // Store in CarpetServer static field directly
+        CarpetServer.scriptServer = scriptServer;
     }
 
     public static boolean isValidCarpetPlayer(ServerPlayer player)

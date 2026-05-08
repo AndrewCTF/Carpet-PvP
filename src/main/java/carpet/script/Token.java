@@ -1,6 +1,6 @@
 package carpet.script;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class Token implements Comparable<Token> {
 

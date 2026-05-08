@@ -1,16 +1,16 @@
 package carpet.mixins;
 
-import it.unimi.dsi.fastutil.objects.Reference2ObjectMap;
+import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.util.List;
-import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.Scoreboard;
-import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+import java.util.Map;
 
-@Mixin(Scoreboard.class)
-public interface Scoreboard_scarpetMixin {
-    @Accessor("objectivesByCriteria")
-    Reference2ObjectMap<ObjectiveCriteria, List<Objective>> getObjectivesByCriterion();
+@Mixin(net.minecraft.world.scores.Scoreboard.class)
+public interface Scoreboard_scarpetMixin
+{
+    @Invoker("getObjectivesByCriterion")
+    Map<ObjectiveCriteria, List<Objective>> invokeGetObjectivesByCriterion(ObjectiveCriteria criterion);
 }

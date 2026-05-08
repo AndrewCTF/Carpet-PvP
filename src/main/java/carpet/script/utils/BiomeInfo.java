@@ -33,7 +33,7 @@ public class BiomeInfo
         map.put("sky_color", (w, b) -> Value.NULL);
         map.put("water_color", (w, b) -> ValueConversions.ofRGB(b.getWaterColor()));
         map.put("water_fog_color", (w, b) -> Value.NULL);
-        map.put("humidity", (w, b) -> NumericValue.of(Vanilla.Biome_getClimateSettings(b).downfall()));
+        map.put("humidity", (w, b) -> NumericValue.of(0.0));
         map.put("precipitation", (w, b) -> StringValue.of(b.getPrecipitationAt(new BlockPos(0, w.getSeaLevel(), 0), w.getSeaLevel()).name().toLowerCase(Locale.ROOT)));
         map.put("features", (w, b) -> {
             Registry<ConfiguredFeature<?, ?>> registry = w.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE);

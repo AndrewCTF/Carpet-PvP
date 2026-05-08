@@ -23,7 +23,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class FunctionValue extends Value implements Fluff.ILazyFunction
 {

@@ -75,10 +75,19 @@ public interface FertilizableCoral extends BonemealableBlock {
         }
         else
         {
-            if (worldIn.random.nextInt(10) == 0)
+            if (worldIn.getRandom().nextInt(10) == 0)
             {
-                BlockPos randomPos = pos.offset(worldIn.random.nextInt(16) - 8, worldIn.random.nextInt(8), worldIn.random.nextInt(16) - 8);
-                if (coralBlocks.contains(worldIn.getBlockState(randomPos).getBlockHolder()))
+                BlockPos randomPos = pos.offset(worldIn.getRandom().nextInt(16) - 8, worldIn.getRandom().nextInt(8), worldIn.getRandom().nextInt(16) - 8);
+                // Check if block at position is in coralBlocks tag
+                Block targetBlock = worldIn.getBlockState(randomPos).getBlock();
+                boolean found = false;
+                for (Holder<Block> holder : coralBlocks) {
+                    if (holder.value() == targetBlock) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
                 {
                     worldIn.setBlock(randomPos, Blocks.WET_SPONGE.defaultBlockState(), Block.UPDATE_ALL);
                 }

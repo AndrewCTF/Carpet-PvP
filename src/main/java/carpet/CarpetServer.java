@@ -42,7 +42,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.commands.PerfCommand;
 import net.minecraft.server.level.ServerPlayer;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class CarpetServer
 {
@@ -172,8 +172,9 @@ public class CarpetServer
         if (minecraft_server != null)
         {
             if (scriptServer != null) scriptServer.onClose();
-            if (server != null && !Vanilla.MinecraftServer_getScriptServer(server).stopAll) {
-                Vanilla.MinecraftServer_getScriptServer(server).onClose();
+            CarpetScriptServer runningScriptServer = (server == null) ? null : Vanilla.MinecraftServer_getScriptServer(server);
+            if (runningScriptServer != null && !runningScriptServer.stopAll) {
+                runningScriptServer.onClose();
             }
 
             scriptServer = null;

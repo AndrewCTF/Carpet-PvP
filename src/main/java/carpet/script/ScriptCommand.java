@@ -46,7 +46,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.pattern.BlockInWorld;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;

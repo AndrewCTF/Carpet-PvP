@@ -25,7 +25,7 @@ import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 import static net.minecraft.world.level.block.RedStoneWireBlock.POWER;
 

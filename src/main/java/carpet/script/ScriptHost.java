@@ -10,7 +10,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;

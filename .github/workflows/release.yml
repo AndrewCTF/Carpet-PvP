@@ -42,11 +42,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25
+      - name: Read Java version
+        id: java
+        run: |
+          JAVA_VERSION=$(grep -E '^\s*java_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          if [ -z "$JAVA_VERSION" ]; then
+            echo "::error::Could not determine Java version from gradle.properties"
+            exit 1
+          fi
+          echo "version=$JAVA_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK ${{ steps.java.outputs.version }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 25
+          java-version: ${{ steps.java.outputs.version }}
           cache: gradle
 
       - name: Make gradlew executable
@@ -156,7 +166,7 @@ jobs:
             echo "| **Minecraft** | ${{ steps.version.outputs.minecraft_version }} |"
             echo "| **Fabric Loader** | ${{ steps.version.outputs.fabric_loader }} |"
             echo "| **Fabric API** | ${{ steps.version.outputs.fabric_api }} |"
-            echo "| **Java** | 21+ |"
+            echo "| **Java** | ${{ steps.java.outputs.version }}+ |"
             echo ""
             if [ -n "${{ inputs.release_notes }}" ]; then
               echo "### Release Notes"

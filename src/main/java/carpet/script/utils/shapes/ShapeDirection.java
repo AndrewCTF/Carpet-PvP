@@ -1,6 +1,6 @@
 package carpet.script.utils.shapes;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.util.Locale;
 
 public enum ShapeDirection

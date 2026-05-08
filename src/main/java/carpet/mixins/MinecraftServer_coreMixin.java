@@ -1,5 +1,7 @@
 package carpet.mixins;
 
+import carpet.fakes.MinecraftServerInterface;
+import carpet.script.CarpetScriptServer;
 import carpet.CarpetServer;
 import carpet.utils.CarpetProfiler;
 import net.minecraft.server.MinecraftServer;
@@ -13,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.function.BooleanSupplier;
 
 @Mixin(MinecraftServer.class)
-public abstract class MinecraftServer_coreMixin
+public abstract class MinecraftServer_coreMixin implements MinecraftServerInterface
 {
     //to inject right before
     // this.tickWorlds(booleanSupplier_1);
@@ -58,4 +60,23 @@ public abstract class MinecraftServer_coreMixin
 
     @Shadow
     public abstract ServerLevel overworld();
+
+    // Implementation of MinecraftServerInterface
+    private CarpetScriptServer scriptServer;
+
+    @Override
+    public void addScriptServer(CarpetScriptServer scriptServer) {
+        this.scriptServer = scriptServer;
+    }
+
+    @Override
+    public CarpetScriptServer getScriptServer() {
+        return this.scriptServer;
+    }
+
+    @Override
+    public Object getCMSession() {
+        // Placeholder - would need proper implementation
+        return null;
+    }
 }

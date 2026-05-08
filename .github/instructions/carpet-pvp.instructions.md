@@ -10,7 +10,7 @@ applyTo: "src/**"
 - **Mod Name**: Carpet PVP
 - **Mod ID**: `carpet`
 - **Current Version**: 14.9
-- **Minecraft Version**: 1.21.11 (supports `>=1.21.11 <1.23`)
+- **Minecraft Version**: 26.1.2 (supports `>=26.1.2 <27`)
 - **Fabric Loader**: `>=0.18.3`
 - **Fabric API**: Required (any version)
 - **Java**: Source/target 21, toolchain 25

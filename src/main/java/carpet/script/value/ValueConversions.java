@@ -61,7 +61,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.StreamSupport;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class ValueConversions
 {

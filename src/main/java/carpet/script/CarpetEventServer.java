@@ -70,7 +70,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class CarpetEventServer
 {
@@ -508,7 +508,7 @@ public class CarpetEventServer
             public void onChunkEvent(ServerLevel world, ChunkPos chPos, boolean generated)
             {
                 handler.call(
-                        () -> Arrays.asList(new NumericValue(chPos.x << 4), new NumericValue(chPos.z << 4)),
+                        () -> Arrays.asList(new NumericValue(chPos.x() << 4), new NumericValue(chPos.z() << 4)),
                         () -> world.getServer().createCommandSourceStack().withLevel(world)
                 );
             }
@@ -519,7 +519,7 @@ public class CarpetEventServer
             public void onChunkEvent(ServerLevel world, ChunkPos chPos, boolean generated)
             {
                 handler.call(
-                        () -> Arrays.asList(new NumericValue(chPos.x << 4), new NumericValue(chPos.z << 4)),
+                        () -> Arrays.asList(new NumericValue(chPos.x() << 4), new NumericValue(chPos.z() << 4)),
                         () -> world.getServer().createCommandSourceStack().withLevel(world)
                 );
             }
@@ -531,7 +531,7 @@ public class CarpetEventServer
             public void onChunkEvent(ServerLevel world, ChunkPos chPos, boolean generated)
             {
                 handler.call(
-                        () -> Arrays.asList(new NumericValue(chPos.x << 4), new NumericValue(chPos.z << 4)),
+                        () -> Arrays.asList(new NumericValue(chPos.x() << 4), new NumericValue(chPos.z() << 4)),
                         () -> world.getServer().createCommandSourceStack().withLevel(world)
                 );
             }

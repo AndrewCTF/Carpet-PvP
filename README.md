@@ -12,7 +12,7 @@ Support this project: [Buy Me a Coffee](https://buymeacoffee.com/andrewyong)
 
 ## Supported versions:
 
-1.21.11
+26.1.2
 
 ## Installation
 
@@ -25,7 +25,7 @@ Support this project: [Buy Me a Coffee](https://buymeacoffee.com/andrewyong)
 1. Download the latest release from the [Releases](https://github.com/AndrewCTF/Carpet-PvP/releases) page
 2. Place the `.jar` file in your `mods` folder
 3. Ensure you have Fabric Loader and Fabric API installed
-4. Supported: Minecraft 1.21.11
+4. Supported: Minecraft 26.1.2
 
 ## Contributing
 

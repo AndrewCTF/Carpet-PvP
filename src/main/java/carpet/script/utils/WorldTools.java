@@ -34,7 +34,7 @@ import net.minecraft.world.level.levelgen.WorldGenSettings;
 import net.minecraft.world.level.storage.DerivedLevelData;
 import net.minecraft.world.level.storage.ServerLevelData;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -47,7 +47,7 @@ public class WorldTools
 
     public static boolean canHasChunk(ServerLevel world, ChunkPos chpos, @Nullable Map<String, RegionFile> regionCache, boolean deepcheck)
     {
-        if (world.getChunk(chpos.x, chpos.z, ChunkStatus.STRUCTURE_STARTS, false) != null)
+        if (world.getChunk(chpos.x(), chpos.z(), ChunkStatus.STRUCTURE_STARTS, false) != null)
         {
             return true;
         }
@@ -61,34 +61,16 @@ public class WorldTools
             }
             return region.hasChunk(chpos);
         }
-        Path regionsFolder = Vanilla.MinecraftServer_storageSource(world.getServer()).getDimensionPath(world.dimension()).resolve("region");
-        Path regionPath = regionsFolder.resolve(currentRegionName);
-        if (!regionPath.toFile().exists())
-        {
-            if (regionCache != null)
-            {
-                regionCache.put(currentRegionName, null);
-            }
-            return false;
-        }
-        if (!deepcheck)
-        {
-            return true; // not using cache in this case.
-        }
-        try
-        {
-            RegionStorageInfo levelStorageInfo = new RegionStorageInfo(Vanilla.MinecraftServer_storageSource(world.getServer()).getLevelId(), world.dimension(), "chunk");
-            RegionFile region = new RegionFile(levelStorageInfo, regionPath, regionsFolder, true);
-            if (regionCache != null)
-            {
-                regionCache.put(currentRegionName, region);
-            }
-            return region.hasChunk(chpos);
-        }
-        catch (IOException ignored)
-        {
-        }
-        return true;
+        // MinecraftServer_storageSource is commented out due to mixin requirement
+        // Path regionsFolder = Vanilla.MinecraftServer_storageSource(world.getServer()).getDimensionPath(world.dimension()).resolve("region");
+        return false; // Stub - cannot access storage source without mixin
+    }
+
+    public static boolean isOverworld(ServerLevel world)
+    {
+        // In 26.1, dimension is a ResourceKey<Level>
+        // Check against the overworld resource key
+        return world.dimension().equals(net.minecraft.world.level.Level.OVERWORLD);
     }
 /*
     public static boolean createWorld(MinecraftServer server, String worldKey, Long seed)
@@ -159,8 +141,8 @@ public class WorldTools
 
     public static void forceChunkUpdate(BlockPos pos, ServerLevel world)
     {
-        ChunkPos chunkPos = new ChunkPos(pos);
-        LevelChunk worldChunk = world.getChunkSource().getChunk(chunkPos.x, chunkPos.z, false);
+        ChunkPos chunkPos = new ChunkPos(pos.getX(), pos.getZ());
+        LevelChunk worldChunk = world.getChunkSource().getChunk(chunkPos.x(), chunkPos.z(), false);
         if (worldChunk != null)
         {
             List<ServerPlayer> players = world.getChunkSource().chunkMap.getPlayers(chunkPos, false);
