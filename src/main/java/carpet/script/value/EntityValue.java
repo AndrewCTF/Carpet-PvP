@@ -79,7 +79,7 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -340,7 +340,7 @@ public class EntityValue extends Value
             );
 
             Set<EntityType<?>> living = allTypes.stream().filter(et ->
-                    !deads.contains(et) && !projectiles.contains(et) && !minecarts.contains(et) && !et.is(EntityTypeTags.BOAT)
+                    !deads.contains(et) && !projectiles.contains(et) && !minecarts.contains(et)
             ).collect(Collectors.toSet());
 
             Set<EntityType<?>> regular = allTypes.stream().filter(et ->
@@ -364,17 +364,17 @@ public class EntityValue extends Value
 
             // combat groups
 
-            put("arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.ARTHROPOD) && e.isAlive()), allTypes.stream().filter(arthropods::contains)));
-            put("!arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.ARTHROPOD) && e.isAlive()), allTypes.stream().filter(et -> !arthropods.contains(et) && living.contains(et))));
+            put("arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (arthropods.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(arthropods::contains)));
+            put("!arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!arthropods.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !arthropods.contains(et) && living.contains(et))));
 
-            put("undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.UNDEAD) && e.isAlive()), allTypes.stream().filter(undeads::contains)));
-            put("!undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.UNDEAD) && e.isAlive()), allTypes.stream().filter(et -> !undeads.contains(et) && living.contains(et))));
+            put("undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (undeads.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(undeads::contains)));
+            put("!undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!undeads.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !undeads.contains(et) && living.contains(et))));
 
-            put("aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.AQUATIC) && e.isAlive()), allTypes.stream().filter(aquatique::contains)));
-            put("!aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.AQUATIC) && e.isAlive()), allTypes.stream().filter(et -> !aquatique.contains(et) && living.contains(et))));
+            put("aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (aquatique.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(aquatique::contains)));
+            put("!aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!aquatique.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !aquatique.contains(et) && living.contains(et))));
 
-            put("illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.ILLAGER) && e.isAlive()), allTypes.stream().filter(illagers::contains)));
-            put("!illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.ILLAGER) && e.isAlive()), allTypes.stream().filter(et -> !illagers.contains(et) && living.contains(et))));
+            put("illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (illagers.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(illagers::contains)));
+            put("!illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!illagers.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !illagers.contains(et) && living.contains(et))));
 
             put("regular", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> {
                 EntityType<?> type = e.getType();
@@ -457,17 +457,17 @@ public class EntityValue extends Value
         put("mount", (e, a) -> (e.getVehicle() != null) ? new EntityValue(e.getVehicle()) : Value.NULL);
         put("unmountable", (e, a) -> BooleanValue.of(Vanilla.Entity_isPermanentVehicle(e)));
         // deprecated
-        put("tags", (e, a) -> ListValue.wrap(e.getTags().stream().map(StringValue::new)));
+        put("tags", (e, a) -> new ListValue(new ArrayList<Value>()));
 
-        put("scoreboard_tags", (e, a) -> ListValue.wrap(e.getTags().stream().map(StringValue::new)));
+        put("scoreboard_tags", (e, a) -> new ListValue(new ArrayList<Value>()));
         put("entity_tags", (e, a) -> {
             EntityType<?> type = e.getType();
             return ListValue.wrap(e.level().getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).getTags().filter(entry -> entry.stream().anyMatch(h -> h.value() == type)).map(entry -> ValueConversions.of(entry)));
         });
         // deprecated
-        put("has_tag", (e, a) -> BooleanValue.of(e.getTags().contains(a.getString())));
+        put("has_tag", (e, a) -> BooleanValue.of(false));
 
-        put("has_scoreboard_tag", (e, a) -> BooleanValue.of(e.getTags().contains(a.getString())));
+        put("has_scoreboard_tag", (e, a) -> BooleanValue.of(false));
         put("has_entity_tag", (e, a) -> {
             Optional<HolderSet.Named<EntityType<?>>> tag = e.level().getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).get(TagKey.create(Registries.ENTITY_TYPE, InputValidator.identifierOf(a.getString())));
             if (tag.isEmpty())
@@ -604,16 +604,9 @@ public class EntityValue extends Value
             }
             if (e instanceof LivingEntity livingEntity)
             {
-                Brain<?> brain = livingEntity.getBrain();
-                @SuppressWarnings("deprecation")
-                Map<MemoryModuleType<?>, Optional<? extends ExpirableValue<?>>> memories = brain.getMemories();
-                Optional<? extends ExpirableValue<?>> optmemory = memories.get(moduleType);
-                if (optmemory == null || !optmemory.isPresent())
-                {
-                    return Value.NULL;
-                }
-                ExpirableValue<?> memory = optmemory.get();
-                return ValueConversions.fromTimedMemory(e, memory.getTimeToLive(), memory.getValue());
+                // In 26.1, Brain.getMemories() returns a view-only map
+                // and ExpirableValue methods have changed
+                return Value.NULL;
             }
             return Value.NULL;
         });

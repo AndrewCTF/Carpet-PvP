@@ -2,7 +2,7 @@ package carpet.script.exception;
 
 import carpet.script.value.Value;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 /* Exception thrown to terminate execution mid expression (aka return statement) */
 public class ExitStatement extends StacklessRuntimeException

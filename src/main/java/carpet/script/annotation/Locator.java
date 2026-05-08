@@ -20,7 +20,7 @@ import carpet.script.value.BlockValue;
 import carpet.script.value.FunctionValue;
 import carpet.script.value.Value;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.ElementType.TYPE_USE;

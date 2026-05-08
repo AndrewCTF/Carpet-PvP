@@ -2,7 +2,7 @@ package carpet.script.exception;
 
 import carpet.script.value.Value;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class BreakStatement extends ExitStatement
 {

@@ -38,7 +38,6 @@ import net.minecraft.world.inventory.BlastFurnaceMenu;
 import net.minecraft.world.inventory.BrewingStandMenu;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.ContainerListener;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.DataSlot;
@@ -58,7 +57,7 @@ import net.minecraft.world.inventory.StonecutterMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 import static net.minecraft.world.inventory.MenuType.*;
 
@@ -225,17 +224,12 @@ public class ScreenValue extends Value
         screenHandler.addSlotListener(new ScarpetScreenHandlerListener()
         {
             @Override
-            public boolean onSlotClick(ServerPlayer player, ClickType actionType, int slot, int button)
+            public boolean onSlotClick(ServerPlayer player, int slot, int button)
             {
                 Map<Value, Value> data = new HashMap<>();
                 data.put(StringValue.of("slot"), slot == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE ? Value.NULL : NumericValue.of(slot));
-                if (actionType == ClickType.QUICK_CRAFT)
-                {
-                    data.put(StringValue.of("quick_craft_stage"), NumericValue.of(AbstractContainerMenu.getQuickcraftHeader(button)));
-                    button = AbstractContainerMenu.getQuickcraftType(button);
-                }
                 data.put(StringValue.of("button"), NumericValue.of(button));
-                return ScreenValue.this.callListener(player, actionTypeToString(actionType), data);
+                return ScreenValue.this.callListener(player, "slot", data);
             }
 
             @Override
@@ -401,7 +395,7 @@ public class ScreenValue extends Value
 
     public interface ScarpetScreenHandlerListener extends ContainerListener
     {
-        boolean onSlotClick(ServerPlayer player, ClickType actionType, int slot, int button);
+        boolean onSlotClick(ServerPlayer player, int slot, int button);
 
         boolean onButtonClick(ServerPlayer player, int button);
 
@@ -545,17 +539,18 @@ public class ScreenValue extends Value
         }
     }
 
-    private static String actionTypeToString(ClickType actionType)
+    private static String actionTypeToString(int actionType)
     {
         return switch (actionType)
         {
-            case PICKUP -> "pickup";
-            case QUICK_MOVE -> "quick_move";
-            case SWAP -> "swap";
-            case CLONE -> "clone";
-            case THROW -> "throw";
-            case QUICK_CRAFT -> "quick_craft";
-            case PICKUP_ALL -> "pickup_all";
+            case 0 -> "pickup";
+            case 1 -> "quick_move";
+            case 2 -> "swap";
+            case 3 -> "clone";
+            case 4 -> "throw";
+            case 5 -> "quick_craft";
+            case 6 -> "pickup_all";
+            default -> "unknown";
         };
     }
 }

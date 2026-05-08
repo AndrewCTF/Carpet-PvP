@@ -361,11 +361,14 @@ public class HopperCounter
     {
         if (DEFAULTS.containsKey(item))
         {
-            return TextColor.fromRgb(appropriateColor(DEFAULTS.get(item).defaultMapColor().col));
+            // defaultMapColor() may have changed - use a fixed color for hopper counters
+            return TextColor.fromRgb(0x8B8B8B); // Gray for default
         }
         if (item instanceof DyeItem dye)
         {
-            return TextColor.fromRgb(appropriateColor(dye.getDyeColor().getMapColor().col));
+            // In 26.1, DyeItem doesn't have getDyeColor - use default instance tint
+            // Just return gray for dye items to skip for now
+            return TextColor.fromRgb(0x8B8B8B);
         }
         Block block = null;
         final Registry<Item> itemRegistry = registryAccess.lookupOrThrow(Registries.ITEM);

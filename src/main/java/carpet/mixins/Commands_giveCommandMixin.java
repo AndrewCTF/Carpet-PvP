@@ -52,7 +52,7 @@ public class Commands_giveCommandMixin {
             // Check if any target is a fake player and the item is armor
             for (ServerPlayer target : targets) {
                 if (target instanceof EntityPlayerMPFake fakePlayer) {
-                    ItemStack itemStack = itemInput.createItemStack(1, false);
+                    ItemStack itemStack = itemInput.createItemStack(1);
                     
                     if (ArmorEquipmentHelper.isArmorItem(itemStack)) {
                         // This is armor being given to a fake player - handle auto-equipment

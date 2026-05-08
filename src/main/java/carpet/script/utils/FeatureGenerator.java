@@ -63,7 +63,7 @@ import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement
 import net.minecraft.world.level.levelgen.structure.structures.JigsawStructure;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorList;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class FeatureGenerator
 {
@@ -89,7 +89,7 @@ public class FeatureGenerator
             checks.set(true);
             try
             {
-                return configuredFeature.place(world, world.getChunkSource().getGenerator(), world.random, pos);
+                return configuredFeature.place(world, world.getChunkSource().getGenerator(), world.getRandom(), pos);
             }
             finally
             {
@@ -115,7 +115,7 @@ public class FeatureGenerator
                 checks.set(true);
                 try
                 {
-                    return configuredStandard.place(world, world.getChunkSource().getGenerator(), world.random, pos);
+                    return configuredStandard.place(world, world.getChunkSource().getGenerator(), world.getRandom(), pos);
                 }
                 finally
                 {
@@ -161,7 +161,7 @@ public class FeatureGenerator
             checks.set(true);
             try
             {
-                return feature.place(w, w.getChunkSource().getGenerator(), w.random, p);
+                return feature.place(w, w.getChunkSource().getGenerator(), w.getRandom(), p);
             }
             finally
             {
@@ -239,8 +239,8 @@ public class FeatureGenerator
         ChunkGenerator generator = chunkSource.getGenerator();
         ChunkGeneratorStructureState structureState = chunkSource.getGeneratorState();
         List<StructurePlacement> structureConfig = structureState.getPlacementsForStructure(Holder.direct(structure));
-        ChunkPos chunkPos = new ChunkPos(pos);
-        boolean couldPlace = structureConfig.stream().anyMatch(p -> p.isStructureChunk(structureState, chunkPos.x, chunkPos.z));
+        ChunkPos chunkPos = new ChunkPos(pos.getX(), pos.getZ());
+        boolean couldPlace = structureConfig.stream().anyMatch(p -> p.isStructureChunk(structureState, chunkPos.x(), chunkPos.z()));
         if (!couldPlace)
         {
             return null;
@@ -418,7 +418,7 @@ public class FeatureGenerator
         checks.set(true);
         try
         {
-            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), world.getChunkSource().randomState(), world.getStructureManager(), world.getSeed(), new ChunkPos(pos), 0, world, b -> true);
+            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), world.getChunkSource().randomState(), world.getStructureManager(), world.getSeed(), new ChunkPos(pos.getX(), pos.getZ()), 0, world, b -> true);
             if (start == StructureStart.INVALID_START)
             {
                 return false;
@@ -426,7 +426,8 @@ public class FeatureGenerator
             RandomSource rand = RandomSource.create(world.getRandom().nextInt());
             int j = pos.getX() >> 4;
             int k = pos.getZ() >> 4;
-            long chId = ChunkPos.asLong(j, k);
+            // ChunkPos.asLong was replaced with toLong() in 26.1
+            long chId = ((long)j & 0xFFFFFFFFL) | ((long)k << 32);
             world.getChunk(j, k).setStartForStructure(structure, start);
             world.getChunk(j, k).addReferenceForStructure(structure, chId);
 

@@ -744,7 +744,7 @@ public class EntityPlayerMPFake extends ServerPlayer
             }
             boolean canDisable = weaponDisableSeconds > 0.0F;
             if(canDisable){
-                this.playSound(SoundEvents.SHIELD_BREAK.value(), 0.8F, 0.8F + this.level().random.nextFloat() * 0.4F);
+                this.playSound(SoundEvents.SHIELD_BREAK.value(), 0.8F, 0.8F + this.level().getRandom().nextFloat() * 0.4F);
                 this.stopUsingItem();
                 int disableTicks;
                 if (this.hasDisableBlockingForSecondsOverride())
@@ -769,7 +769,7 @@ public class EntityPlayerMPFake extends ServerPlayer
                         = srv.getCommands().getDispatcher().parse(String.format("function practicebot:shielddisable", ign), commandSource);
                 srv.getCommands().performCommand(parseResults, "");
             } else {
-                this.playSound(SoundEvents.SHIELD_BLOCK.value(), 1.0F, 0.8F + this.level().random.nextFloat() * 0.4F);
+                this.playSound(SoundEvents.SHIELD_BLOCK.value(), 1.0F, 0.8F + this.level().getRandom().nextFloat() * 0.4F);
             }
             CriteriaTriggers.ENTITY_HURT_PLAYER.trigger((ServerPlayer)this, source, f, 0, true);
             if(blockedDamage < 3.4028235E37F){

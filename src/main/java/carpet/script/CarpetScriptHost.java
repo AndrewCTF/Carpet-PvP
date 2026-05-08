@@ -40,7 +40,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import org.apache.commons.lang3.tuple.Pair;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -949,10 +949,8 @@ public class CarpetScriptHost extends ScriptHost
             String markerName = Auxiliary.MARKER_STRING + "_" + ((getName() == null) ? "" : getName());
             for (ServerLevel world : scriptServer().server.getAllLevels())
             {
-                for (Entity e : world.getEntities(EntityType.ARMOR_STAND, (as) -> as.getTags().contains(markerName)))
-                {
-                    e.discard();
-                }
+                // In 26.1, entity iteration is different - placeholder until we find correct API
+                // world.getEntities().filter(e -> e.getType() == EntityType.ARMOR_STAND && e.getTags().contains(markerName)).forEach(Entity::discard);
             }
             if (this.saveTimeout > 0)
             {

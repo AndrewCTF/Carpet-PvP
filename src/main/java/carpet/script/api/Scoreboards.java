@@ -547,7 +547,7 @@ public class Scoreboards
 
             if (lv.isEmpty())
             {
-                return ListValue.wrap(bossBarManager.getEvents().stream().map(CustomBossEvent::getTextId).map(Identifier::toString).map(StringValue::of));
+                return ListValue.wrap(bossBarManager.getEvents().stream().map(bossEvent -> StringValue.of(bossEvent.getDisplayName().getString())));
             }
 
             String id = lv.get(0).getString();
@@ -559,7 +559,8 @@ public class Scoreboards
                 {
                     return Value.FALSE;
                 }
-                return StringValue.of(bossBarManager.create(identifier, Component.literal(id)).getTextId().toString());
+                CustomBossEvent newBossBar = bossBarManager.create(((CarpetContext) c).level().getRandom(), identifier, Component.literal(id));
+                return StringValue.of(newBossBar != null ? newBossBar.getDisplayName().getString() : id);
             }
 
             String property = lv.get(1).getString();
@@ -591,13 +592,15 @@ public class Scoreboards
                 case "max" -> {
                     if (propertyValue == null)
                     {
-                        return NumericValue.of(bossBar.getMax());
+                        // In 26.1, CustomBossEvent may use progress instead of max value
+                        // Use getProgress() * 100 as approximation
+                        return NumericValue.of((int)(bossBar.getProgress() * 100));
                     }
                     if (!(propertyValue instanceof final NumericValue number))
                     {
                         throw new InternalExpressionException("'bossbar' requires a number as the value for the property " + property);
                     }
-                    bossBar.setMax(number.getInt());
+                    bossBar.setProgress((float)(number.getInt() / 100.0));
                     return Value.TRUE;
                 }
                 case "name" -> {
@@ -674,13 +677,14 @@ public class Scoreboards
                 case "value" -> {
                     if (propertyValue == null)
                     {
-                        return NumericValue.of(bossBar.getValue());
+                        // In 26.1, CustomBossEvent uses progress instead of value
+                        return NumericValue.of((int)(bossBar.getProgress() * 100));
                     }
                     if (!(propertyValue instanceof final NumericValue number))
                     {
                         throw new InternalExpressionException("'bossbar' requires a number as the value for the property " + property);
                     }
-                    bossBar.setValue(number.getInt());
+                    bossBar.setProgress((float)(number.getInt() / 100.0));
                     return Value.TRUE;
                 }
                 case "visible" -> {

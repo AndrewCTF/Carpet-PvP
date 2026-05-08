@@ -18,7 +18,7 @@ import carpet.script.value.StringValue;
 import carpet.script.value.ThreadValue;
 import carpet.script.value.Value;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 /**
  * <p>Simple {@link ValueConverter} implementation that casts a {@link Value} into one of its subclasses, either for use directly in parameters or

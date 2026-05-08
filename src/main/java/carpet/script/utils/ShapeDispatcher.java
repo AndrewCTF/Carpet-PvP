@@ -58,7 +58,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -2235,7 +2235,7 @@ public class ShapeDispatcher
         int pcount = 0;
         if (distance < 100)
         {
-            RandomSource rand = players.get(0).level().random;
+            RandomSource rand = players.get(0).level().getRandom();
             int particles = (int) (distance / density) + 1;
             Vec3 towards = to.subtract(from);
             for (int i = 0; i < particles; i++)

@@ -947,7 +947,7 @@ public class RedstoneWireTurbo
         // these updates will be added to the stack and processed after the entire network has updated
         state.updateIndirectNeighbourShapes(level, pos, Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_CLIENTS);
 
-        for (Direction dir : Block.UPDATE_SHAPE_ORDER) {
+        for (Direction dir : new Direction[]{Direction.WEST, Direction.EAST, Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH}) {
             BlockPos neighborPos = pos.relative(dir);
             BlockState neighborState = level.getBlockState(neighborPos);
 

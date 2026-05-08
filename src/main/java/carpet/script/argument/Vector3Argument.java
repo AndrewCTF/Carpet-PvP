@@ -14,7 +14,7 @@ import java.util.NoSuchElementException;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 public class Vector3Argument extends Argument
 {
