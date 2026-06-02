@@ -46,6 +46,7 @@
                    
                    "Player_fakePlayersMixin",
                    "Player_fakePlayerCritMixin",
+                   "Player_fakePlayerStrongAttackMixin",
                    "LivingEntity_fallDamageRuleMixin",
                    "ServerGamePacketListenerImpl_coreMixin",
                    "ServerGamePacketListenerImpl_swordBlockMarkerMixin",
