@@ -73,6 +73,10 @@ public class EntityPlayerActionPack
 
     private boolean attackCritical;
 
+    // PvP combat-AI: chance (0-100) for a chase-attack swing to deliberately miss.
+    // Driven each tick by carpet.pvp.BotBrain; read at the chase-attack site below.
+    public int botMissChancePercent = 0;
+
     // Timed movement: counts down ticks and stops movement when depleted.
     private int moveTicksRemaining = -1; // -1 = indefinite
 
@@ -902,6 +906,12 @@ public class EntityPlayerActionPack
 
     public void onUpdate()
     {
+        // PvP combat-AI: let the bot brain pick targets / drive combat before normal action processing.
+        if (player instanceof EntityPlayerMPFake fakeForBrain)
+        {
+            fakeForBrain.getBotBrain().tick();
+        }
+
         if (maybeAutoEat())
         {
             stopMovement();
@@ -2820,6 +2830,14 @@ public class EntityPlayerActionPack
                     // Attack strength check for modern combat.
                     if (enforceWeaponCooldown && player.getAttackStrengthScale(0.5F) < 0.9F)
                     {
+                        return false;
+                    }
+
+                    // PvP combat-AI realism: deliberately miss a fraction of swings.
+                    if (ap.botMissChancePercent > 0
+                            && player.getRandom().nextInt(100) < ap.botMissChancePercent)
+                    {
+                        ap.navChaseAttackCooldown = ap.navChaseAttackInterval;
                         return false;
                     }
 

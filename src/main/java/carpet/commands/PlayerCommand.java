@@ -8,6 +8,8 @@ import carpet.helpers.pathfinding.BotNavMode;
 import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
+import carpet.pvp.BotPvpConfig;
+import carpet.pvp.FactionManager;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
 import carpet.utils.EquipmentSlotMapping;
@@ -83,6 +85,8 @@ public class PlayerCommand
             .then(makeAttackCommand())
             .then(makeGlideCommand())
             .then(makeNavCommand())
+            .then(makeAiCommand())
+            .then(makeFactionCommand())
             .then(makeActionCommand("drop", ActionType.DROP_ITEM))
             .then(makeDropCommand("drop", false))
             .then(makeActionCommand("dropStack", ActionType.DROP_STACK))
@@ -1148,6 +1152,200 @@ public class PlayerCommand
                 .then(literal("offhand").executes(manipulation(ap -> ap.drop(40, dropAll))))
                 .then(argument("slot", IntegerArgumentType.integer(0, 40)).
                         executes(c -> manipulate(c, ap -> ap.drop(IntegerArgumentType.getInteger(c, "slot"), dropAll))));
+    }
+
+    // ===== PvP combat-AI (`/player <name> ai ...`) =====
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeAiCommand()
+    {
+        return literal("ai")
+            .executes(PlayerCommand::aiShow)
+            .then(literal("show").executes(PlayerCommand::aiShow))
+            .then(literal("reset").executes(PlayerCommand::aiReset))
+            .then(argument("setting", StringArgumentType.word())
+                .suggests((c, b) -> suggest(List.of(BotPvpConfig.KEYS), b))
+                .then(argument("value", StringArgumentType.greedyString())
+                    .executes(PlayerCommand::aiSet)));
+    }
+
+    private static int aiShow(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        int count = 0;
+        for (ServerPlayer p : getPlayers(context))
+        {
+            if (!(p instanceof EntityPlayerMPFake bot)) continue;
+            Messenger.m(context.getSource(), "w " + bot.getName().getString() + ": " + bot.getPvpConfig().describe());
+            count++;
+        }
+        if (count == 0) Messenger.m(context.getSource(), "r No fake players selected");
+        return count;
+    }
+
+    private static int aiReset(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        int count = 0;
+        for (ServerPlayer p : getPlayers(context))
+        {
+            if (!(p instanceof EntityPlayerMPFake bot)) continue;
+            bot.resetPvpConfig();
+            FactionManager.leave(bot.getUUID());
+            count++;
+        }
+        if (count == 0) { Messenger.m(context.getSource(), "r No fake players selected"); return 0; }
+        Messenger.m(context.getSource(), "w Reset PvP config on " + count + " bot(s)");
+        return count;
+    }
+
+    private static int aiSet(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        String setting = StringArgumentType.getString(context, "setting");
+        String value = StringArgumentType.getString(context, "value");
+        int count = 0;
+        for (ServerPlayer p : getPlayers(context))
+        {
+            if (!(p instanceof EntityPlayerMPFake bot)) continue;
+            String err = bot.getPvpConfig().apply(setting, value);
+            if (err != null) { Messenger.m(context.getSource(), "r " + err); return 0; }
+            syncBotFaction(bot);
+            count++;
+        }
+        if (count == 0) { Messenger.m(context.getSource(), "r No fake players selected"); return 0; }
+        Messenger.m(context.getSource(), "w Set " + setting + " = " + value + " on " + count + " bot(s)");
+        return count;
+    }
+
+    /** Keeps the faction registry in sync with a bot's config faction field. */
+    private static void syncBotFaction(EntityPlayerMPFake bot)
+    {
+        String faction = bot.getPvpConfig().faction;
+        if (faction == null)
+        {
+            FactionManager.leave(bot.getUUID());
+        }
+        else
+        {
+            FactionManager.create(faction);
+            FactionManager.join(faction, bot.getUUID());
+        }
+    }
+
+    // ===== Factions (`/player <name> faction ...`) =====
+
+    private static LiteralArgumentBuilder<CommandSourceStack> makeFactionCommand()
+    {
+        return literal("faction")
+            .then(literal("list").executes(PlayerCommand::factionList))
+            .then(literal("create").then(argument("name", StringArgumentType.word())
+                .executes(PlayerCommand::factionCreate)))
+            .then(literal("delete").then(argument("name", StringArgumentType.word())
+                .suggests((c, b) -> suggest(FactionManager.allFactions(), b))
+                .executes(PlayerCommand::factionDelete)))
+            .then(literal("join").then(argument("name", StringArgumentType.word())
+                .suggests((c, b) -> suggest(FactionManager.allFactions(), b))
+                .executes(PlayerCommand::factionJoin)))
+            .then(literal("leave").executes(PlayerCommand::factionLeave))
+            .then(literal("info").executes(PlayerCommand::factionInfo))
+            .then(literal("ally").then(argument("a", StringArgumentType.word())
+                .suggests((c, b) -> suggest(FactionManager.allFactions(), b))
+                .then(argument("b", StringArgumentType.word())
+                    .suggests((c, b) -> suggest(FactionManager.allFactions(), b))
+                    .executes(PlayerCommand::factionAlly))))
+            .then(literal("unally").then(argument("a", StringArgumentType.word())
+                .suggests((c, b) -> suggest(FactionManager.allFactions(), b))
+                .then(argument("b", StringArgumentType.word())
+                    .suggests((c, b) -> suggest(FactionManager.allFactions(), b))
+                    .executes(PlayerCommand::factionUnally))));
+    }
+
+    private static int factionList(CommandContext<CommandSourceStack> context)
+    {
+        var all = FactionManager.allFactions();
+        if (all.isEmpty()) { Messenger.m(context.getSource(), "w No factions"); return 0; }
+        Messenger.m(context.getSource(), "w Factions: " + String.join(", ", all));
+        return all.size();
+    }
+
+    private static int factionCreate(CommandContext<CommandSourceStack> context)
+    {
+        String name = StringArgumentType.getString(context, "name");
+        boolean created = FactionManager.create(name);
+        Messenger.m(context.getSource(), created ? "w Created faction " + name : "r Faction already exists: " + name);
+        return created ? 1 : 0;
+    }
+
+    private static int factionDelete(CommandContext<CommandSourceStack> context)
+    {
+        String name = StringArgumentType.getString(context, "name");
+        boolean deleted = FactionManager.delete(name);
+        Messenger.m(context.getSource(), deleted ? "w Deleted faction " + name : "r No such faction: " + name);
+        return deleted ? 1 : 0;
+    }
+
+    private static int factionJoin(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        String name = StringArgumentType.getString(context, "name");
+        FactionManager.create(name);
+        int count = 0;
+        for (ServerPlayer p : getPlayers(context))
+        {
+            if (!(p instanceof EntityPlayerMPFake bot)) continue;
+            bot.getPvpConfig().faction = name;
+            FactionManager.join(name, bot.getUUID());
+            count++;
+        }
+        if (count == 0) { Messenger.m(context.getSource(), "r No fake players selected"); return 0; }
+        Messenger.m(context.getSource(), "w Added " + count + " bot(s) to faction " + name);
+        return count;
+    }
+
+    private static int factionLeave(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        int count = 0;
+        for (ServerPlayer p : getPlayers(context))
+        {
+            if (!(p instanceof EntityPlayerMPFake bot)) continue;
+            bot.getPvpConfig().faction = null;
+            FactionManager.leave(bot.getUUID());
+            count++;
+        }
+        if (count == 0) { Messenger.m(context.getSource(), "r No fake players selected"); return 0; }
+        Messenger.m(context.getSource(), "w Removed " + count + " bot(s) from their faction");
+        return count;
+    }
+
+    private static int factionInfo(CommandContext<CommandSourceStack> context)
+    {
+        if (cantManipulate(context)) return 0;
+        ServerPlayer p = getPlayer(context);
+        if (!(p instanceof EntityPlayerMPFake bot)) { Messenger.m(context.getSource(), "r No fake player selected"); return 0; }
+        String faction = bot.getPvpConfig().faction;
+        if (faction == null) { Messenger.m(context.getSource(), "w " + bot.getName().getString() + " has no faction"); return 0; }
+        String info = FactionManager.info(faction);
+        Messenger.m(context.getSource(), "w " + (info == null ? "Faction " + faction : info));
+        return 1;
+    }
+
+    private static int factionAlly(CommandContext<CommandSourceStack> context)
+    {
+        String a = StringArgumentType.getString(context, "a");
+        String b = StringArgumentType.getString(context, "b");
+        boolean ok = FactionManager.ally(a, b);
+        Messenger.m(context.getSource(), ok ? "w " + a + " and " + b + " are now allies" : "r Could not ally " + a + " and " + b);
+        return ok ? 1 : 0;
+    }
+
+    private static int factionUnally(CommandContext<CommandSourceStack> context)
+    {
+        String a = StringArgumentType.getString(context, "a");
+        String b = StringArgumentType.getString(context, "b");
+        boolean ok = FactionManager.unally(a, b);
+        Messenger.m(context.getSource(), ok ? "w " + a + " and " + b + " are no longer allies" : "r " + a + " and " + b + " were not allies");
+        return ok ? 1 : 0;
     }
 
     private static List<ServerPlayer> getPlayers(CommandContext<CommandSourceStack> context)
