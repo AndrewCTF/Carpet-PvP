@@ -56,12 +56,16 @@ import carpet.utils.Messenger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import carpet.pvp.BotBrain;
+import carpet.pvp.BotPvpConfig;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -86,6 +90,34 @@ public class EntityPlayerMPFake extends ServerPlayer
     public boolean isAShadow;
     public Vec3 spawnPos;
     public double spawnYaw;
+
+    // PvP combat-AI state (lazily initialised so it also covers shadow players).
+    private BotPvpConfig pvpConfig;
+    private BotBrain botBrain;
+    /** UUID of the most recent attacker, used by the combat-AI revenge logic. */
+    public UUID lastAttackerUUID;
+    /** Game-time tick at which {@link #lastAttackerUUID} last dealt damage. */
+    public long lastAttackerTick;
+
+    /** Per-bot PvP configuration, seeded from the global {@code /carpet} bot rules. */
+    public BotPvpConfig getPvpConfig()
+    {
+        if (pvpConfig == null) pvpConfig = new BotPvpConfig();
+        return pvpConfig;
+    }
+
+    /** The per-bot combat-AI driver, ticked each game tick from the action pack. */
+    public BotBrain getBotBrain()
+    {
+        if (botBrain == null) botBrain = new BotBrain(this);
+        return botBrain;
+    }
+
+    /** Resets this bot's PvP config back to the current global {@code /carpet} rule defaults. */
+    public void resetPvpConfig()
+    {
+        pvpConfig = new BotPvpConfig();
+    }
     
     // Equipment synchronization state caching
     private final Map<EquipmentSlot, ItemStack> lastSyncedEquipment = new HashMap<>();
@@ -727,6 +759,11 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     @Override
     public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float f) {
+        // Record the attacker so the combat-AI revenge logic can retaliate.
+        if (f > 0.0f && source.getEntity() instanceof LivingEntity attacker && attacker != this) {
+            this.lastAttackerUUID = attacker.getUUID();
+            this.lastAttackerTick = serverLevel.getGameTime();
+        }
         // In 1.21+, directional blocking is handled by applyItemBlocking (uses BLOCKS_ATTACKS component).
         if (f > 0.0f && this.isBlocking()) {
             float blockedDamage = this.applyItemBlocking(serverLevel, source, f);

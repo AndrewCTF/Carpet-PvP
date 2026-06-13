@@ -25,5 +25,10 @@ public class RuleCategory {
      * running Carpet
      */
     public static final String CLIENT = "client";
+    /**
+     * Rules controlling the PvP combat-AI behaviour of Carpet fake players
+     * (auto-totem, auto-shield, target acquisition, factions, realism, ...).
+     */
+    public static final String PVP = "pvp";
 
 }

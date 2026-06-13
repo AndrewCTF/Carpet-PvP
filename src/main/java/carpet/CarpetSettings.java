@@ -42,6 +42,7 @@ import static carpet.api.settings.RuleCategory.TNT;
 import static carpet.api.settings.RuleCategory.DISPENSER;
 import static carpet.api.settings.RuleCategory.SCARPET;
 import static carpet.api.settings.RuleCategory.CLIENT;
+import static carpet.api.settings.RuleCategory.PVP;
 
 @SuppressWarnings({"CanBeFinal", "removal"}) // removal should be removed after migrating rules to the new system
 public class CarpetSettings
@@ -1139,6 +1140,97 @@ public class CarpetSettings
             category = FEATURE
     )
     public static boolean spamClickCombat = false;
+
+    // ===================================================================================
+    // PvP combat-AI bot rules. These are the GLOBAL DEFAULTS new fake players inherit at
+    // spawn (see carpet.pvp.BotPvpConfig). Per-bot overrides via `/player <name> ai ...`.
+    // ===================================================================================
+
+    @Rule(desc = "Bots fight: master toggle for fake-player PvP combat AI", category = PVP)
+    public static boolean botCombat = false;
+
+    @Rule(desc = "Bots automatically search for nearby targets", category = PVP)
+    public static boolean botAutoTarget = true;
+
+    @Rule(desc = "Bots target real players", category = PVP)
+    public static boolean botTargetPlayers = true;
+
+    @Rule(desc = "Bots target hostile/other mobs", category = PVP)
+    public static boolean botTargetMobs = false;
+
+    @Rule(desc = "Bots target other fake-player bots", category = PVP)
+    public static boolean botTargetBots = true;
+
+    @Rule(desc = "Bots retaliate against whoever last hit them", category = PVP)
+    public static boolean botRevenge = true;
+
+    @Rule(desc = "Default target acquisition range in blocks", category = PVP,
+            options = {"8.0", "16.0", "24.0", "32.0"}, validate = Validators.NonNegativeNumber.class)
+    public static double botTargetRange = 16.0D;
+
+    @Rule(desc = "Bots break off combat when health drops to this value (0 = never)", category = PVP,
+            options = {"0", "4", "6", "8"}, validate = Validators.NonNegativeNumber.class)
+    public static int botRetreatHealth = 0;
+
+    @Rule(desc = "Bots keep a Totem of Undying in the offhand", category = PVP)
+    public static boolean botAutoTotem = true;
+
+    @Rule(desc = "Bots equip a shield in the offhand when low on health", category = PVP)
+    public static boolean botAutoShield = false;
+
+    @Rule(desc = "Bots auto-eat when hungry (uses existing nav auto-eat)", category = PVP)
+    public static boolean botAutoFood = true;
+
+    @Rule(desc = "Bots auto-drink/throw potions in combat (planned)", category = PVP)
+    public static boolean botAutoPotion = false;
+
+    @Rule(desc = "Bots auto-equip the best available armor (planned)", category = PVP)
+    public static boolean botAutoArmor = false;
+
+    @Rule(desc = "Bots auto-equip the best available weapon (planned)", category = PVP)
+    public static boolean botAutoWeapon = false;
+
+    @Rule(desc = "Bots auto-repair gear with Mending XP (planned)", category = PVP)
+    public static boolean botAutoRepair = false;
+
+    @Rule(desc = "Default bot combat style", category = PVP,
+            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE"}, strict = true)
+    public static String botCombatStyle = "MELEE";
+
+    @Rule(desc = "Bots prefer swords over axes for melee", category = PVP)
+    public static boolean botPreferSword = true;
+
+    @Rule(desc = "Bots use an axe to break shields (planned)", category = PVP)
+    public static boolean botShieldBreak = false;
+
+    @Rule(desc = "Bots perform critical (jump) hits", category = PVP)
+    public static boolean botCritical = true;
+
+    @Rule(desc = "Bots strafe around their target in melee range", category = PVP)
+    public static boolean botStrafe = true;
+
+    @Rule(desc = "Bots bunny-hop while chasing (planned)", category = PVP)
+    public static boolean botBhop = false;
+
+    @Rule(desc = "Default melee engagement range in blocks", category = PVP,
+            options = {"2.5", "3.0", "4.0"}, validate = Validators.NonNegativeNumber.class)
+    public static double botMeleeRange = 3.0D;
+
+    @Rule(desc = "Default ticks between bot attacks (0 = as fast as cooldown allows)", category = PVP,
+            options = {"0", "10", "20"}, validate = Validators.NonNegativeNumber.class)
+    public static int botAttackCooldown = 0;
+
+    @Rule(desc = "Default chance (0-100%) for a bot to deliberately miss a swing", category = PVP,
+            options = {"0", "10", "25", "50"}, validate = Validators.NonNegativeNumber.class)
+    public static int botMissChance = 0;
+
+    @Rule(desc = "Default chance (0-100%) for a bot to make a targeting mistake (planned)", category = PVP,
+            options = {"0", "10", "25"}, validate = Validators.NonNegativeNumber.class)
+    public static int botMistakeChance = 0;
+
+    @Rule(desc = "Default reaction delay in ticks before a bot engages a new target", category = PVP,
+            options = {"0", "2", "5", "10"}, validate = Validators.NonNegativeNumber.class)
+    public static int botReactionDelay = 0;
 
     @Rule(
             desc = "Enables 1.8-style sword block hitting on right click",
