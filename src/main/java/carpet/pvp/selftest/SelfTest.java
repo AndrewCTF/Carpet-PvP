@@ -21,7 +21,7 @@ import java.util.function.Function;
  */
 public final class SelfTest
 {
-    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit");
+    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow", "chase_attack", "chase_crit");
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     private static final double SURFACE_Y = -60.0D;
@@ -133,6 +133,64 @@ public final class SelfTest
                     double gap = player(server, a).distanceTo(leader);
                     return new Probe(walked >= 20.0D && gap <= 4.0D, fmt("%s walked %.1f blocks, %s is %.1f blocks behind", b, walked, a, gap));
                 });
+            case "nav_patrol":
+                // The bot starts away from the first waypoint, so visiting both means it walked there.
+                Vec3 first = origin;
+                Vec3 second = origin.add(10.0D, 0.0D, 0.0D);
+                boolean[] visited = {false, false};
+                return new Scenario(600, List.of(new Bot(a, origin.add(0.0D, 0.0D, -6.0D))),
+                        List.of("player " + a + " nav patrol " + coords(first) + " " + coords(second)), server ->
+                {
+                    ServerPlayer bot = player(server, a);
+                    // Patrol loops, so the two visits happen at different ticks; remember them.
+                    // The patrol arrival radius is 1.5 blocks.
+                    if (bot.position().distanceTo(first) <= 2.0D) visited[0] = true;
+                    if (bot.position().distanceTo(second) <= 2.0D) visited[1] = true;
+                    return new Probe(visited[0] && visited[1],
+                            fmt("%s visited the first waypoint: %s, the second: %s", a, visited[0], visited[1]));
+                });
+            case "nav_stop":
+                // nav stop clears the navigation state but never the movement inputs, so the bot keeps
+                // coasting at its last speed instead of halting. This pins that; it should be tightened
+                // to "the bot stops moving" once stopNavigation() also stops movement.
+                Vec3 far = origin.add(40.0D, 0.0D, 0.0D);
+                boolean[] stopping = {false};
+                double[] lastX = {origin.x};
+                return new Scenario(600, List.of(new Bot(a, origin)),
+                        List.of("player " + a + " nav goto " + coords(far)), server ->
+                {
+                    ServerPlayer bot = player(server, a);
+                    double x = bot.getX();
+                    if (!stopping[0])
+                    {
+                        if (Math.abs(x - origin.x) < 3.0D)
+                        {
+                            return new Probe(false, fmt("%s has not started walking yet", a));
+                        }
+                        run(server, "player " + a + " nav stop");
+                        stopping[0] = true;
+                        lastX[0] = x;
+                        return new Probe(false, fmt("issued nav stop with %s 3 blocks along", a));
+                    }
+                    double since = Math.abs(x - lastX[0]);
+                    return new Probe(since >= 0.15D, fmt("%s coasted %.2f blocks past nav stop", a, since));
+                });
+            case "nav_come":
+                // nav come navigates to the command source's position, so the console is moved there.
+                Vec3 here = origin.add(8.0D, 0.0D, 0.0D);
+                boolean[] sent = {false};
+                return new Scenario(600, List.of(new Bot(a, origin)), List.of(), server ->
+                {
+                    ServerPlayer bot = player(server, a);
+                    if (!sent[0])
+                    {
+                        run(server, "player " + a + " nav come", here);
+                        sent[0] = true;
+                        return new Probe(false, fmt("%s was sent to the command source's position", a));
+                    }
+                    double left = bot.position().distanceTo(here);
+                    return new Probe(left <= 1.5D, fmt("%s is %.2f blocks from the command source", a, left));
+                });
             case "chase_attack":
             case "chase_crit":
                 String mode = name.substring("chase_".length());
@@ -183,6 +241,12 @@ public final class SelfTest
     private static void run(MinecraftServer server, String command)
     {
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+    }
+
+    /** Runs a command as if it came from the given position, which nav come navigates to. */
+    private static void run(MinecraftServer server, String command, Vec3 sourcePos)
+    {
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withPosition(sourcePos), command);
     }
 
     private static void log(MinecraftServer server, String message)

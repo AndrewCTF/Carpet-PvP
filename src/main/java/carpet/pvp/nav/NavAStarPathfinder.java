@@ -1,4 +1,4 @@
-package carpet.helpers.pathfinding;
+package carpet.pvp.nav;
 
 import java.util.ArrayList;
 import java.util.HashMap;

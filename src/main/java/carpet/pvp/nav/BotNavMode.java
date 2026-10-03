@@ -1,4 +1,4 @@
-package carpet.helpers.pathfinding;
+package carpet.pvp.nav;
 
 /**
  * High-level navigation mode selector for fake players.
