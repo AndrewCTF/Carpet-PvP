@@ -37,6 +37,23 @@ public final class DuelSim
     public static final double HEIGHT = 1.8;
     private static final double FRONT_COS = 0.5;
 
+    /** WindCharge.RADIUS, the radius the wind charge burst explodes with. */
+    public static final double WIND_CHARGE_RADIUS = 1.2;
+    /** SimpleExplosionDamageCalculator knockback multiplier of the wind charge burst, for a player that is not flying. */
+    public static final double WIND_CHARGE_KNOCKBACK = 1.22;
+    /** Items registers the wind charge with useCooldown(0.5f); UseCooldown.ticks() is (int)(0.5f * 20). */
+    public static final int WIND_CHARGE_COOLDOWN = 10;
+    /** Radius of the Wind Burst enchantment effect, from data/minecraft/enchantment/wind_burst.json. */
+    public static final double WIND_BURST_RADIUS = 3.5;
+    /** Knockback multiplier of the Wind Burst effect per enchantment level, from wind_burst.json. */
+    public static final double[] WIND_BURST_KNOCKBACK = {1.2, 1.75, 2.2};
+    /** Items registers the ender pearl with useCooldown(1.0f), so 20 ticks. */
+    public static final int PEARL_COOLDOWN = 20;
+    /** Damage ThrownEnderpearl deals to the thrower on the way back; the ender_pearl type bypasses armour. */
+    public static final float PEARL_RETURN_DAMAGE = 5.0f;
+    /** MaceItem.hurtEnemy sets the attacker's vertical velocity to this after a smash hit. */
+    public static final double SMASH_HIT_VERTICAL_VELOCITY = 0.01;
+
     public static final class Fighter
     {
         public double x;
@@ -56,7 +73,18 @@ public final class DuelSim
         public int invulTime;
         public float lastHurt;
         public int noJumpDelay;
-
+        /** Entity.fallDistance: only downward movement adds to it, and it is zeroed on the landing tick. */
+        public double fallDistance;
+        /** LivingEntity.isFallFlying. While true the mace cannot smash and the fall distance is pinned to 1. */
+        public boolean gliding;
+        /** View pitch in degrees while gliding, positive looking down, as Minecraft's x rotation. */
+        public double glidePitch;
+        public int windChargeCooldown;
+        public int pearlCooldown;
+        /** Density enchantment level of the held mace, 0 without it. */
+        public int densityLevel;
+        /** Wind Burst enchantment level of the held mace, 0 without it. */
+        public int windBurstLevel;
         public double baseDamage = 8.0;
         public double attackSpeed = 1.6;
         public float enchantBonus;
@@ -98,6 +126,13 @@ public final class DuelSim
             invulTime = o.invulTime;
             lastHurt = o.lastHurt;
             noJumpDelay = o.noJumpDelay;
+            fallDistance = o.fallDistance;
+            gliding = o.gliding;
+            glidePitch = o.glidePitch;
+            windChargeCooldown = o.windChargeCooldown;
+            pearlCooldown = o.pearlCooldown;
+            densityLevel = o.densityLevel;
+            windBurstLevel = o.windBurstLevel;
             baseDamage = o.baseDamage;
             attackSpeed = o.attackSpeed;
             enchantBonus = o.enchantBonus;
@@ -176,6 +211,12 @@ public final class DuelSim
         b.copyFrom(o.b);
     }
 
+    /** Points fighter who at the other one, the way step() does at the end of every tick. */
+    public void face(int who, int other)
+    {
+        face(fighter(who), fighter(other));
+    }
+
     public boolean over()
     {
         return a.health <= 0.0f || b.health <= 0.0f;
@@ -191,12 +232,18 @@ public final class DuelSim
     /** Mirrors ServerPlayer.isWithinAttackRange with AttackRange.defaultFor: eye to hitbox distance at most the interaction range. */
     public static boolean inReach(Fighter att, Fighter tgt)
     {
-        double ex = att.x;
-        double ey = att.y + EYE_HEIGHT;
-        double ez = att.z;
-        double dx = Math.max(Math.max(tgt.x - HALF_WIDTH - ex, ex - (tgt.x + HALF_WIDTH)), 0.0);
-        double dy = Math.max(Math.max(tgt.y - ey, ey - (tgt.y + HEIGHT)), 0.0);
-        double dz = Math.max(Math.max(tgt.z - HALF_WIDTH - ez, ez - (tgt.z + HALF_WIDTH)), 0.0);
+        return inReach(att.x, att.y, att.z, tgt.x, tgt.y, tgt.z);
+    }
+
+    /** Feet position of the attacker and of the hitbox the attack has to reach. */
+    public static boolean inReach(double ax, double ay, double az, double tx, double ty, double tz)
+    {
+        double ex = ax;
+        double ey = ay + EYE_HEIGHT;
+        double ez = az;
+        double dx = Math.max(Math.max(tx - HALF_WIDTH - ex, ex - (tx + HALF_WIDTH)), 0.0);
+        double dy = Math.max(Math.max(ty - ey, ey - (ty + HEIGHT)), 0.0);
+        double dz = Math.max(Math.max(tz - HALF_WIDTH - ez, ez - (tz + HALF_WIDTH)), 0.0);
         return dx * dx + dy * dy + dz * dz <= REACH * REACH;
     }
 
@@ -305,6 +352,14 @@ public final class DuelSim
         {
             f.invulTime--;
         }
+        if (f.windChargeCooldown > 0)
+        {
+            f.windChargeCooldown--;
+        }
+        if (f.pearlCooldown > 0)
+        {
+            f.pearlCooldown--;
+        }
         int forward = forward(action);
         if (!sprint(action))
         {
@@ -332,6 +387,11 @@ public final class DuelSim
         if (Math.abs(f.vy) < 0.003)
         {
             f.vy = 0.0;
+        }
+        if (f.gliding)
+        {
+            glide(f);
+            return;
         }
         float zza = forward * INPUT_SCALE;
         float xxa = strafe(action) * INPUT_SCALE;
@@ -375,11 +435,78 @@ public final class DuelSim
             f.vz += iz * f.cosYaw + ix * f.sinYaw;
         }
 
+        move(f);
+
+        float drag = friction * AIR_DRAG;
+        f.vx *= drag;
+        f.vz *= drag;
+        f.vy = (f.vy - GRAVITY) * VERTICAL_DRAG;
+    }
+
+    /**
+     * Mirrors LivingEntity.travelFallFlying: checkFallDistanceAccumulation, then updateFallFlyingMovement,
+     * then Entity.move.
+     */
+    private void glide(Fighter f)
+    {
+        checkFallDistanceAccumulation(f);
+        double pitch = f.glidePitch * 0.017453292;
+        double cos = Math.cos(pitch);
+        double lookX = -f.sinYaw * cos;
+        double lookZ = f.cosYaw * cos;
+        double lookFlat = Math.sqrt(lookX * lookX + lookZ * lookZ);
+        double horiz = Math.sqrt(f.vx * f.vx + f.vz * f.vz);
+        double cosSq = cos * cos;
+        double vx = f.vx;
+        double vy = f.vy + GRAVITY * (0.75 * cosSq - 1.0);
+        double vz = f.vz;
+        if (vy < 0.0 && lookFlat > 0.0)
+        {
+            double g = vy * -0.1 * cosSq;
+            vx += lookX * g / lookFlat;
+            vy += g;
+            vz += lookZ * g / lookFlat;
+        }
+        if (pitch < 0.0 && lookFlat > 0.0)
+        {
+            double g = horiz * Math.sin(pitch) * -0.04;
+            vx += -lookX * g / lookFlat;
+            vy += g * 3.2;
+            vz += -lookZ * g / lookFlat;
+        }
+        if (lookFlat > 0.0)
+        {
+            vx += (lookX / lookFlat * horiz - vx) * 0.1;
+            vz += (lookZ / lookFlat * horiz - vz) * 0.1;
+        }
+        f.vx = vx * 0.99;
+        f.vy = vy * 0.98;
+        f.vz = vz * 0.99;
+        move(f);
+    }
+
+    /** Mirrors Entity.checkFallDistanceAccumulation: the counter is pinned to 1 while the sink is shallow. */
+    private static void checkFallDistanceAccumulation(Fighter f)
+    {
+        if (f.vy > -0.5 && f.fallDistance > 1.0)
+        {
+            f.fallDistance = 1.0;
+        }
+    }
+
+    /**
+     * Mirrors Entity.move on flat ground followed by Entity.checkFallDamage: only the downward part of the
+     * tick's movement adds to the fall distance, and the counter is zeroed on the landing tick.
+     */
+    private static void move(Fighter f)
+    {
+        double ny = f.y + f.vy;
+        double moved = ny - f.y;
         f.x += f.vx;
         f.z += f.vz;
-        double ny = f.y + f.vy;
         if (ny <= 0.0)
         {
+            moved = -f.y;
             f.y = 0.0;
             f.vy = 0.0;
             f.onGround = true;
@@ -389,11 +516,136 @@ public final class DuelSim
             f.y = ny;
             f.onGround = false;
         }
+        if (moved < 0.0)
+        {
+            f.fallDistance -= moved;
+        }
+        if (f.onGround)
+        {
+            f.fallDistance = 0.0;
+        }
+    }
 
-        float drag = friction * AIR_DRAG;
-        f.vx *= drag;
-        f.vz *= drag;
-        f.vy = (f.vy - GRAVITY) * VERTICAL_DRAG;
+    /**
+     * Mirrors ServerExplosion.hurtEntities: the velocity an explosion of the given radius and knockback
+     * multiplier adds to a fighter whose feet are at (fx, fy, fz) when it bursts at (bx, by, bz). Entities
+     * farther away than twice the radius are left alone, the direction points from the burst to the eye, and
+     * the magnitude is (1 - ratio) * exposure * multiplier. A player has no explosion knockback resistance.
+     * Writes {vx, vy, vz} into out.
+     */
+    public static void explosionImpulse(double[] out, double fx, double fy, double fz, double bx, double by, double bz,
+                                       double radius, double knockbackMultiplier, double exposure)
+    {
+        double dx = fx - bx;
+        double dy = fy - by;
+        double dz = fz - bz;
+        double ratio = Math.sqrt(dx * dx + dy * dy + dz * dz) / (radius * 2.0);
+        if (ratio > 1.0)
+        {
+            out[0] = out[1] = out[2] = 0.0;
+            return;
+        }
+        double ey = dy + EYE_HEIGHT;
+        double len = Math.sqrt(dx * dx + ey * ey);
+        if (len < 1.0E-5)
+        {
+            out[0] = out[1] = out[2] = 0.0;
+            return;
+        }
+        double factor = (1.0 - ratio) * exposure * knockbackMultiplier;
+        out[0] = dx / len * factor;
+        out[1] = ey / len * factor;
+        out[2] = dz / len * factor;
+    }
+
+    /** Starts gliding, which needs an elytra and an off ground fighter (LivingEntity.canGlide). */
+    public void startGlide(int who, double pitchDegrees)
+    {
+        Fighter f = fighter(who);
+        if (f.onGround)
+        {
+            return;
+        }
+        f.gliding = true;
+        f.glidePitch = pitchDegrees;
+    }
+
+    /** Mirrors LivingEntity.stopFallFlying, after which the fall distance accumulates again. */
+    public void stopGlide(int who)
+    {
+        fighter(who).gliding = false;
+    }
+
+    /**
+     * Bursts a wind charge at the given offset from the fighter's feet and adds the impulse to its velocity.
+     * A charge fired straight down lands on the fighter's own ground block, so a burst at its feet sits a
+     * quarter of a block above them. False while the item is still on cooldown.
+     */
+    public boolean windCharge(int who, double dx, double dy, double dz)
+    {
+        Fighter f = fighter(who);
+        if (f.windChargeCooldown > 0)
+        {
+            return false;
+        }
+        explosionImpulse(kb, f.x, f.y, f.z, f.x + dx, f.y + dy, f.z + dz,
+                WIND_CHARGE_RADIUS, WIND_CHARGE_KNOCKBACK, 1.0);
+        f.vx += kb[0];
+        f.vy += kb[1];
+        f.vz += kb[2];
+        f.windChargeCooldown = WIND_CHARGE_COOLDOWN;
+        return true;
+    }
+
+    /** The Wind Burst post attack effect of wind_burst.json: a burst on the attacker with a level dependent multiplier. */
+    public void windBurst(int who)
+    {
+        Fighter f = fighter(who);
+        if (f.windBurstLevel <= 0)
+        {
+            return;
+        }
+        explosionImpulse(kb, f.x, f.y, f.z, f.x, f.y, f.z, WIND_BURST_RADIUS,
+                WIND_BURST_KNOCKBACK[Math.min(f.windBurstLevel, WIND_BURST_KNOCKBACK.length) - 1], 1.0);
+        f.vx += kb[0];
+        f.vy += kb[1];
+        f.vz += kb[2];
+    }
+
+    /**
+     * Mirrors ThrownEnderpearl.onHit: the thrower teleports with zero velocity and its fall distance is reset.
+     * False while the pearl is still on cooldown.
+     */
+    public boolean pearl(int who, double x, double y, double z)
+    {
+        Fighter f = fighter(who);
+        if (f.pearlCooldown > 0)
+        {
+            return false;
+        }
+        f.x = x;
+        f.y = y;
+        f.z = z;
+        f.vx = 0.0;
+        f.vy = 0.0;
+        f.vz = 0.0;
+        f.fallDistance = 0.0;
+        f.gliding = false;
+        f.pearlCooldown = PEARL_COOLDOWN;
+        return true;
+    }
+
+    /**
+     * The attacker's side of a landed smash hit: MaceItem.hurtEnemy pins the vertical velocity to 0.01 and
+     * MaceItem.postHurtEnemy clears the fall distance, then the Wind Burst effect launches the attacker again.
+     */
+    public void smashHit(int who)
+    {
+        Fighter f = fighter(who);
+        f.vy = SMASH_HIT_VERTICAL_VELOCITY;
+        f.gliding = false;
+        f.fallDistance = 0.0;
+        windBurst(who);
     }
 
     /** Mirrors Entity.push(Entity) applied symmetrically to overlapping fighters (LivingEntity.pushEntities). */
