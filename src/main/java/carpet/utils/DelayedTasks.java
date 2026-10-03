@@ -20,7 +20,7 @@ public final class DelayedTasks
     /** Runs the task on the server thread once {@code ticks} server ticks have passed. */
     public static void schedule(MinecraftServer server, int ticks, Runnable task)
     {
-        TASKS.add(new Entry(server.getTickCount() + Math.max(0, ticks), task));
+        add(server.getTickCount() + Math.max(0, ticks), task);
     }
 
     /** Runs the task on the next server tick, whatever thread asks for it. */
@@ -29,18 +29,37 @@ public final class DelayedTasks
         schedule(server, 1, task);
     }
 
+    static void add(long dueTick, Runnable task)
+    {
+        synchronized (TASKS)
+        {
+            TASKS.add(new Entry(dueTick, task));
+        }
+    }
+
     /** Runs every task that came due since the last tick. Called from the server tick. */
     public static void tick(MinecraftServer server)
     {
-        if (TASKS.isEmpty()) return;
+        runDue(server.getTickCount());
+    }
 
-        long currentTick = server.getTickCount();
-        Iterator<Entry> it = TASKS.iterator();
-        while (it.hasNext())
+    /** A task may schedule another one, so the due tasks are taken off the list before any of them runs. */
+    static void runDue(long currentTick)
+    {
+        List<Entry> due = new ArrayList<>();
+        synchronized (TASKS)
         {
-            Entry entry = it.next();
-            if (currentTick < entry.dueTick()) continue;
-            it.remove();
+            Iterator<Entry> it = TASKS.iterator();
+            while (it.hasNext())
+            {
+                Entry entry = it.next();
+                if (currentTick < entry.dueTick()) continue;
+                it.remove();
+                due.add(entry);
+            }
+        }
+        for (Entry entry : due)
+        {
             try
             {
                 entry.task().run();
@@ -54,7 +73,10 @@ public final class DelayedTasks
 
     public static void clear()
     {
-        TASKS.clear();
+        synchronized (TASKS)
+        {
+            TASKS.clear();
+        }
     }
 
     private record Entry(long dueTick, Runnable task) {}
