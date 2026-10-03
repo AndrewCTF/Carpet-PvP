@@ -1,0 +1,19 @@
+# /auto-setup run by the joining player: the menu, the arena with the bot, the fight, and the clean-up.
+time set noon
+weather clear
+gamemode survival Viewer
+tp Viewer 0.5 -60 0.5 -90 5
+sleep 4
+execute as Viewer run auto-setup
+sleep 2
+shot auto-setup-01-menu
+execute as Viewer run auto-setup sword beginner
+sleep 5
+shot auto-setup-02-countdown
+sleep 5
+shot auto-setup-03-fighting
+sleep 4
+shot auto-setup-04-fighting
+execute as Viewer run auto-setup stop
+sleep 3
+shot auto-setup-05-restored

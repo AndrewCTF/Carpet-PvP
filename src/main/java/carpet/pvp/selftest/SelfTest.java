@@ -202,6 +202,9 @@ public final class SelfTest
             all.addAll(ScenarioIndex.SCENARIOS.keySet());
             names = SelfTestReport.parseNames(REQUESTED, all);
             run(server, "carpet fakePlayerNavigation true");
+            // A flat world breeds slimes everywhere, and one wandering into a fight changes its outcome.
+            run(server, "gamerule spawn_mobs false");
+            run(server, "kill @e[type=!player]");
             // Sprinting only removes the wait between ticks; the scenarios take the same ticks either way.
             run(server, "tick sprint 1d");
         }
@@ -2073,6 +2076,7 @@ public final class SelfTest
         long[] attempts = {-1};
         return new Scenario(400, List.of(new Bot(a, origin), new Bot(b, origin.add(3.0D, 0.0D, 0.0D))), List.of(
                 forceload(area),
+                "gamerule spawn_mobs true",
                 "carpet lagFreeSpawning true",
                 "spawn tracking start",
                 "spawn mocking true"), server ->
@@ -2084,6 +2088,7 @@ public final class SelfTest
                 attempts[0] = now;
                 run(server, "spawn mocking false");
                 run(server, "spawn tracking stop");
+                run(server, "gamerule spawn_mobs false");
                 return new Probe(attempts[0] > 0, fmt("the spawner made %d attempts with lagFreeSpawning on", attempts[0]));
             }
             return new Probe(false, "measuring");
