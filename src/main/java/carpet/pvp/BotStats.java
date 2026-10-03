@@ -53,6 +53,24 @@ public final class BotStats
     public int blockTicks;
     /** Target shields disabled by an axe hit. */
     public int shieldBreaks;
+    /** End crystals put down. */
+    public int crystalsPlaced;
+    /** Blocks put down, bridging a base cell or blocking off a blast. */
+    public int blocksPlaced;
+    /** Respawn anchors put down. */
+    public int anchorsPlaced;
+    /** Blasts set off, whichever kind. */
+    public int blasts;
+    /** Of those, respawn anchors. */
+    public int anchorsBlown;
+    /** Blasts the model said would cost the bot a totem or its life, so it walked away from them. */
+    public int refusedBlasts;
+    /** Ticks the bot spent stepping out of a blast it was standing in. */
+    public int backedOff;
+    /** Fresh totems moved into the offhand. */
+    public int reTotems;
+    /** Ender pearls thrown. */
+    public int pearlsThrown;
     public double damageDealt;
     public double damageTaken;
     /** Planner calls that spent simulated ticks. */
@@ -167,6 +185,15 @@ public final class BotStats
         throttledClicks = 0;
         blockTicks = 0;
         shieldBreaks = 0;
+        crystalsPlaced = 0;
+        blocksPlaced = 0;
+        anchorsPlaced = 0;
+        blasts = 0;
+        anchorsBlown = 0;
+        refusedBlasts = 0;
+        backedOff = 0;
+        reTotems = 0;
+        pearlsThrown = 0;
         damageDealt = 0.0;
         damageTaken = 0.0;
         plannerCalls = 0;
@@ -186,6 +213,10 @@ public final class BotStats
                 + " crits=" + crits
                 + " sprintHits=" + sprintHits + " throttled=" + throttledClicks
                 + " shieldBreaks=" + shieldBreaks + " blockTicks=" + blockTicks
+                + " blasts[" + crystalsPlaced + " crystals, " + anchorsPlaced + " anchors, " + blasts
+                + " blown (" + anchorsBlown + " anchors), " + refusedBlasts + " refused, " + backedOff
+                + " backed off, " + blocksPlaced + " blocks]"
+                + " totems=" + reTotems + " pearls=" + pearlsThrown
                 + " dealt=" + round(damageDealt) + " taken=" + round(damageTaken)
                 + " planner=" + plannerCalls + "/" + simulatedTicks + " ticks starved=" + starvedTicks
                 + " rotation[onGrid=" + rotationOnGrid() + " maxStep=" + round(maxRotationStep)
