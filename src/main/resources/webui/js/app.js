@@ -17,10 +17,7 @@ function log(msg, level) {
 // ── Init ─────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
 
-    // 1. Boot node editor
-    NodeEditor.init();
-
-    // 2. Boot panels
+    // 1. Boot panels
     BotPanel.init();
     ProgramPanel.init();
 
@@ -44,8 +41,17 @@ document.addEventListener("DOMContentLoaded", () => {
         log(message || "Not authorised. Run /carpetlogic open in game for a link.", "error");
     });
 
-    // 4. Connect to the server this page came from
+    // 4. Connect to the server this page came from. The node types are built from its action schema,
+    //    so the editor starts once that has arrived.
     API.connect();
+    if (API.hasToken()) {
+        API.getSchema().then((schema) => {
+            Nodes.register(schema);
+            NodeCompiler.setSchema(schema);
+            NodeEditor.init();
+            log("CarpetLogic Node Editor ready");
+        }).catch((e) => log("Could not load the action schema: " + e.message, "error"));
+    }
 
     // 5. Console toggle
     const logPanel = document.getElementById("log-panel");
@@ -119,7 +125,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    log("CarpetLogic Node Editor ready");
     log("Press B to toggle bot panel • Right-click Play for controls");
 });
 

@@ -4,39 +4,28 @@ import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
+import carpet.logic.program.Bot;
+import carpet.logic.program.BotActionException;
 import carpet.patches.EntityPlayerMPFake;
 import net.minecraft.core.Direction;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
 /**
- * The operations a bot program can perform on one fake player.
+ * A fake player as the program interpreter sees it.
  */
-public class BotController
+public class BotController implements Bot
 {
+    private static final List<String> EQUIPMENT_SLOTS = List.of("mainhand", "offhand", "head", "chest", "legs", "feet");
+
     private final ServerPlayer player;
     private final EntityPlayerActionPack actionPack;
-
-    private enum NavMode { NONE, GOTO, FOLLOW, FLEE, WANDER }
-    private NavMode currentNavMode = NavMode.NONE;
-    private String navTargetPlayer;
-    private double navTargetDistance;
-    private double navGoalX, navGoalY, navGoalZ;
-    private double navGoalRadius;
-    private int navRepathCooldown;
-    private boolean navComplete;
-    private int navStuckTicks;
-    private double navLastX, navLastZ;
-
-    private static final int REPATH_FOLLOW = 20;
-    private static final int REPATH_FLEE = 10;
-    private static final int REPATH_WANDER = 60;
-    private static final int STUCK_TICKS = 40;
-    private static final double STUCK_DIST = 0.25;
 
     public BotController(ServerPlayer player)
     {
@@ -44,85 +33,96 @@ public class BotController
         this.actionPack = ((ServerPlayerInterface) player).getActionPack();
     }
 
-    public ServerPlayer getPlayer()
+    @Override
+    public void move(float forward, float strafe)
     {
-        return player;
+        actionPack.setForward(forward).setStrafing(strafe);
     }
 
-    public void move(String direction)
+    @Override
+    public void strafe(float strafe)
     {
-        switch (direction == null ? "stop" : direction.toLowerCase(Locale.ROOT))
-        {
-            case "forward" -> actionPack.setForward(1).setStrafing(0);
-            case "backward" -> actionPack.setForward(-1).setStrafing(0);
-            case "left" -> actionPack.setForward(0).setStrafing(1);
-            case "right" -> actionPack.setForward(0).setStrafing(-1);
-            default -> actionPack.setForward(0).setStrafing(0);
-        }
+        actionPack.setStrafing(strafe);
     }
 
-    public void sprint(boolean start)
+    @Override
+    public void stopMoving()
     {
-        actionPack.setSprinting(start);
+        actionPack.setForward(0).setStrafing(0);
     }
 
-    public void sneak(boolean start)
+    @Override
+    public void stopStrafing()
     {
-        actionPack.setSneaking(start);
+        actionPack.setStrafing(0);
     }
 
+    @Override
+    public void setSprinting(boolean sprinting)
+    {
+        actionPack.setSprinting(sprinting);
+    }
+
+    @Override
+    public void setSneaking(boolean sneaking)
+    {
+        actionPack.setSneaking(sneaking);
+    }
+
+    @Override
     public void jump()
     {
         actionPack.start(ActionType.JUMP, Action.once());
     }
 
-    public void strafe(String direction)
-    {
-        switch (direction == null ? "left" : direction.toLowerCase(Locale.ROOT))
-        {
-            case "left" -> actionPack.setStrafing(1);
-            case "right" -> actionPack.setStrafing(-1);
-            default -> actionPack.setStrafing(0);
-        }
-    }
-
+    @Override
     public void mount(boolean onlyRideables)
     {
         actionPack.mount(onlyRideables);
     }
 
+    @Override
     public void dismount()
     {
         actionPack.dismount();
     }
 
+    @Override
     public void stopMovement()
     {
         actionPack.stopMovement();
     }
 
-    public void attack(String mode, boolean crit, int interval)
+    @Override
+    public void attack(String mode, int interval, boolean critical)
     {
-        if (crit)
-        {
-            actionPack.start(ActionType.JUMP, Action.once());
-        }
-        actionPack.start(ActionType.ATTACK, actionFor(mode, interval));
+        actionPack.setAttackCritical(critical);
+        actionPack.start(ActionType.ATTACK, critical ? Action.onceUntilSuccess() : actionFor(mode, interval));
     }
 
+    @Override
+    public void stopAttack()
+    {
+        actionPack.start(ActionType.ATTACK, null);
+        actionPack.setAttackCritical(false);
+    }
+
+    @Override
+    public void use(String mode, int interval)
+    {
+        actionPack.start(ActionType.USE, actionFor(mode, interval));
+    }
+
+    @Override
     public void swordBlock()
-    {
-        actionPack.start(ActionType.USE, Action.once());
-    }
-
-    public void shieldBlock()
     {
         actionPack.start(ActionType.USE, Action.continuous());
     }
 
-    public void use(String mode, int interval)
+    @Override
+    public void stopUse()
     {
-        actionPack.start(ActionType.USE, actionFor(mode, interval));
+        actionPack.start(ActionType.USE, null);
     }
 
     private static Action actionFor(String mode, int interval)
@@ -135,58 +135,62 @@ public class BotController
         };
     }
 
+    @Override
+    public void selectHotbar(int slot)
+    {
+        actionPack.setSlot(slot);
+    }
+
+    @Override
     public void equipArmor(String armorSet)
     {
         playerCommand("equip " + armorSet);
     }
 
-    public void equipSlot(String slot, String item)
+    @Override
+    public void equipItem(String slot, String item)
     {
         playerCommand("equip " + slot + " " + item);
     }
 
+    @Override
     public void unequip(String slot)
     {
-        playerCommand("unequip " + slot);
-    }
-
-    public void hotbar(int slot)
-    {
-        if (slot >= 1 && slot <= 9)
+        for (String each : "all".equals(slot) ? EQUIPMENT_SLOTS : List.of(slot))
         {
-            actionPack.setSlot(slot);
+            playerCommand("unequip " + each);
         }
     }
 
-    public void drop()
+    @Override
+    public void drop(boolean wholeStack)
     {
-        actionPack.start(ActionType.DROP_ITEM, Action.once());
+        actionPack.drop(-1, wholeStack);
     }
 
-    public void dropStack()
-    {
-        actionPack.start(ActionType.DROP_STACK, Action.once());
-    }
-
+    @Override
     public void swapHands()
     {
         actionPack.start(ActionType.SWAP_HANDS, Action.once());
     }
 
+    @Override
     public void lookDirection(String direction)
     {
-        Direction dir = direction == null ? null : Direction.byName(direction.toLowerCase(Locale.ROOT));
+        Direction dir = Direction.byName(direction);
         if (dir != null)
         {
             actionPack.look(dir);
         }
     }
 
+    @Override
     public void lookAt(double x, double y, double z)
     {
-        actionPack.lookAt(new net.minecraft.world.phys.Vec3(x, y, z));
+        actionPack.lookAt(new Vec3(x, y, z));
     }
 
+    @Override
     public void lookAtPlayer(String playerName)
     {
         ServerPlayer target = findPlayer(playerName);
@@ -196,359 +200,170 @@ public class BotController
         }
     }
 
-    public void lookYawPitch(float yaw, float pitch)
+    @Override
+    public void look(float yaw, float pitch)
     {
         actionPack.look(yaw, pitch);
     }
 
-    public void turn(String direction, float degrees)
+    @Override
+    public void turn(float yaw, float pitch)
     {
-        switch (direction == null ? "right" : direction.toLowerCase(Locale.ROOT))
-        {
-            case "left" -> actionPack.turn(-degrees, 0);
-            case "back" -> actionPack.turn(180, 0);
-            default -> actionPack.turn(degrees, 0);
-        }
+        actionPack.turn(yaw, pitch);
     }
 
+    @Override
     public void navGoto(double x, double y, double z, String mode, double radius)
     {
-        resetNavState();
-        currentNavMode = NavMode.GOTO;
-        navGoalX = x;
-        navGoalY = y;
-        navGoalZ = z;
-        navGoalRadius = radius;
-        issueNavCommand(x, y, z, mode, radius);
+        String modeArgument = "auto".equals(mode) ? "" : mode + " ";
+        playerCommand(String.format(Locale.ROOT, "nav goto %s%.2f %.2f %.2f %.2f", modeArgument, x, y, z, radius));
     }
 
-    public void navStop()
+    @Override
+    public void follow(String playerName, double distance)
     {
-        resetNavState();
+        ServerPlayer target = findPlayer(playerName);
+        if (target == null)
+        {
+            throw new BotActionException("There is no player to follow");
+        }
+        playerCommand(String.format(Locale.ROOT, "nav follow %s %.2f", target.getGameProfile().name(), distance));
+    }
+
+    @Override
+    public boolean fleeFrom(String playerName, double distance)
+    {
+        ServerPlayer target = findPlayer(playerName);
+        if (target == null || player.distanceTo(target) >= distance)
+        {
+            return false;
+        }
+        Vec3 away = player.position().subtract(target.position()).multiply(1, 0, 1);
+        away = away.lengthSqr() < 0.01 ? new Vec3(1, 0, 0) : away.normalize();
+        Vec3 goal = player.position().add(away.scale(distance));
+        navGoto(goal.x, goal.y, goal.z, "land", 2.0);
+        return true;
+    }
+
+    @Override
+    public void wander(double radius)
+    {
+        double angle = Math.random() * 2 * Math.PI;
+        double range = Math.random() * radius;
+        navGoto(player.getX() + Math.cos(angle) * range, player.getY(), player.getZ() + Math.sin(angle) * range, "land", 2.0);
+    }
+
+    @Override
+    public boolean isNavigating()
+    {
+        return actionPack.isNavEnabled();
+    }
+
+    @Override
+    public void stopNavigation()
+    {
         actionPack.stopNavigation();
     }
 
-    public void followPlayer(String playerName, double distance)
+    @Override
+    public void setGliding(boolean gliding)
     {
-        resetNavState();
-        currentNavMode = NavMode.FOLLOW;
-        navTargetPlayer = playerName;
-        navTargetDistance = distance;
-        navGoalRadius = distance;
-        ServerPlayer target = findPlayer(playerName);
-        if (target != null)
-        {
-            issueNavCommand(target.getX(), target.getY(), target.getZ(), "land", distance);
-        }
-        else
-        {
-            navComplete = true;
-        }
+        playerCommand(gliding ? "glide start" : "glide stop");
     }
 
-    public void fleeFrom(String playerName, double distance)
-    {
-        resetNavState();
-        currentNavMode = NavMode.FLEE;
-        navTargetPlayer = playerName;
-        navTargetDistance = distance;
-        navGoalRadius = 2.0;
-        issueFleeCommand();
-    }
-
-    public void wander(double radius)
-    {
-        resetNavState();
-        currentNavMode = NavMode.WANDER;
-        navTargetDistance = radius;
-        navGoalRadius = 2.0;
-        pickWanderTarget();
-    }
-
-    /**
-     * Called every tick while a navigation action is active: re-targets follow, flee and wander,
-     * and re-issues the goal when the bot stops making progress.
-     */
-    public void tickNavigation()
-    {
-        if (navComplete || currentNavMode == NavMode.NONE)
-        {
-            return;
-        }
-
-        double dx = player.getX() - navLastX;
-        double dz = player.getZ() - navLastZ;
-        if (dx * dx + dz * dz < STUCK_DIST * STUCK_DIST)
-        {
-            if (++navStuckTicks >= STUCK_TICKS)
-            {
-                navStuckTicks = 0;
-                reissueCurrent();
-            }
-        }
-        else
-        {
-            navStuckTicks = 0;
-            navLastX = player.getX();
-            navLastZ = player.getZ();
-        }
-
-        if (currentNavMode == NavMode.GOTO)
-        {
-            if (player.distanceToSqr(navGoalX, navGoalY, navGoalZ) <= navGoalRadius * navGoalRadius)
-            {
-                completeNavigation();
-            }
-            return;
-        }
-
-        if (--navRepathCooldown > 0)
-        {
-            return;
-        }
-
-        switch (currentNavMode)
-        {
-            case FOLLOW ->
-            {
-                ServerPlayer target = findPlayer(navTargetPlayer);
-                if (target == null)
-                {
-                    completeNavigation();
-                    return;
-                }
-                actionPack.lookAt(target.getEyePosition());
-                if (player.distanceTo(target) <= navTargetDistance)
-                {
-                    actionPack.stopMovement();
-                    navRepathCooldown = 5;
-                    return;
-                }
-                issueNavCommand(target.getX(), target.getY(), target.getZ(), "land", navTargetDistance);
-                navRepathCooldown = REPATH_FOLLOW;
-            }
-            case FLEE ->
-            {
-                ServerPlayer target = findPlayer(navTargetPlayer);
-                if (target == null || player.distanceTo(target) >= navTargetDistance)
-                {
-                    completeNavigation();
-                    return;
-                }
-                issueFleeCommand();
-                navRepathCooldown = REPATH_FLEE;
-            }
-            case WANDER ->
-            {
-                if (player.distanceToSqr(navGoalX, navGoalY, navGoalZ) <= navGoalRadius * navGoalRadius)
-                {
-                    pickWanderTarget();
-                }
-                navRepathCooldown = REPATH_WANDER;
-            }
-            default ->
-            {
-            }
-        }
-    }
-
-    public boolean isNavigationComplete()
-    {
-        return navComplete || currentNavMode == NavMode.NONE;
-    }
-
-    private void resetNavState()
-    {
-        currentNavMode = NavMode.NONE;
-        navTargetPlayer = null;
-        navTargetDistance = 0;
-        navGoalX = navGoalY = navGoalZ = 0;
-        navGoalRadius = 1;
-        navRepathCooldown = 0;
-        navComplete = false;
-        navStuckTicks = 0;
-        navLastX = player.getX();
-        navLastZ = player.getZ();
-    }
-
-    private void completeNavigation()
-    {
-        navComplete = true;
-        actionPack.stopMovement();
-    }
-
-    private void issueNavCommand(double x, double y, double z, String mode, double radius)
-    {
-        if (mode == null || mode.isEmpty() || "auto".equalsIgnoreCase(mode))
-        {
-            mode = "land";
-        }
-        playerCommand(String.format(Locale.ROOT, "nav goto %s %.0f %.0f %.0f %.1f", mode, x, y, z, radius));
-    }
-
-    private void issueFleeCommand()
-    {
-        ServerPlayer target = findPlayer(navTargetPlayer);
-        if (target == null)
-        {
-            navComplete = true;
-            return;
-        }
-        double dx = player.getX() - target.getX();
-        double dz = player.getZ() - target.getZ();
-        double len = Math.sqrt(dx * dx + dz * dz);
-        if (len < 0.1)
-        {
-            dx = 1;
-            dz = 0;
-            len = 1;
-        }
-        issueNavCommand(player.getX() + dx / len * navTargetDistance, player.getY(), player.getZ() + dz / len * navTargetDistance, "land", 2.0);
-    }
-
-    private void pickWanderTarget()
-    {
-        double angle = Math.random() * 2 * Math.PI;
-        double r = Math.random() * navTargetDistance;
-        navGoalX = player.getX() + Math.cos(angle) * r;
-        navGoalZ = player.getZ() + Math.sin(angle) * r;
-        navGoalY = player.getY();
-        issueNavCommand(navGoalX, navGoalY, navGoalZ, "land", navGoalRadius);
-    }
-
-    private void reissueCurrent()
-    {
-        switch (currentNavMode)
-        {
-            case GOTO -> issueNavCommand(navGoalX, navGoalY, navGoalZ, "land", navGoalRadius);
-            case FOLLOW ->
-            {
-                ServerPlayer target = findPlayer(navTargetPlayer);
-                if (target != null)
-                {
-                    issueNavCommand(target.getX(), target.getY(), target.getZ(), "land", navTargetDistance);
-                }
-            }
-            case FLEE -> issueFleeCommand();
-            case WANDER -> pickWanderTarget();
-            default ->
-            {
-            }
-        }
-    }
-
-    public void glideStart()
-    {
-        playerCommand("glide start");
-    }
-
-    public void glideStop()
-    {
-        playerCommand("glide stop");
-    }
-
+    @Override
     public void glideGoto(double x, double y, double z, double radius)
     {
-        playerCommand(String.format(Locale.ROOT, "glide goto %.0f %.0f %.0f %.1f", x, y, z, radius));
+        playerCommand(String.format(Locale.ROOT, "glide goto %.2f %.2f %.2f %.2f", x, y, z, radius));
     }
 
+    @Override
     public void glideHeading(float yaw, float pitch)
     {
         playerCommand(String.format(Locale.ROOT, "glide heading %.1f %.1f", yaw, pitch));
     }
 
+    @Override
     public void glideSpeed(double speed)
     {
         playerCommand(String.format(Locale.ROOT, "glide speed %.2f", speed));
     }
 
-    public void glideFreeze()
+    @Override
+    public void glideFreeze(boolean frozen)
     {
-        playerCommand("glide freeze");
+        playerCommand("glide freeze " + frozen);
     }
 
+    @Override
     public void glideLand()
     {
         playerCommand("glide arrival land");
     }
 
+    @Override
+    public boolean isGliding()
+    {
+        return actionPack.isGlideEnabled();
+    }
+
     /**
      * Runs a command as the player the program belongs to, with that player's permissions and never the console's.
-     *
-     * @return null when the command was dispatched, otherwise why it was refused
      */
-    public String executeCommand(String command, UUID owner)
+    @Override
+    public void executeCommand(String command, UUID owner)
     {
         MinecraftServer server = player.level().getServer();
         ServerPlayer ownerPlayer = owner == null ? null : server.getPlayerList().getPlayer(owner);
         if (ownerPlayer == null)
         {
-            return owner == null
+            throw new BotActionException(owner == null
                     ? "EXECUTE_COMMAND only runs in programs a player started from the web editor"
-                    : "EXECUTE_COMMAND needs the player who started this program to be online";
+                    : "EXECUTE_COMMAND needs the player who started this program to be online");
         }
         server.getCommands().performPrefixedCommand(ownerPlayer.createCommandSourceStack(), command);
-        return null;
     }
 
-    /**
-     * @param playerName a player name, or empty / "nearest" for the closest other player
-     */
-    public ServerPlayer findPlayer(String playerName)
+    @Override
+    public void stopAll()
     {
-        MinecraftServer server = player.level().getServer();
-        if (playerName != null && !playerName.isEmpty() && !"nearest".equalsIgnoreCase(playerName))
-        {
-            return server.getPlayerList().getPlayerByName(playerName);
-        }
-        ServerPlayer nearest = null;
-        double minDist = Double.MAX_VALUE;
-        for (ServerPlayer other : server.getPlayerList().getPlayers())
-        {
-            if (other == player || other.level() != player.level())
-            {
-                continue;
-            }
-            double dist = player.distanceToSqr(other);
-            if (dist < minDist)
-            {
-                minDist = dist;
-                nearest = other;
-            }
-        }
-        return nearest;
+        actionPack.stopAll();
     }
 
-    public float getHealth()
+    @Override
+    public double health()
     {
         return player.getHealth();
     }
 
-    public int getFoodLevel()
+    @Override
+    public double food()
     {
         return player.getFoodData().getFoodLevel();
     }
 
-    public double getDistanceToNearestPlayer()
+    @Override
+    public double armor()
     {
-        double minDist = Double.MAX_VALUE;
-        for (ServerPlayer other : player.level().getServer().getPlayerList().getPlayers())
-        {
-            if (other == player || other instanceof EntityPlayerMPFake || other.level() != player.level())
-            {
-                continue;
-            }
-            minDist = Math.min(minDist, player.distanceTo(other));
-        }
-        return minDist;
+        return player.getArmorValue();
     }
 
+    @Override
+    public double distanceToPlayer(String playerName)
+    {
+        ServerPlayer target = findPlayer(playerName);
+        return target == null || target.level() != player.level() ? Double.POSITIVE_INFINITY : player.distanceTo(target);
+    }
+
+    @Override
+    public double distanceTo(double x, double y, double z)
+    {
+        return Math.sqrt(player.distanceToSqr(x, y, z));
+    }
+
+    @Override
     public boolean hasItem(String itemName)
     {
-        if (itemName == null)
-        {
-            return false;
-        }
         String wanted = itemName.toLowerCase(Locale.ROOT);
         for (int i = 0; i < player.getInventory().getContainerSize(); i++)
         {
@@ -561,35 +376,57 @@ public class BotController
         return false;
     }
 
+    @Override
     public boolean isFlying()
     {
         return player.isFallFlying();
     }
 
+    @Override
     public boolean isSneaking()
     {
         return player.isCrouching();
     }
 
+    @Override
     public boolean isSprinting()
     {
         return player.isSprinting();
     }
 
+    @Override
     public boolean isInWater()
     {
         return player.isInWater();
     }
 
-    public int getArmorValue()
+    /**
+     * @param playerName a player name, or empty for the nearest other player that is not a bot
+     */
+    private ServerPlayer findPlayer(String playerName)
     {
-        return player.getArmorValue();
-    }
-
-    public void stopAll()
-    {
-        resetNavState();
-        actionPack.stopAll();
+        MinecraftServer server = player.level().getServer();
+        if (!playerName.isEmpty())
+        {
+            ServerPlayer named = server.getPlayerList().getPlayerByName(playerName);
+            return named == player ? null : named;
+        }
+        ServerPlayer nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        for (ServerPlayer other : server.getPlayerList().getPlayers())
+        {
+            if (other == player || other instanceof EntityPlayerMPFake || other.level() != player.level())
+            {
+                continue;
+            }
+            double distance = player.distanceToSqr(other);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearest = other;
+            }
+        }
+        return nearest;
     }
 
     private void playerCommand(String arguments)

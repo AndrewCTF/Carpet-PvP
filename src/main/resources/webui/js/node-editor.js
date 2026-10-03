@@ -6,17 +6,17 @@ const NodeEditor = (() => {
     let graph = null;
     let canvas = null;
 
-    // Category definitions with colors and node lists
+    // Sidebar categories. A category lists every registered node type under its prefix.
     const CATEGORIES = {
-        control:    { label: "Control Flow",   color: "#f59e0b", types: ["Control/Start", "Control/Delay", "Control/Repeat", "Control/Forever", "Control/If-Else", "Control/Sequence", "Control/ExecuteCommand"] },
-        movement:   { label: "Movement",       color: "#06b6d4", types: ["Movement/Move", "Movement/Sprint", "Movement/Sneak", "Movement/Jump", "Movement/Strafe", "Movement/Mount", "Movement/Dismount", "Movement/StopMovement"] },
-        combat:     { label: "Combat",         color: "#f43f5e", types: ["Combat/Attack", "Combat/CritAttack", "Combat/SwordBlock", "Combat/ShieldBlock", "Combat/UseItem"] },
-        equipment:  { label: "Equipment",      color: "#f97316", types: ["Equipment/Hotbar", "Equipment/EquipArmor", "Equipment/EquipSlot", "Equipment/Unequip", "Equipment/Drop", "Equipment/DropStack", "Equipment/SwapHands"] },
-        look:       { label: "Look / Aim",     color: "#8b5cf6", types: ["Look/LookDirection", "Look/LookAt", "Look/LookAtPlayer", "Look/LookYawPitch", "Look/Turn"] },
-        navigation: { label: "Navigation",     color: "#22c55e", types: ["Navigation/NavGoto", "Navigation/NavStop", "Navigation/NavMode", "Navigation/FollowPlayer", "Navigation/FleeFrom", "Navigation/Wander"] },
-        elytra:     { label: "Elytra Flight",  color: "#10b981", types: ["Elytra/GlideStart", "Elytra/GlideStop", "Elytra/GlideGoto", "Elytra/GlideHeading", "Elytra/GlideSpeed", "Elytra/GlideFreeze", "Elytra/GlideLand"] },
-        crystal:    { label: "Crystal PvP",    color: "#ec4899", types: ["Crystal/PlaceCrystal", "Crystal/DetonateCrystal", "Crystal/PlaceBlock", "Crystal/CrystalCombo", "Crystal/AutoCrystal"] },
-        condition:  { label: "Conditions",     color: "#0ea5e9", types: ["Conditions/Health", "Conditions/Distance", "Conditions/Food", "Conditions/Random", "Conditions/HasItem", "Conditions/IsFlying", "Conditions/IsSneaking", "Conditions/IsSprinting", "Conditions/IsInWater", "Conditions/Armor"] },
+        control:    { label: "Control Flow",   color: "#f59e0b", prefix: "Control" },
+        movement:   { label: "Movement",       color: "#06b6d4", prefix: "Movement" },
+        combat:     { label: "Combat",         color: "#f43f5e", prefix: "Combat" },
+        equipment:  { label: "Equipment",      color: "#f97316", prefix: "Equipment" },
+        look:       { label: "Look / Aim",     color: "#8b5cf6", prefix: "Look" },
+        navigation: { label: "Navigation",     color: "#22c55e", prefix: "Navigation" },
+        elytra:     { label: "Elytra Flight",  color: "#10b981", prefix: "Elytra" },
+        crystal:    { label: "Crystal PvP",    color: "#ec4899", prefix: "Crystal" },
+        condition:  { label: "Conditions",     color: "#0ea5e9", prefix: "Conditions" },
     };
 
     // ── Initialise ───────────────────────────────────────────
@@ -193,7 +193,8 @@ const NodeEditor = (() => {
         title.textContent = cat.label;
         nodes.innerHTML = "";
 
-        cat.types.forEach(t => {
+        const types = Object.keys(LiteGraph.registered_node_types).filter(t => t.startsWith(cat.prefix + "/"));
+        types.forEach(t => {
             const info = LiteGraph.registered_node_types[t];
             const label = t.split("/")[1] || t;
             const div = document.createElement("div");

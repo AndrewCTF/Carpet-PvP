@@ -17,9 +17,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -30,7 +28,6 @@ public class BotManager
     private static final Pattern BOT_NAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
 
     private final MinecraftServer server;
-    private final Map<String, BotController> controllers = new HashMap<>();
 
     public BotManager(MinecraftServer server)
     {
@@ -73,7 +70,6 @@ public class BotManager
 
     public boolean kill(String name)
     {
-        controllers.remove(name);
         if (server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake)
         {
             fake.kill((ServerLevel) fake.level());
@@ -87,18 +83,7 @@ public class BotManager
      */
     public BotController getController(String name)
     {
-        if (!(server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake))
-        {
-            controllers.remove(name);
-            return null;
-        }
-        BotController controller = controllers.get(name);
-        if (controller == null || controller.getPlayer() != fake)
-        {
-            controller = new BotController(fake);
-            controllers.put(name, controller);
-        }
-        return controller;
+        return server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake ? new BotController(fake) : null;
     }
 
     public static JsonObject describe(ServerPlayer bot)

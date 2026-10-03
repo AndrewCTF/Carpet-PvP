@@ -1,36 +1,95 @@
 package carpet.logic.program;
 
-import carpet.logic.bot.BotController;
-import carpet.logic.bot.BotManager;
+import carpet.logic.program.ActionSchema.Params;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.IntSupplier;
+import java.util.function.Predicate;
 
 /**
- * Runs bot programs one step per server tick. Each bot runs at most one program.
+ * Runs bot programs, advancing each once per server tick. A bot runs at most one program.
+ * Every action parameter is read through the {@link ActionSchema}.
  */
 public class ProgramExecutor
 {
     private static final Logger LOG = LogManager.getLogger("CarpetLogic");
+    private static final int FLEE_RETARGET_TICKS = 10;
 
-    private final BotManager botManager;
+    public enum Status
+    {
+        RUNNING, COMPLETED, ERROR
+    }
+
+    public record ProgramInfo(String programName, String status, String currentAction, String error, boolean running)
+    {
+    }
+
+    // What a program is waiting for before its next action: a number of ticks, a condition, or whichever comes first.
+    private static class Wait
+    {
+        int ticksLeft = -1;
+        Predicate<Bot> done;
+        Consumer<Bot> eachTick;
+        Consumer<Bot> onEnd;
+    }
+
+    private static class Frame
+    {
+        final List<BotAction> actions;
+        final boolean isLoop;
+        final int maxIterations;
+        int index;
+        int iteration;
+
+        Frame(List<BotAction> actions, boolean isLoop, int maxIterations)
+        {
+            this.actions = actions;
+            this.isLoop = isLoop;
+            this.maxIterations = maxIterations;
+        }
+    }
+
+    private static class ProgramState
+    {
+        final BotProgram program;
+        final UUID owner;
+        final Deque<Frame> stack = new ArrayDeque<>();
+        Status status = Status.RUNNING;
+        Wait wait;
+        String currentAction;
+        String error;
+
+        ProgramState(BotProgram program, UUID owner)
+        {
+            this.program = program;
+            this.owner = owner;
+        }
+    }
+
+    private final ActionSchema schema;
+    private final Function<String, ? extends Bot> bots;
     private final IntSupplier maxPrograms;
-    private final Map<String, ProgramState> runningPrograms = new HashMap<>();
+    private final Map<String, ProgramState> programs = new LinkedHashMap<>();
     private BiConsumer<String, String> logListener = (level, message) -> {};
 
-    public ProgramExecutor(BotManager botManager, IntSupplier maxPrograms)
+    /**
+     * @param bots looks a bot up by name, giving null when there is none
+     */
+    public ProgramExecutor(ActionSchema schema, Function<String, ? extends Bot> bots, IntSupplier maxPrograms)
     {
-        this.botManager = botManager;
+        this.schema = schema;
+        this.bots = bots;
         this.maxPrograms = maxPrograms;
     }
 
@@ -39,90 +98,39 @@ public class ProgramExecutor
         this.logListener = logListener;
     }
 
-    public void tick()
-    {
-        Iterator<Map.Entry<String, ProgramState>> it = runningPrograms.entrySet().iterator();
-        while (it.hasNext())
-        {
-            Map.Entry<String, ProgramState> entry = it.next();
-            String botName = entry.getKey();
-            ProgramState state = entry.getValue();
-
-            if (state.status == ProgramStatus.COMPLETED || state.status == ProgramStatus.ERROR)
-            {
-                it.remove();
-                continue;
-            }
-            if (state.status == ProgramStatus.PAUSED)
-            {
-                continue;
-            }
-
-            BotController controller = botManager.getController(botName);
-            if (controller == null)
-            {
-                state.status = ProgramStatus.ERROR;
-                state.errorMessage = "Bot '" + botName + "' not found or disconnected";
-                LOG.warn("Bot '{}' lost while its program was running", botName);
-                continue;
-            }
-
-            try
-            {
-                tickProgram(state, controller);
-            }
-            catch (IllegalStateException e)
-            {
-                state.status = ProgramStatus.ERROR;
-                state.errorMessage = e.getMessage();
-                controller.stopAll();
-                LOG.warn("Program '{}' on bot '{}' stopped: {}", state.program.getName(), botName, e.getMessage());
-                logListener.accept("ERROR", "Program '" + state.program.getName() + "' on " + botName + " stopped: " + e.getMessage());
-            }
-            catch (Exception e)
-            {
-                state.status = ProgramStatus.ERROR;
-                state.errorMessage = e.getMessage();
-                LOG.error("Error executing program on bot '{}'", botName, e);
-            }
-        }
-    }
-
     /**
      * @param owner the player the program runs on behalf of, or null when it was started from the console
      * @return null when the program was started, otherwise why it was not
      */
     public String startProgram(String botName, BotProgram program, UUID owner)
     {
-        if (botManager.getController(botName) == null)
+        if (bots.apply(botName) == null)
         {
             return "There is no bot named '" + botName + "'";
         }
-        if (runningPrograms.size() >= maxPrograms.getAsInt() && !runningPrograms.containsKey(botName))
-        {
-            return runningPrograms.size() + " programs are already running (carpetLogicMaxPrograms)";
-        }
-
         stopProgram(botName);
-
+        if (getRunningCount() >= maxPrograms.getAsInt())
+        {
+            return getRunningCount() + " programs are already running (carpetLogicMaxPrograms)";
+        }
         ProgramState state = new ProgramState(program, owner);
-        state.status = ProgramStatus.RUNNING;
-        runningPrograms.put(botName, state);
+        pushFrame(state, program.getActions(), false, 1);
+        programs.put(botName, state);
         logListener.accept("INFO", "Started '" + program.getName() + "' on " + botName);
         return null;
     }
 
     public boolean stopProgram(String botName)
     {
-        ProgramState state = runningPrograms.remove(botName);
-        if (state == null)
+        ProgramState state = programs.remove(botName);
+        if (state == null || state.status != Status.RUNNING)
         {
             return false;
         }
-        BotController controller = botManager.getController(botName);
-        if (controller != null)
+        Bot bot = bots.apply(botName);
+        if (bot != null)
         {
-            controller.stopAll();
+            bot.stopAll();
         }
         logListener.accept("INFO", "Stopped program on " + botName);
         return true;
@@ -130,388 +138,356 @@ public class ProgramExecutor
 
     public void stopAll()
     {
-        for (String botName : new ArrayList<>(runningPrograms.keySet()))
+        for (String botName : new ArrayList<>(programs.keySet()))
         {
             stopProgram(botName);
         }
     }
 
-    private void tickProgram(ProgramState state, BotController controller)
+    public void tick()
     {
-        if (state.delayRemaining > 0)
+        for (Map.Entry<String, ProgramState> entry : new ArrayList<>(programs.entrySet()))
         {
-            state.delayRemaining--;
-            return;
-        }
-
-        if (state.waitingForCompletion)
-        {
-            if (state.tickAction != null)
+            String botName = entry.getKey();
+            ProgramState state = entry.getValue();
+            Bot bot = bots.apply(botName);
+            if (bot == null)
             {
-                state.tickAction.tick(controller);
-            }
-            if (state.completionCheck != null && !state.completionCheck.isComplete(controller))
-            {
-                return;
-            }
-            state.clearWait();
-        }
-
-        if (state.currentActionDuration > 0)
-        {
-            state.currentActionDuration--;
-            if (state.currentActionDuration > 0)
-            {
-                return;
-            }
-        }
-
-        while (state.status == ProgramStatus.RUNNING)
-        {
-            if (state.executionStack.isEmpty())
-            {
-                state.status = ProgramStatus.COMPLETED;
-                controller.stopAll();
-                logListener.accept("INFO", "Program '" + state.program.getName() + "' completed");
-                return;
-            }
-
-            StackFrame frame = state.executionStack.peek();
-            if (frame.actionIndex >= frame.actions.size())
-            {
-                if (frame.isLoop)
+                programs.remove(botName);
+                if (state.status == Status.RUNNING)
                 {
-                    frame.loopIteration++;
-                    if (frame.maxIterations == -1 || frame.loopIteration < frame.maxIterations)
-                    {
-                        frame.actionIndex = 0;
-                        continue;
-                    }
+                    logListener.accept("ERROR", "Program '" + state.program.getName() + "' ended: bot " + botName + " is gone");
                 }
-                state.executionStack.pop();
                 continue;
             }
-
-            BotAction action = frame.actions.get(frame.actionIndex);
-            frame.actionIndex++;
-            state.currentBlockType = action.getType().name();
-
-            if (executeAction(action, state, controller))
+            if (state.status != Status.RUNNING)
             {
-                return;
+                continue;
+            }
+            try
+            {
+                tickProgram(state, bot);
+            }
+            catch (BotActionException e)
+            {
+                fail(state, bot, botName, e.getMessage());
+            }
+            catch (RuntimeException e)
+            {
+                LOG.error("Program '{}' on bot '{}' failed", state.program.getName(), botName, e);
+                fail(state, bot, botName, "internal error, see the server log");
             }
         }
     }
 
-    /**
-     * @return true when the program has to wait before its next action
-     */
-    private boolean executeAction(BotAction action, ProgramState state, BotController controller)
+    private void fail(ProgramState state, Bot bot, String botName, String message)
     {
-        switch (action.getType())
+        state.status = Status.ERROR;
+        state.error = message;
+        state.wait = null;
+        bot.stopAll();
+        LOG.warn("Program '{}' on bot '{}' stopped: {}", state.program.getName(), botName, message);
+        logListener.accept("ERROR", "Program '" + state.program.getName() + "' on " + botName + " stopped: " + message);
+    }
+
+    private void tickProgram(ProgramState state, Bot bot)
+    {
+        if (state.wait != null)
         {
-            case MOVE ->
+            Wait wait = state.wait;
+            if (wait.eachTick != null)
             {
-                int duration = action.getIntParam("duration", 20);
-                controller.move(action.getStringParam("direction"));
-                state.currentActionDuration = duration;
-                return true;
+                wait.eachTick.accept(bot);
             }
-            case SPRINT -> controller.sprint(!"stop".equals(action.getStringParam("mode")));
-            case SNEAK -> controller.sneak(!"stop".equals(action.getStringParam("mode")));
-            case JUMP -> controller.jump();
-            case STRAFE ->
+            boolean timeUp = wait.ticksLeft >= 0 && --wait.ticksLeft <= 0;
+            if (!timeUp && (wait.done == null || !wait.done.test(bot)))
             {
-                int duration = action.getIntParam("duration", 20);
-                controller.strafe(action.getStringParam("direction"));
-                state.currentActionDuration = duration;
-                return true;
+                return;
             }
-            case MOUNT -> controller.mount(action.getBoolParam("onlyRideables", false));
-            case DISMOUNT -> controller.dismount();
-            case STOP_MOVEMENT -> controller.stopMovement();
+            state.wait = null;
+            if (wait.onEnd != null)
+            {
+                wait.onEnd.accept(bot);
+            }
+        }
 
-            case ATTACK ->
+        while (state.wait == null)
+        {
+            if (state.stack.isEmpty())
             {
-                String mode = action.getStringParam("mode");
-                controller.attack(mode != null ? mode : "once", false, action.getIntParam("interval", 20));
-                if (mode != null && !"once".equals(mode))
+                state.status = Status.COMPLETED;
+                state.currentAction = null;
+                bot.stopAll();
+                logListener.accept("INFO", "Program '" + state.program.getName() + "' completed");
+                return;
+            }
+            Frame frame = state.stack.peek();
+            if (frame.index >= frame.actions.size())
+            {
+                if (frame.isLoop && (frame.maxIterations == -1 || ++frame.iteration < frame.maxIterations))
                 {
-                    state.currentActionDuration = action.getIntParam("duration", 40);
-                    return true;
-                }
-            }
-            case ATTACK_CRIT ->
-            {
-                String mode = action.getStringParam("mode");
-                boolean once = mode == null || "once".equals(mode);
-                controller.attack(once ? "once" : mode, true, action.getIntParam("interval", 20));
-                state.currentActionDuration = once ? 10 : action.getIntParam("duration", 60);
-                return true;
-            }
-            case SWORD_BLOCK ->
-            {
-                int duration = action.getIntParam("duration", 10);
-                controller.swordBlock();
-                state.currentActionDuration = duration;
-                return true;
-            }
-            case SHIELD_BLOCK ->
-            {
-                int duration = action.getIntParam("duration", 20);
-                controller.shieldBlock();
-                state.currentActionDuration = duration;
-                return true;
-            }
-
-            case EQUIP_ARMOR -> controller.equipArmor(action.getStringParam("set"));
-            case EQUIP_SLOT -> controller.equipSlot(action.getStringParam("slot"), action.getStringParam("item"));
-            case UNEQUIP -> controller.unequip(action.getStringParam("slot"));
-            case HOTBAR -> controller.hotbar(action.getIntParam("slot", 1));
-            case DROP -> controller.drop();
-            case DROP_STACK -> controller.dropStack();
-            case SWAP_HANDS -> controller.swapHands();
-
-            case LOOK_DIRECTION -> controller.lookDirection(action.getStringParam("direction"));
-            case LOOK_AT ->
-            {
-                String playerParam = action.getStringParam("player");
-                if (playerParam != null && !playerParam.isEmpty())
-                {
-                    controller.lookAtPlayer(playerParam);
+                    frame.index = 0;
                 }
                 else
                 {
-                    controller.lookAt(action.getDoubleParam("x", 0), action.getDoubleParam("y", 0), action.getDoubleParam("z", 0));
+                    state.stack.pop();
                 }
+                continue;
             }
-            case LOOK_YAW_PITCH -> controller.lookYawPitch((float) action.getDoubleParam("yaw", 0), (float) action.getDoubleParam("pitch", 0));
-            case TURN -> controller.turn(action.getStringParam("direction"), (float) action.getDoubleParam("degrees", 90));
-
-            case USE ->
-            {
-                String mode = action.getStringParam("mode");
-                controller.use(mode != null ? mode : "once", action.getIntParam("interval", 20));
-            }
-            case PLACE_BLOCK, PLACE_CRYSTAL -> controller.use("once", 0);
-            case DETONATE_CRYSTAL -> controller.attack("once", false, 0);
-
-            case NAV_GOTO ->
-            {
-                String mode = action.getStringParam("mode");
-                controller.navGoto(action.getDoubleParam("x", 0), action.getDoubleParam("y", 0), action.getDoubleParam("z", 0),
-                        mode != null ? mode : "land", action.getDoubleParam("radius", 1.0));
-                state.waitFor(BotController::tickNavigation, BotController::isNavigationComplete);
-                return true;
-            }
-            case NAV_STOP -> controller.navStop();
-            case NAV_MODE ->
-            {
-            }
-            case FOLLOW_PLAYER ->
-            {
-                String target = action.getStringParam("player");
-                String name = target != null ? target : "nearest";
-                controller.followPlayer(name, action.getDoubleParam("distance", 3.0));
-                state.waitFor(BotController::tickNavigation, c -> c.findPlayer(name) == null);
-                return true;
-            }
-            case FLEE_FROM ->
-            {
-                String target = action.getStringParam("player");
-                controller.fleeFrom(target != null ? target : "nearest", action.getDoubleParam("distance", 10.0));
-                state.waitFor(BotController::tickNavigation, BotController::isNavigationComplete);
-                return true;
-            }
-            case WANDER ->
-            {
-                controller.wander(action.getDoubleParam("radius", 10.0));
-                state.waitFor(BotController::tickNavigation, c -> false);
-                return true;
-            }
-
-            case GLIDE_START -> controller.glideStart();
-            case GLIDE_STOP -> controller.glideStop();
-            case GLIDE_GOTO ->
-            {
-                double x = action.getDoubleParam("x", 0);
-                double y = action.getDoubleParam("y", 0);
-                double z = action.getDoubleParam("z", 0);
-                double radius = action.getDoubleParam("radius", 5.0);
-                controller.glideGoto(x, y, z, radius);
-                state.waitFor(null, c -> c.getPlayer().distanceToSqr(x, y, z) <= radius * radius);
-                return true;
-            }
-            case GLIDE_HEADING -> controller.glideHeading((float) action.getDoubleParam("yaw", 0), (float) action.getDoubleParam("pitch", 0));
-            case GLIDE_SPEED -> controller.glideSpeed(action.getDoubleParam("speed", 1.6));
-            case GLIDE_FREEZE -> controller.glideFreeze();
-            case GLIDE_LAND -> controller.glideLand();
-
-            case SEQUENCE -> pushFrame(state, action.getChildren(), false, 1);
-            case LOOP -> pushFrame(state, action.getChildren(), true, action.getIntParam("count", 1));
-            case FOREVER -> pushFrame(state, action.getChildren(), true, -1);
-            case DELAY ->
-            {
-                state.delayRemaining = action.getIntParam("ticks", 20);
-                return true;
-            }
-            case IF_THEN ->
-            {
-                if (evaluateCondition(action.getCondition(), controller))
-                {
-                    pushFrame(state, action.getChildren(), false, 1);
-                }
-            }
-            case IF_THEN_ELSE ->
-            {
-                boolean met = evaluateCondition(action.getCondition(), controller);
-                pushFrame(state, met ? action.getChildren() : action.getElseChildren(), false, 1);
-            }
-            case EXECUTE_COMMAND ->
-            {
-                String command = action.getStringParam("command");
-                if (command != null && !command.isEmpty())
-                {
-                    String refused = controller.executeCommand(command, state.owner);
-                    if (refused != null)
-                    {
-                        throw new IllegalStateException(refused);
-                    }
-                }
-            }
-
-            default -> LOG.warn("Unhandled action type: {}", action.getType());
+            BotAction action = frame.actions.get(frame.index++);
+            state.currentAction = action.getType();
+            execute(action, state, bot);
         }
-        return false;
+    }
+
+    private void execute(BotAction action, ProgramState state, Bot bot)
+    {
+        Params p = schema.params(action);
+        switch (action.getType())
+        {
+            case "MOVE" ->
+            {
+                switch (p.string("direction"))
+                {
+                    case "backward" -> bot.move(-1, 0);
+                    case "left" -> bot.move(0, 1);
+                    case "right" -> bot.move(0, -1);
+                    default -> bot.move(1, 0);
+                }
+                hold(state, bot, p.integer("ticks"), Bot::stopMoving);
+            }
+            case "STRAFE" ->
+            {
+                bot.strafe("right".equals(p.string("direction")) ? -1 : 1);
+                hold(state, bot, p.integer("ticks"), Bot::stopStrafing);
+            }
+            case "SPRINT" ->
+            {
+                bot.setSprinting(p.bool("enabled"));
+                hold(state, bot, p.integer("ticks"), null);
+            }
+            case "SNEAK" ->
+            {
+                bot.setSneaking(p.bool("enabled"));
+                hold(state, bot, p.integer("ticks"), null);
+            }
+            case "JUMP" ->
+            {
+                bot.jump();
+                hold(state, bot, p.integer("ticks"), null);
+            }
+            case "MOUNT" -> bot.mount(p.bool("onlyRideables"));
+            case "DISMOUNT" -> bot.dismount();
+            case "STOP_MOVEMENT" -> bot.stopMovement();
+
+            case "ATTACK" ->
+            {
+                String mode = p.string("mode");
+                bot.attack(mode, p.integer("interval"), false);
+                hold(state, bot, p.integer("ticks"), "once".equals(mode) ? null : Bot::stopAttack);
+            }
+            case "ATTACK_CRIT" ->
+            {
+                bot.attack("once", 0, true);
+                hold(state, bot, p.integer("ticks"), Bot::stopAttack);
+            }
+            case "SWORD_BLOCK" ->
+            {
+                bot.swordBlock();
+                hold(state, bot, p.integer("ticks"), Bot::stopUse);
+            }
+            case "SHIELD_BLOCK" ->
+            {
+                bot.use("continuous", 0);
+                hold(state, bot, p.integer("ticks"), Bot::stopUse);
+            }
+            case "USE" ->
+            {
+                String mode = p.string("mode");
+                bot.use(mode, p.integer("interval"));
+                hold(state, bot, p.integer("ticks"), "once".equals(mode) ? null : Bot::stopUse);
+            }
+            case "PLACE_BLOCK", "PLACE_CRYSTAL" ->
+            {
+                bot.use("once", 0);
+                hold(state, bot, p.integer("ticks"), null);
+            }
+            case "DETONATE_CRYSTAL" ->
+            {
+                bot.attack("once", 0, false);
+                hold(state, bot, p.integer("ticks"), null);
+            }
+
+            case "HOTBAR" -> bot.selectHotbar(p.integer("slot"));
+            case "EQUIP_ARMOR" -> bot.equipArmor(p.string("armorSet"));
+            case "EQUIP_SLOT" -> bot.equipItem(p.string("slot"), p.string("item"));
+            case "UNEQUIP" -> bot.unequip(p.string("slot"));
+            case "DROP" ->
+            {
+                bot.drop(false);
+                hold(state, bot, p.integer("ticks"), null);
+            }
+            case "DROP_STACK" ->
+            {
+                bot.drop(true);
+                hold(state, bot, p.integer("ticks"), null);
+            }
+            case "SWAP_HANDS" ->
+            {
+                bot.swapHands();
+                hold(state, bot, 1, null);
+            }
+
+            case "LOOK_DIRECTION" -> bot.lookDirection(p.string("direction"));
+            case "LOOK_AT" -> bot.lookAt(p.number("x"), p.number("y"), p.number("z"));
+            case "LOOK_AT_PLAYER" -> bot.lookAtPlayer(p.string("player"));
+            case "LOOK_YAW_PITCH" -> bot.look((float) p.number("yaw"), (float) p.number("pitch"));
+            case "TURN" -> bot.turn((float) p.number("yaw"), (float) p.number("pitch"));
+
+            case "NAV_GOTO" ->
+            {
+                bot.navGoto(p.number("x"), p.number("y"), p.number("z"), p.string("mode"), p.number("radius"));
+                Wait wait = new Wait();
+                wait.done = b -> !b.isNavigating();
+                state.wait = wait;
+            }
+            case "NAV_STOP" -> bot.stopNavigation();
+            case "FOLLOW_PLAYER" ->
+            {
+                bot.follow(p.string("player"), p.number("distance"));
+                Wait wait = hold(state, bot, p.integer("ticks"), Bot::stopNavigation);
+                wait.done = b -> !b.isNavigating();
+            }
+            case "FLEE_FROM" ->
+            {
+                String player = p.string("player");
+                double distance = p.number("distance");
+                int ticks = p.integer("ticks");
+                if (bot.fleeFrom(player, distance))
+                {
+                    Wait wait = hold(state, bot, ticks, Bot::stopNavigation);
+                    int[] untilRetarget = {FLEE_RETARGET_TICKS};
+                    wait.done = b ->
+                    {
+                        if (--untilRetarget[0] > 0)
+                        {
+                            return false;
+                        }
+                        untilRetarget[0] = FLEE_RETARGET_TICKS;
+                        return !b.fleeFrom(player, distance);
+                    };
+                }
+            }
+            case "WANDER" ->
+            {
+                double radius = p.number("radius");
+                bot.wander(radius);
+                Wait wait = hold(state, bot, p.integer("ticks"), Bot::stopNavigation);
+                wait.eachTick = b ->
+                {
+                    if (!b.isNavigating())
+                    {
+                        b.wander(radius);
+                    }
+                };
+            }
+
+            case "GLIDE_START" -> bot.setGliding(true);
+            case "GLIDE_STOP" -> bot.setGliding(false);
+            case "GLIDE_GOTO" ->
+            {
+                double x = p.number("x");
+                double y = p.number("y");
+                double z = p.number("z");
+                double radius = p.number("radius");
+                bot.glideGoto(x, y, z, radius);
+                Wait wait = new Wait();
+                wait.done = b -> !b.isGliding() || b.distanceTo(x, y, z) <= radius;
+                state.wait = wait;
+            }
+            case "GLIDE_HEADING" -> bot.glideHeading((float) p.number("yaw"), (float) p.number("pitch"));
+            case "GLIDE_SPEED" -> bot.glideSpeed(p.number("speed"));
+            case "GLIDE_FREEZE" -> bot.glideFreeze(p.bool("enabled"));
+            case "GLIDE_LAND" -> bot.glideLand();
+
+            case "DELAY" -> hold(state, bot, p.integer("ticks"), null);
+            case "EXECUTE_COMMAND" -> bot.executeCommand(p.string("command"), state.owner);
+            case "SEQUENCE" -> pushFrame(state, action.getChildren(), false, 1);
+            case "LOOP" -> pushFrame(state, action.getChildren(), true, p.integer("count"));
+            case "FOREVER" -> pushFrame(state, action.getChildren(), true, -1);
+            case "IF_THEN_ELSE" -> pushFrame(state, test(action.getCondition(), bot) ? action.getChildren() : action.getElseChildren(), false, 1);
+
+            default -> throw new IllegalStateException("No interpreter for action type " + action.getType());
+        }
+    }
+
+    // Makes the program wait the given ticks before its next action, then runs onEnd. No wait when ticks is 0.
+    private static Wait hold(ProgramState state, Bot bot, int ticks, Consumer<Bot> onEnd)
+    {
+        Wait wait = new Wait();
+        wait.ticksLeft = ticks;
+        wait.onEnd = onEnd;
+        if (ticks > 0)
+        {
+            state.wait = wait;
+        }
+        else if (onEnd != null)
+        {
+            onEnd.accept(bot);
+        }
+        return wait;
     }
 
     private static void pushFrame(ProgramState state, List<BotAction> actions, boolean isLoop, int maxIterations)
     {
-        if (actions != null && !actions.isEmpty())
+        if (!actions.isEmpty())
         {
-            state.executionStack.push(new StackFrame(actions, isLoop, maxIterations));
+            state.stack.push(new Frame(actions, isLoop, maxIterations));
         }
     }
 
-    private boolean evaluateCondition(BotAction condition, BotController controller)
+    private boolean test(BotAction condition, Bot bot)
     {
-        if (condition == null)
-        {
-            return false;
-        }
+        Params p = schema.params(condition);
         return switch (condition.getType())
         {
-            case CONDITION_HEALTH -> compare(controller.getHealth(), condition.getStringParam("operator"), condition.getDoubleParam("value", 10));
-            case CONDITION_DISTANCE -> compare(controller.getDistanceToNearestPlayer(), condition.getStringParam("operator"), condition.getDoubleParam("value", 5));
-            case CONDITION_RANDOM -> Math.random() * 100 < condition.getDoubleParam("chance", 50);
-            case CONDITION_FOOD -> compare(controller.getFoodLevel(), condition.getStringParam("operator"), condition.getDoubleParam("value", 10));
-            case CONDITION_HAS_ITEM -> controller.hasItem(condition.getStringParam("item"));
-            case CONDITION_IS_FLYING -> controller.isFlying();
-            case CONDITION_IS_SNEAKING -> controller.isSneaking();
-            case CONDITION_IS_SPRINTING -> controller.isSprinting();
-            case CONDITION_IS_IN_WATER -> controller.isInWater();
-            case CONDITION_ARMOR -> compare(controller.getArmorValue(), condition.getStringParam("operator"), condition.getDoubleParam("value", 10));
-            default -> false;
+            case "CONDITION_HEALTH" -> compare(bot.health(), p.string("operator"), p.number("value"));
+            case "CONDITION_FOOD" -> compare(bot.food(), p.string("operator"), p.number("value"));
+            case "CONDITION_ARMOR" -> compare(bot.armor(), p.string("operator"), p.number("value"));
+            case "CONDITION_DISTANCE" -> compare(bot.distanceToPlayer(p.string("target")), p.string("operator"), p.number("value"));
+            case "CONDITION_RANDOM" -> Math.random() * 100 < p.number("chance");
+            case "CONDITION_HAS_ITEM" -> bot.hasItem(p.string("item"));
+            case "CONDITION_IS_FLYING" -> bot.isFlying();
+            case "CONDITION_IS_SNEAKING" -> bot.isSneaking();
+            case "CONDITION_IS_SPRINTING" -> bot.isSprinting();
+            case "CONDITION_IS_IN_WATER" -> bot.isInWater();
+            default -> throw new IllegalStateException("No interpreter for condition type " + condition.getType());
         };
     }
 
-    private static boolean compare(double actual, String op, double threshold)
+    private static boolean compare(double actual, String operator, double value)
     {
-        return switch (op == null ? "<" : op)
+        return switch (operator)
         {
-            case "<" -> actual < threshold;
-            case ">" -> actual > threshold;
-            case "=", "==" -> Math.abs(actual - threshold) < 0.01;
-            case "<=" -> actual <= threshold;
-            case ">=" -> actual >= threshold;
-            case "!=" -> Math.abs(actual - threshold) >= 0.01;
-            default -> false;
+            case "<" -> actual < value;
+            case "<=" -> actual <= value;
+            case ">" -> actual > value;
+            case ">=" -> actual >= value;
+            case "==" -> Math.abs(actual - value) < 0.01;
+            default -> Math.abs(actual - value) >= 0.01;
         };
     }
 
     public int getRunningCount()
     {
-        return (int) runningPrograms.values().stream().filter(s -> s.status == ProgramStatus.RUNNING).count();
+        return (int) programs.values().stream().filter(s -> s.status == Status.RUNNING).count();
     }
 
-    public Map<String, ProgramStateInfo> getRunningStates()
+    public Map<String, ProgramInfo> getPrograms()
     {
-        Map<String, ProgramStateInfo> states = new HashMap<>();
-        runningPrograms.forEach((bot, s) -> states.put(bot, new ProgramStateInfo(
-                s.program.getName(), s.status.name(), s.currentBlockType, s.errorMessage, s.status == ProgramStatus.RUNNING)));
-        return states;
-    }
-
-    public enum ProgramStatus
-    {
-        RUNNING, PAUSED, COMPLETED, ERROR
-    }
-
-    @FunctionalInterface
-    interface CompletionCheck
-    {
-        boolean isComplete(BotController controller);
-    }
-
-    @FunctionalInterface
-    interface TickAction
-    {
-        void tick(BotController controller);
-    }
-
-    private static class ProgramState
-    {
-        final BotProgram program;
-        final UUID owner;
-        final Deque<StackFrame> executionStack = new ArrayDeque<>();
-        ProgramStatus status;
-        int delayRemaining;
-        int currentActionDuration;
-        boolean waitingForCompletion;
-        String currentBlockType;
-        String errorMessage;
-        CompletionCheck completionCheck;
-        TickAction tickAction;
-
-        ProgramState(BotProgram program, UUID owner)
-        {
-            this.program = program;
-            this.owner = owner;
-            pushFrame(this, program.getActions(), false, 1);
-        }
-
-        void waitFor(TickAction eachTick, CompletionCheck done)
-        {
-            waitingForCompletion = true;
-            tickAction = eachTick;
-            completionCheck = done;
-        }
-
-        void clearWait()
-        {
-            waitingForCompletion = false;
-            completionCheck = null;
-            tickAction = null;
-        }
-    }
-
-    private static class StackFrame
-    {
-        final List<BotAction> actions;
-        final boolean isLoop;
-        final int maxIterations;
-        int actionIndex;
-        int loopIteration;
-
-        StackFrame(List<BotAction> actions, boolean isLoop, int maxIterations)
-        {
-            this.actions = actions;
-            this.isLoop = isLoop;
-            this.maxIterations = maxIterations;
-        }
-    }
-
-    public record ProgramStateInfo(String programName, String status, String currentBlock, String error, boolean running)
-    {
+        Map<String, ProgramInfo> infos = new LinkedHashMap<>();
+        programs.forEach((bot, s) -> infos.put(bot, new ProgramInfo(
+                s.program.getName(), s.status.name(), s.currentAction, s.error, s.status == Status.RUNNING)));
+        return infos;
     }
 }

@@ -159,6 +159,7 @@ const API = (() => {
 
     const getStatus = () => _fetch('/api/status');
     const getSettings = () => _fetch('/api/settings');
+    const getSchema = () => _fetch('/api/schema');
     const getPrograms = () => _fetch('/api/programs');
     const getPresets = () => _fetch('/api/presets');
     const saveProgram = (program) => _fetch('/api/programs', { method: 'POST', body: program });
@@ -171,7 +172,7 @@ const API = (() => {
 
     return {
         connect, disconnect, isConnected, hasToken, on, off,
-        getStatus, getSettings, getPrograms, getPresets, saveProgram, deleteProgram,
+        getStatus, getSettings, getSchema, getPrograms, getPresets, saveProgram, deleteProgram,
         getBots, spawnBot, killBot, runProgram, stopProgram
     };
 

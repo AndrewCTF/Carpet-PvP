@@ -29,9 +29,9 @@ class BotProgramTest
     void graphDataSurvivesSaveAndReload(@TempDir Path dir)
     {
         BotProgram program = new Gson().fromJson(PROGRAM, BotProgram.class);
-        new ProgramStorage(dir).save(program);
+        new ProgramStorage(dir, ActionSchema.load()).save(program);
 
-        ProgramStorage reloaded = new ProgramStorage(dir);
+        ProgramStorage reloaded = new ProgramStorage(dir, ActionSchema.load());
         reloaded.loadAll();
         BotProgram loaded = reloaded.getById("walk");
         assertNotNull(loaded);

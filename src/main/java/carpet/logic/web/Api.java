@@ -34,7 +34,6 @@ public class Api
 
     private static final Gson GSON = new Gson();
     private static final int MAX_NAME_LENGTH = 64;
-    private static final int MAX_TREE_DEPTH = 64;
 
     private final MinecraftServer server;
     private final CarpetLogic logic;
@@ -84,6 +83,7 @@ public class Api
             {
                 case "GET /api/status" -> ok(status(session));
                 case "GET /api/settings" -> ok(settings());
+                case "GET /api/schema" -> ok(logic.getSchema().json());
                 case "GET /api/programs" -> ok(GSON.toJsonTree(logic.getProgramStorage().getAllPrograms()));
                 case "GET /api/presets" -> ok(GSON.toJsonTree(logic.getProgramStorage().getPresets()));
                 case "POST /api/programs" -> saveProgram(parse(body));
@@ -117,7 +117,7 @@ public class Api
         JsonObject update = new JsonObject();
         update.addProperty("type", "botUpdate");
         update.add("bots", bots());
-        update.add("programs", GSON.toJsonTree(logic.getProgramExecutor().getRunningStates()));
+        update.add("programs", GSON.toJsonTree(logic.getProgramExecutor().getPrograms()));
         return update;
     }
 
@@ -163,7 +163,6 @@ public class Api
     private Response saveProgram(JsonObject request)
     {
         BotProgram program = GSON.fromJson(request, BotProgram.class);
-        validate(program.getActions(), 0);
         ProgramStorage storage = logic.getProgramStorage();
         if (program.getId() == null || program.getId().isEmpty())
         {
@@ -240,7 +239,7 @@ public class Api
         }
         BotProgram program = new BotProgram("_unsaved", cleanName(string(request, "name")), "");
         program.setActions(GSON.fromJson(request.get("actions"), new TypeToken<List<BotAction>>() {}.getType()));
-        validate(program.getActions(), 0);
+        logic.getSchema().validate(program.getActions());
         String refused = logic.getProgramExecutor().startProgram(string(request, "botName"), program, session.owner());
         return refused == null ? success(true) : error(409, refused);
     }
@@ -248,31 +247,6 @@ public class Api
     private Response stop(JsonObject request)
     {
         return success(logic.getProgramExecutor().stopProgram(string(request, "botName")));
-    }
-
-    private static void validate(List<BotAction> actions, int depth)
-    {
-        if (actions == null)
-        {
-            return;
-        }
-        if (depth > MAX_TREE_DEPTH)
-        {
-            throw new IllegalArgumentException("Program is nested too deeply");
-        }
-        for (BotAction action : actions)
-        {
-            if (action == null || action.getType() == null)
-            {
-                throw new IllegalArgumentException("Program contains an action without a known type");
-            }
-            validate(action.getChildren(), depth + 1);
-            validate(action.getElseChildren(), depth + 1);
-            if (action.getCondition() != null)
-            {
-                validate(List.of(action.getCondition()), depth + 1);
-            }
-        }
     }
 
     private static String cleanName(String name)

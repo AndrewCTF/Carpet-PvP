@@ -3,6 +3,7 @@ package carpet.logic;
 import carpet.CarpetExtension;
 import carpet.CarpetSettings;
 import carpet.logic.bot.BotManager;
+import carpet.logic.program.ActionSchema;
 import carpet.logic.program.ProgramExecutor;
 import carpet.logic.program.ProgramStorage;
 import carpet.logic.web.Api;
@@ -24,6 +25,7 @@ public class CarpetLogic implements CarpetExtension
 {
     public static final CarpetLogic INSTANCE = new CarpetLogic();
 
+    private final ActionSchema schema = ActionSchema.load();
     private BotManager botManager;
     private ProgramExecutor programExecutor;
     private ProgramStorage programStorage;
@@ -37,10 +39,10 @@ public class CarpetLogic implements CarpetExtension
     @Override
     public void onServerLoaded(MinecraftServer server)
     {
-        programStorage = new ProgramStorage(server.getWorldPath(LevelResource.ROOT).resolve("carpetlogic").resolve("programs"));
+        programStorage = new ProgramStorage(server.getWorldPath(LevelResource.ROOT).resolve("carpetlogic").resolve("programs"), schema);
         programStorage.loadAll();
         botManager = new BotManager(server);
-        programExecutor = new ProgramExecutor(botManager, () -> CarpetSettings.carpetLogicMaxPrograms);
+        programExecutor = new ProgramExecutor(schema, botManager::getController, () -> CarpetSettings.carpetLogicMaxPrograms);
         programExecutor.setLogListener((level, message) ->
         {
             if (webServer != null)
@@ -135,6 +137,11 @@ public class CarpetLogic implements CarpetExtension
     public ProgramStorage getProgramStorage()
     {
         return programStorage;
+    }
+
+    public ActionSchema getSchema()
+    {
+        return schema;
     }
 
     public AuthManager getAuth()

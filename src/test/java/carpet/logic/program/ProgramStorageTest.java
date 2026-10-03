@@ -29,7 +29,7 @@ class ProgramStorageTest
     void idsOutsideThePatternAreRejected(String id, @TempDir Path root) throws IOException
     {
         Path dir = Files.createDirectory(root.resolve("programs"));
-        ProgramStorage storage = new ProgramStorage(dir);
+        ProgramStorage storage = new ProgramStorage(dir, ActionSchema.load());
         BotProgram program = new BotProgram(id, "name", "");
 
         assertFalse(ProgramStorage.isValidId(id));
@@ -45,7 +45,7 @@ class ProgramStorageTest
     @ValueSource(strings = {"a", "walk_1", "A-b", "p7f3a", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
     void idsInsideThePatternAreStored(String id, @TempDir Path dir)
     {
-        ProgramStorage storage = new ProgramStorage(dir);
+        ProgramStorage storage = new ProgramStorage(dir, ActionSchema.load());
         storage.save(new BotProgram(id, "name", ""));
 
         assertTrue(Files.isRegularFile(dir.resolve(id + ".json")));
@@ -57,7 +57,7 @@ class ProgramStorageTest
     @Test
     void presetsCannotBeOverwritten(@TempDir Path dir)
     {
-        ProgramStorage storage = new ProgramStorage(dir);
+        ProgramStorage storage = new ProgramStorage(dir, ActionSchema.load());
         String presetId = storage.getPresets().getFirst().getId();
 
         assertThrows(IllegalArgumentException.class, () -> storage.save(new BotProgram(presetId, "mine", "")));
@@ -69,7 +69,7 @@ class ProgramStorageTest
     {
         Files.writeString(dir.resolve("bad.json"), "{\"id\": \"../../escape\", \"name\": \"bad\", \"actions\": []}");
         Files.writeString(dir.resolve("good.json"), "{\"id\": \"good\", \"name\": \"good\", \"actions\": []}");
-        ProgramStorage storage = new ProgramStorage(dir);
+        ProgramStorage storage = new ProgramStorage(dir, ActionSchema.load());
         storage.loadAll();
 
         assertEquals(1, storage.getCount());

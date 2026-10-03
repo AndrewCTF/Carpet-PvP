@@ -1,96 +1,71 @@
 /* ═══════════════════════════════════════════════════════════════
-   Node Compiler — Converts LiteGraph → CarpetLogic JSON actions
+   Node Compiler — turns the node graph into a JSON action tree
+
+   Action types and their parameters come from the action schema the
+   server sends (/api/schema). A node's properties are read by the
+   parameter names the schema declares, so the compiler cannot emit a
+   name the interpreter does not read.
    ═══════════════════════════════════════════════════════════════ */
 const NodeCompiler = (() => {
 
-    // ── Node-type → ActionType mapping ───────────────────────
-    const TYPE_MAP = {
-        // Control
-        "Control/Start":          null,
-        "Control/Delay":          "DELAY",
-        "Control/Repeat":         "LOOP",
-        "Control/Forever":        "FOREVER",
-        "Control/If-Else":        "IF_THEN_ELSE",
-        "Control/Sequence":       "SEQUENCE",
-        "Control/ExecuteCommand": "EXECUTE_COMMAND",
-        // Movement
-        "Movement/Move":          "MOVE",
-        "Movement/Sprint":        "SPRINT",
-        "Movement/Sneak":         "SNEAK",
-        "Movement/Jump":          "JUMP",
-        "Movement/Strafe":        "STRAFE",
-        "Movement/Mount":         "MOUNT",
-        "Movement/Dismount":      "DISMOUNT",
-        "Movement/StopMovement":  "STOP_MOVEMENT",
-        // Combat
-        "Combat/Attack":          "ATTACK",
-        "Combat/CritAttack":      "ATTACK_CRIT",
-        "Combat/SwordBlock":      "SWORD_BLOCK",
-        "Combat/ShieldBlock":     "SHIELD_BLOCK",
-        "Combat/UseItem":         "USE",
-        // Equipment
-        "Equipment/Hotbar":       "HOTBAR",
-        "Equipment/EquipArmor":   "EQUIP_ARMOR",
-        "Equipment/EquipSlot":    "EQUIP_SLOT",
-        "Equipment/Unequip":      "UNEQUIP",
-        "Equipment/Drop":         "DROP",
-        "Equipment/DropStack":    "DROP_STACK",
-        "Equipment/SwapHands":    "SWAP_HANDS",
-        // Look
-        "Look/LookDirection":     "LOOK_DIRECTION",
-        "Look/LookAt":            "LOOK_AT",
-        "Look/LookAtPlayer":      "LOOK_AT",
-        "Look/LookYawPitch":      "LOOK_YAW_PITCH",
-        "Look/Turn":              "TURN",
-        // Navigation
-        "Navigation/NavGoto":     "NAV_GOTO",
-        "Navigation/NavStop":     "NAV_STOP",
-        "Navigation/NavMode":     "NAV_MODE",
-        "Navigation/FollowPlayer":"FOLLOW_PLAYER",
-        "Navigation/FleeFrom":    "FLEE_FROM",
-        "Navigation/Wander":      "WANDER",
-        // Elytra
-        "Elytra/GlideStart":     "GLIDE_START",
-        "Elytra/GlideStop":      "GLIDE_STOP",
-        "Elytra/GlideGoto":      "GLIDE_GOTO",
-        "Elytra/GlideHeading":   "GLIDE_HEADING",
-        "Elytra/GlideSpeed":     "GLIDE_SPEED",
-        "Elytra/GlideFreeze":    "GLIDE_FREEZE",
-        "Elytra/GlideLand":      "GLIDE_LAND",
-        // Crystal PvP
-        "Crystal/PlaceCrystal":  "PLACE_CRYSTAL",
-        "Crystal/DetonateCrystal":"DETONATE_CRYSTAL",
-        "Crystal/PlaceBlock":    "PLACE_BLOCK",
-        "Crystal/CrystalCombo":  null,       // macro — expanded inline
-        "Crystal/AutoCrystal":   null,       // macro — expanded inline
-        // Conditions
-        "Conditions/Health":     "CONDITION_HEALTH",
-        "Conditions/Distance":   "CONDITION_DISTANCE",
-        "Conditions/Food":       "CONDITION_FOOD",
-        "Conditions/Random":     "CONDITION_RANDOM",
-        "Conditions/HasItem":    "CONDITION_HAS_ITEM",
-        "Conditions/IsFlying":   "CONDITION_IS_FLYING",
-        "Conditions/IsSneaking": "CONDITION_IS_SNEAKING",
-        "Conditions/IsSprinting":"CONDITION_IS_SPRINTING",
-        "Conditions/IsInWater":  "CONDITION_IS_IN_WATER",
-        "Conditions/Armor":      "CONDITION_ARMOR",
-    };
+    let schema = null;
+    let actionByNode = {};      // editor node type → action type
 
-    // ── Find Start node ──────────────────────────────────────
-    function findStartNode(graph) {
-        const nodes = graph._nodes || [];
-        return nodes.find(n => n.type === "Control/Start");
+    function setSchema(newSchema) {
+        schema = newSchema;
+        actionByNode = {};
+        for (const [type, def] of Object.entries(schema.actions)) {
+            actionByNode[def.node] = type;
+        }
+    }
+
+    // ── Parameters ───────────────────────────────────────────
+
+    function coerce(param, value) {
+        switch (param.type) {
+            case "bool":
+                return typeof value === "boolean" ? value : param.default;
+            case "string": {
+                const text = value === undefined || value === null ? param.default : String(value);
+                return param.options && !param.options.includes(text) ? param.default : text;
+            }
+            default: {
+                let number = value === "" || value === null ? NaN : Number(value);
+                if (!Number.isFinite(number)) number = param.default;
+                if (param.type === "int") number = Math.round(number);
+                if (param.min !== undefined) number = Math.max(param.min, number);
+                if (param.max !== undefined) number = Math.min(param.max, number);
+                return number;
+            }
+        }
+    }
+
+    /** Builds an action of the given type. Values are looked up by the parameter names the schema declares. */
+    function make(type, values) {
+        const def = schema.actions[type];
+        if (!def) throw new Error("Unknown action type " + type);
+        for (const name of Object.keys(values || {})) {
+            if (!def.params.some(p => p.name === name)) throw new Error(type + " has no parameter '" + name + "'");
+        }
+        const action = { type };
+        if (def.params.length > 0) {
+            action.params = {};
+            for (const param of def.params) {
+                action.params[param.name] = coerce(param, values ? values[param.name] : undefined);
+            }
+        }
+        return action;
     }
 
     // ── Compile graph to actions array ───────────────────────
+
     function compile(graph) {
-        const start = findStartNode(graph);
+        if (!schema) throw new Error("The action schema has not been loaded");
+        const start = (graph._nodes || []).find(n => n.type === "Control/Start");
         if (!start) throw new Error("No Start node found. Add a Control/Start node.");
-        const visited = new Set();
-        return followChain(graph, start, 0, visited);
+        return followChain(graph, start, 0, new Set());
     }
 
-    // ── Follow the output chain ─────────────────────────────
     function followChain(graph, node, outputIndex, visited) {
         const actions = [];
         let current = node;
@@ -106,7 +81,6 @@ const NodeCompiler = (() => {
                 else actions.push(action);
             }
 
-            // Follow the "next" or first output
             const nextNode = getConnectedNode(graph, current, outIdx);
             current = nextNode;
             outIdx = 0;
@@ -114,42 +88,25 @@ const NodeCompiler = (() => {
         return actions;
     }
 
-    // ── Compile a single node ────────────────────────────────
     function compileNode(graph, node, visited) {
-        const type = node.type;
         const props = node.properties || {};
 
-        // Start node — skip
-        if (type === "Control/Start") return null;
-
-        // Crystal Combo macro — expand to sequence
-        if (type === "Crystal/CrystalCombo") {
-            return expandCrystalCombo(props);
+        switch (node.type) {
+            case "Control/Start":
+                return null;
+            case "Crystal/CrystalCombo":
+                return expandCrystalCombo(props);
+            case "Crystal/AutoCrystal":
+                return expandAutoCrystal(props);
         }
 
-        // Auto Crystal macro — expand to loop
-        if (type === "Crystal/AutoCrystal") {
-            return expandAutoCrystal(props);
-        }
+        const type = actionByNode[node.type];
+        if (!type) throw new Error("Node '" + node.type + "' cannot be compiled");
+        const action = make(type, pick(schema.actions[type], props));
 
-        const actionType = TYPE_MAP[type];
-        if (!actionType) return null;
-
-        const action = { type: actionType, params: {} };
-
-        // Duration
-        if (props.ticks !== undefined) action.duration = Number(props.ticks);
-
-        // Build params based on node type
-        switch (type) {
-            case "Control/Delay":
-                action.duration = Number(props.ticks) || 20;
-                break;
-
+        switch (node.type) {
             case "Control/Repeat":
-                action.type = "LOOP";
-                action.params.count = Number(props.count) || 3;
-                action.children = followChain(graph, node, 0, new Set(visited)) ;
+                action.children = followChain(graph, node, 0, new Set(visited));
                 // body output is index 0, done is index 1
                 const bodyNode = getConnectedNode(graph, node, 0);
                 if (bodyNode) action.children = followChain(graph, bodyNode, 0, new Set(visited));
@@ -171,7 +128,8 @@ const NodeCompiler = (() => {
                 if (elseNode) action.elseChildren = followChain(graph, elseNode, 0, new Set(visited));
                 // condition input (index 1)
                 const condNode = getConnectedInput(graph, node, 1);
-                if (condNode) action.condition = compileNode(graph, condNode, new Set(visited));
+                if (!condNode) throw new Error("An If / Else node has no condition connected");
+                action.condition = compileNode(graph, condNode, new Set(visited));
                 break;
 
             case "Control/Sequence":
@@ -183,196 +141,49 @@ const NodeCompiler = (() => {
                     }
                 }
                 break;
-
-            case "Control/ExecuteCommand":
-                action.params.command = props.command || "/say Hello";
-                break;
-
-            // Movement
-            case "Movement/Move":
-                action.params.direction = props.direction || "forward";
-                action.duration = Number(props.ticks) || 20;
-                break;
-            case "Movement/Sprint":
-                action.params.enabled = props.enabled !== false;
-                action.duration = Number(props.ticks) || 40;
-                break;
-            case "Movement/Sneak":
-                action.params.enabled = props.enabled !== false;
-                action.duration = Number(props.ticks) || 20;
-                break;
-            case "Movement/Jump":
-                action.duration = Number(props.ticks) || 1;
-                break;
-            case "Movement/Strafe":
-                action.params.direction = props.direction || "left";
-                action.duration = Number(props.ticks) || 10;
-                break;
-            case "Movement/Mount":
-                action.params.onlyRideables = props.onlyRideables !== false;
-                break;
-
-            // Combat
-            case "Combat/Attack":
-                action.params.continuous = props.continuous === true;
-                action.duration = Number(props.ticks) || 1;
-                break;
-            case "Combat/CritAttack":
-                action.duration = Number(props.ticks) || 15;
-                break;
-            case "Combat/SwordBlock":
-            case "Combat/ShieldBlock":
-                action.duration = Number(props.ticks) || 40;
-                break;
-            case "Combat/UseItem":
-                action.params.continuous = props.continuous === true;
-                action.duration = Number(props.ticks) || 1;
-                break;
-
-            // Equipment
-            case "Equipment/Hotbar":
-                action.params.slot = Number(props.slot) || 0;
-                break;
-            case "Equipment/EquipArmor":
-                action.params.armorSet = props.armorSet || "diamond";
-                break;
-            case "Equipment/EquipSlot":
-                action.params.slot = props.slot || "mainhand";
-                action.params.item = props.item || "diamond_sword";
-                break;
-            case "Equipment/Drop":
-            case "Equipment/DropStack":
-                action.duration = Number(props.ticks) || 1;
-                break;
-
-            // Look
-            case "Look/LookDirection":
-                action.params.direction = props.direction || "north";
-                break;
-            case "Look/LookAt":
-                action.params.x = Number(props.x) || 0;
-                action.params.y = Number(props.y) || 64;
-                action.params.z = Number(props.z) || 0;
-                break;
-            case "Look/LookAtPlayer":
-                action.params.player = props.player || "";
-                break;
-            case "Look/LookYawPitch":
-                action.params.yaw = Number(props.yaw) || 0;
-                action.params.pitch = Number(props.pitch) || 0;
-                break;
-            case "Look/Turn":
-                action.params.yaw = Number(props.yaw) || 0;
-                action.params.pitch = Number(props.pitch) || 0;
-                break;
-
-            // Navigation
-            case "Navigation/NavGoto":
-                action.params.x = Number(props.x) || 0;
-                action.params.y = Number(props.y) || 64;
-                action.params.z = Number(props.z) || 0;
-                break;
-            case "Navigation/NavMode":
-                action.params.mode = props.mode || "auto";
-                break;
-            case "Navigation/FollowPlayer":
-                action.params.player = props.player || "";
-                action.params.distance = Number(props.distance) || 3;
-                action.duration = Number(props.ticks) || 200;
-                break;
-            case "Navigation/FleeFrom":
-                action.params.player = props.player || "";
-                action.params.distance = Number(props.distance) || 16;
-                action.duration = Number(props.ticks) || 100;
-                break;
-            case "Navigation/Wander":
-                action.params.radius = Number(props.radius) || 16;
-                action.duration = Number(props.ticks) || 200;
-                break;
-
-            // Elytra
-            case "Elytra/GlideGoto":
-                action.params.x = Number(props.x) || 0;
-                action.params.y = Number(props.y) || 100;
-                action.params.z = Number(props.z) || 0;
-                break;
-            case "Elytra/GlideHeading":
-                action.params.yaw = Number(props.yaw) || 0;
-                action.params.pitch = Number(props.pitch) || -5;
-                break;
-            case "Elytra/GlideSpeed":
-                action.params.speed = Number(props.speed) || 1.0;
-                break;
-
-            // Crystal
-            case "Crystal/PlaceCrystal":
-            case "Crystal/DetonateCrystal":
-            case "Crystal/PlaceBlock":
-                action.duration = Number(props.ticks) || 1;
-                break;
-
-            // Conditions
-            case "Conditions/Health":
-                action.params.operator = props.operator || "<";
-                action.params.value = Number(props.value) || 10;
-                break;
-            case "Conditions/Distance":
-                action.params.target = props.target || "";
-                action.params.operator = props.operator || "<";
-                action.params.value = Number(props.value) || 5;
-                break;
-            case "Conditions/Food":
-                action.params.operator = props.operator || "<";
-                action.params.value = Number(props.value) || 10;
-                break;
-            case "Conditions/Random":
-                action.params.chance = Number(props.chance) || 50;
-                break;
-            case "Conditions/HasItem":
-                action.params.item = props.item || "end_crystal";
-                break;
-            case "Conditions/Armor":
-                action.params.operator = props.operator || "<";
-                action.params.value = Number(props.value) || 10;
-                break;
         }
 
         return action;
     }
 
-    // ── Crystal Combo macro expansion ────────────────────────
-    function expandCrystalCombo(props) {
-        return {
-            type: "SEQUENCE",
-            children: [
-                { type: "LOOK_YAW_PITCH", params: { yaw: 0, pitch: Number(props.lookPitch) || 90 } },
-                { type: "HOTBAR", params: { slot: Number(props.obsidianSlot) || 0 } },
-                { type: "PLACE_BLOCK", duration: 1 },
-                { type: "DELAY", duration: 2 },
-                { type: "HOTBAR", params: { slot: Number(props.crystalSlot) || 1 } },
-                { type: "PLACE_CRYSTAL", duration: 1 },
-                { type: "DELAY", duration: 1 },
-                { type: "HOTBAR", params: { slot: Number(props.swordSlot) || 2 } },
-                { type: "DETONATE_CRYSTAL", duration: 1 },
-            ]
-        };
+    // The node properties that are parameters of the action; a node carries nothing else the compiler reads.
+    function pick(def, props) {
+        const values = {};
+        for (const param of def.params) values[param.name] = props[param.name];
+        return values;
     }
 
-    // ── Auto Crystal macro expansion ─────────────────────────
+    // ── Macro nodes ──────────────────────────────────────────
+
+    function expandCrystalCombo(props) {
+        const combo = make("SEQUENCE");
+        combo.children = [
+            make("HOTBAR", { slot: props.obsidianSlot }),
+            make("PLACE_BLOCK", { ticks: 1 }),
+            make("DELAY", { ticks: 2 }),
+            make("HOTBAR", { slot: props.crystalSlot }),
+            make("PLACE_CRYSTAL", { ticks: 1 }),
+            make("DELAY", { ticks: 1 }),
+            make("HOTBAR", { slot: props.swordSlot }),
+            make("DETONATE_CRYSTAL", { ticks: 1 }),
+        ];
+        return combo;
+    }
+
+    // One cycle takes "speed" ticks: place for one tick, detonate for the rest.
     function expandAutoCrystal(props) {
-        return {
-            type: "LOOP",
-            params: { count: Math.floor((Number(props.ticks) || 100) / (Number(props.speed) || 2)) },
-            children: [
-                { type: "HOTBAR", params: { slot: Number(props.crystalSlot) || 1 } },
-                { type: "PLACE_CRYSTAL", duration: 1 },
-                { type: "DELAY", duration: Math.max(1, Number(props.speed) - 1) },
-                { type: "DETONATE_CRYSTAL", duration: 1 },
-            ]
-        };
+        const speed = Math.max(2, Math.round(Number(props.speed) || 2));
+        const loop = make("LOOP", { count: Math.floor((Number(props.ticks) || 100) / speed) });
+        loop.children = [
+            make("HOTBAR", { slot: props.crystalSlot }),
+            make("PLACE_CRYSTAL", { ticks: 1 }),
+            make("DETONATE_CRYSTAL", { ticks: speed - 1 }),
+        ];
+        return loop;
     }
 
     // ── Graph helpers ────────────────────────────────────────
+
     function getConnectedNode(graph, node, outputIndex) {
         if (!node.outputs || !node.outputs[outputIndex]) return null;
         const links = node.outputs[outputIndex].links;
@@ -391,11 +202,7 @@ const NodeCompiler = (() => {
         return graph.getNodeById(link.origin_id);
     }
 
-    // ── Compile to JSON string ───────────────────────────────
-    function compileToJSON(graph) {
-        const actions = compile(graph);
-        return JSON.stringify(actions, null, 2);
-    }
-
-    return { compile, compileToJSON, findStartNode, TYPE_MAP };
+    return { setSchema, compile, make };
 })();
+
+if (typeof module !== "undefined") module.exports = NodeCompiler;

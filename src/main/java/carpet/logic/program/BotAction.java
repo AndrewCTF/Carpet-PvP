@@ -1,138 +1,49 @@
 package carpet.logic.program;
 
-import com.google.gson.annotations.SerializedName;
-
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * One node of a compiled bot program. Actions form a tree: control flow actions carry child lists.
+ * One node of a compiled bot program, exactly as it appears in JSON. Actions form a tree: control actions
+ * carry child lists and IF_THEN_ELSE a condition. Which types exist and which parameters they take is
+ * defined by {@link ActionSchema}, and parameters are read through {@link ActionSchema.Params} only.
  */
 public class BotAction
 {
-    public enum ActionType
-    {
-        MOVE, SPRINT, SNEAK, JUMP, STRAFE, MOUNT, DISMOUNT, STOP_MOVEMENT,
-
-        ATTACK, ATTACK_CRIT, SWORD_BLOCK, SHIELD_BLOCK,
-
-        EQUIP_ARMOR, EQUIP_SLOT, UNEQUIP, HOTBAR, DROP, DROP_STACK, SWAP_HANDS,
-
-        LOOK_DIRECTION, LOOK_AT, LOOK_YAW_PITCH, TURN,
-
-        USE, PLACE_BLOCK, PLACE_CRYSTAL, DETONATE_CRYSTAL,
-
-        NAV_GOTO, NAV_STOP, NAV_MODE, FOLLOW_PLAYER, FLEE_FROM, WANDER,
-
-        GLIDE_START, GLIDE_STOP, GLIDE_GOTO, GLIDE_HEADING, GLIDE_SPEED, GLIDE_FREEZE, GLIDE_LAND,
-
-        SEQUENCE, LOOP, FOREVER, DELAY, IF_THEN, IF_THEN_ELSE, EXECUTE_COMMAND,
-
-        CONDITION_HEALTH, CONDITION_DISTANCE, CONDITION_RANDOM, CONDITION_FOOD, CONDITION_HAS_ITEM,
-        CONDITION_IS_FLYING, CONDITION_IS_SNEAKING, CONDITION_IS_SPRINTING, CONDITION_IS_IN_WATER, CONDITION_ARMOR
-    }
-
-    private ActionType type;
-
-    @SerializedName("params")
-    private Map<String, Object> parameters = new HashMap<>();
-
-    @SerializedName("duration")
-    private int durationTicks;
-
-    private List<BotAction> children = new ArrayList<>();
-
-    private List<BotAction> elseChildren = new ArrayList<>();
-
+    private String type;
+    private Map<String, Object> params;
+    private List<BotAction> children;
+    private List<BotAction> elseChildren;
     private BotAction condition;
 
     public BotAction()
     {
     }
 
-    public BotAction(ActionType type)
+    public BotAction(String type, Map<String, Object> params)
     {
         this.type = type;
+        this.params = params;
     }
 
-    public BotAction withParam(String key, Object value)
-    {
-        parameters.put(key, value);
-        return this;
-    }
-
-    public BotAction withDuration(int ticks)
-    {
-        this.durationTicks = ticks;
-        return this;
-    }
-
-    public ActionType getType()
+    public String getType()
     {
         return type;
     }
 
-    public Map<String, Object> getParameters()
+    public Map<String, Object> getParams()
     {
-        return parameters;
+        return params == null ? Map.of() : params;
     }
 
-    public String getStringParam(String key)
+    public void setParams(Map<String, Object> params)
     {
-        Object val = parameters.get(key);
-        return val != null ? val.toString() : null;
-    }
-
-    public int getIntParam(String key, int defaultValue)
-    {
-        return (int) getDoubleParam(key, defaultValue);
-    }
-
-    public double getDoubleParam(String key, double defaultValue)
-    {
-        Object val = parameters.get(key);
-        if (val instanceof Number number)
-        {
-            return number.doubleValue();
-        }
-        if (val instanceof String string)
-        {
-            try
-            {
-                return Double.parseDouble(string);
-            }
-            catch (NumberFormatException e)
-            {
-                return defaultValue;
-            }
-        }
-        return defaultValue;
-    }
-
-    public boolean getBoolParam(String key, boolean defaultValue)
-    {
-        Object val = parameters.get(key);
-        if (val instanceof Boolean bool)
-        {
-            return bool;
-        }
-        if (val instanceof String string)
-        {
-            return Boolean.parseBoolean(string);
-        }
-        return defaultValue;
-    }
-
-    public int getDurationTicks()
-    {
-        return durationTicks;
+        this.params = params;
     }
 
     public List<BotAction> getChildren()
     {
-        return children;
+        return children == null ? List.of() : children;
     }
 
     public void setChildren(List<BotAction> children)
@@ -142,7 +53,12 @@ public class BotAction
 
     public List<BotAction> getElseChildren()
     {
-        return elseChildren;
+        return elseChildren == null ? List.of() : elseChildren;
+    }
+
+    public void setElseChildren(List<BotAction> elseChildren)
+    {
+        this.elseChildren = elseChildren;
     }
 
     public BotAction getCondition()
@@ -150,9 +66,14 @@ public class BotAction
         return condition;
     }
 
+    public void setCondition(BotAction condition)
+    {
+        this.condition = condition;
+    }
+
     @Override
     public String toString()
     {
-        return "BotAction{type=" + type + ", params=" + parameters + ", duration=" + durationTicks + "}";
+        return type + getParams();
     }
 }
