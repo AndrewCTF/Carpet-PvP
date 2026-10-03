@@ -47,16 +47,17 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
             CallbackInfo ci
     ) {
         this.carpet$pushed = false;
-        //? if >=26.3
+        //? if >=26.3 {
         AbstractClientPlayer player = Minecraft.getInstance().player;
+        //?}
         if (player == null) return;
         if (hand != InteractionHand.MAIN_HAND) return; // main-hand only
         if (stack.isEmpty() || !stack.is(ItemTags.SWORDS)) return;
-    // If the player is using the sword at all, do not apply our transform; rely on vanilla/model
-    if (Minecraft.getInstance().player != null && Minecraft.getInstance().player.isUsingItem()) return;
+        // a player really holding the sword up already gets the vanilla pose
+        if (player.isUsingItem()) return;
 
-    boolean holding = Minecraft.getInstance().options.keyUse.isDown();
-    if (!holding && !SwordBlockVisuals.isActive(player)) return;
+        boolean holding = Minecraft.getInstance().options.keyUse.isDown();
+        if (!holding && !SwordBlockVisuals.isActive(player)) return;
 
         poseStack.pushPose();
         this.carpet$pushed = true;
@@ -65,7 +66,7 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
         ease = ease * ease;
 
         // Pre-rotate translation: move down in screen-space so tip height matches baseline.
-        float drop = 0.16f * ease; // tune as needed
+        float drop = 0.16f * ease;
         poseStack.translate(0.0F, -drop, 0.0F);
 
         // Roll-only in-place tilt (Z axis). Strong left tilt (>45°) toward center.

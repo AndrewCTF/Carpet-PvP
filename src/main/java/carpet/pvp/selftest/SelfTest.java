@@ -1,6 +1,7 @@
 package carpet.pvp.selftest;
 
 import carpet.pvp.selftest.SelfTestReport.Result;
+import carpet.CarpetSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -23,11 +24,12 @@ import java.util.function.Function;
  */
 public final class SelfTest
 {
-    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit", "script_run", "fill_updates");
+    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit", "script_run", "fill_updates", "sword_block");
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     private static final double SURFACE_Y = -60.0D;
     private static final double SPACING = 256.0D;
+    private static final float SWORD_BLOCK_HIT = 4.0F;
 
     private record Bot(String name, Vec3 pos) {}
 
@@ -176,6 +178,43 @@ public final class SelfTest
                             "after %d ticks the lamp placed with the rule off is %s and the one placed with it on is %s",
                             ticks, quietLit ? "lit" : "dark", liveLit ? "lit" : "dark"));
                 });
+            case "sword_block":
+            {
+                // One player holds its sword up, the other one stands idle, both take the same fixed hit. With the rule
+                // on the blocking one must lose swordBlockDamageMultiplier of it, with the rule off it must lose all of it.
+                int[] phase = {0};
+                float[] guarding = new float[2];
+                float[] open = new float[2];
+                return new Scenario(300, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, -2.0D))),
+                        List.of("carpet swordBlockHitting true",
+                                "player " + a + " equip mainhand minecraft:diamond_sword",
+                                "player " + a + " use continuous"), server ->
+                {
+                    ServerPlayer blocker = player(server, a);
+                    ServerPlayer idle = player(server, b);
+                    if (!blocker.isUsingItem()) return pending(a + " is not holding the sword up yet");
+                    if (!hittable(blocker, idle)) return pending(hitWaitReason(blocker, idle));
+                    if (phase[0] == 0)
+                    {
+                        guarding[0] = damage(server, blocker);
+                        open[0] = damage(server, idle);
+                        run(server, "carpet swordBlockHitting false");
+                        phase[0] = 1;
+                        return pending(fmt("with the rule on %s lost %.1f health while blocking and %s lost %.1f",
+                                a, guarding[0], b, open[0]));
+                    }
+                    guarding[1] = damage(server, blocker);
+                    open[1] = damage(server, idle);
+                    // both idle players have to take the whole hit, otherwise the numbers below mean nothing
+                    boolean hitsLanded = same(open[0], SWORD_BLOCK_HIT) && same(open[1], SWORD_BLOCK_HIT);
+                    float factor = (float) CarpetSettings.swordBlockDamageMultiplier;
+                    boolean halved = same(guarding[0], SWORD_BLOCK_HIT * factor);
+                    boolean wholeAgain = same(guarding[1], SWORD_BLOCK_HIT);
+                    return new Probe(hitsLanded && halved && wholeAgain, fmt(
+                            "with the rule on %s lost %.1f of the %.1f health a hit takes, with the rule off %.1f",
+                            a, guarding[0], SWORD_BLOCK_HIT, guarding[1]));
+                });
+            }
             default:
                 return null;
         }
@@ -240,6 +279,46 @@ public final class SelfTest
     private static boolean lit(MinecraftServer server, BlockPos pos)
     {
         return server.overworld().getBlockState(pos).getValue(RedstoneLampBlock.LIT);
+    }
+
+    private static Probe pending(String detail)
+    {
+        return new Probe(false, detail);
+    }
+
+    /** A hit counts in full only when the player is loaded, off the damage cooldown of the last one and healthy. */
+    private static boolean hittable(ServerPlayer... players)
+    {
+        for (ServerPlayer player : players)
+        {
+            // a fake player cannot be hurt while its connection is still counted as loading
+            if (!player.connection.hasClientLoaded()) return false;
+            if (player.hurtTime > 0 || player.getHealth() <= SWORD_BLOCK_HIT) return false;
+        }
+        return true;
+    }
+
+    private static String hitWaitReason(ServerPlayer... players)
+    {
+        for (ServerPlayer player : players)
+        {
+            if (!player.connection.hasClientLoaded()) return player.getName().getString() + " is still loading";
+            if (player.getHealth() <= SWORD_BLOCK_HIT) return player.getName().getString() + " has too little health left";
+        }
+        return "the last hit is still on cooldown";
+    }
+
+    /** Hits a player for a fixed amount and returns what it cost them in health. */
+    private static float damage(MinecraftServer server, ServerPlayer victim)
+    {
+        float before = victim.getHealth();
+        result(server, "damage " + victim.getName().getString() + " " + SWORD_BLOCK_HIT);
+        return before - victim.getHealth();
+    }
+
+    private static boolean same(float one, float other)
+    {
+        return Math.abs(one - other) < 0.05F;
     }
 
     private static void log(MinecraftServer server, String message)

@@ -2,6 +2,7 @@ package carpet.mixins;
 
 import carpet.CarpetSettings;
 import carpet.fakes.PlayerSwordBlockInterface;
+import carpet.pvp.PvpInitializer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.damagesource.DamageSource;
@@ -28,7 +29,9 @@ public abstract class Player_swordBlockStateMixin extends LivingEntity implement
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void tickSwordBlock(CallbackInfo ci) {
-        if (this.carpet$swordBlockTicks > 0) this.carpet$swordBlockTicks--;
+        if (this.carpet$swordBlockTicks > 0 && --this.carpet$swordBlockTicks == 0) {
+            PvpInitializer.stopSwordBlock(this); // window over, the clients stop showing the blocking pose
+        }
         this.carpet$pendingKbMultiplier = 1.0F;
     }
 

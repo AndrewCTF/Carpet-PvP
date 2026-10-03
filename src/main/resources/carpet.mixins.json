@@ -153,7 +153,9 @@
                    "PistonHeadRenderer_movableBEMixin",
                    "StructureBlockRenderer_mixin",
                    "ClientPacketListener_explosionMixin",
-                   "LevelRenderer_fogOffMixin"
+                   "LevelRenderer_fogOffMixin",
+                   "ItemInHandRenderer_swordBlockFirstPersonMixin",
+                   "PlayerRenderer_swordBlockArmPoseMixin"
                ],
     "injectors":  {
                       "defaultRequire":  1

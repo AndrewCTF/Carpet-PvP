@@ -1,6 +1,5 @@
 package carpet.client;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.player.Player;
 
@@ -22,7 +21,8 @@ public class SwordBlockVisuals {
     }
 
     public static void activate(Player player, int ticks) {
-        timers.put(player.getId(), ticks);
+        if (ticks <= 0) timers.remove(player.getId());
+        else timers.put(player.getId(), ticks);
     }
 
     public static boolean isActive(AbstractClientPlayer p) {
