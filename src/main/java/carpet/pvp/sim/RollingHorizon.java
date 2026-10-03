@@ -10,7 +10,6 @@ public final class RollingHorizon
 {
     private static final double DISTANCE_WEIGHT = 0.05;
     private static final double PREFERRED_DISTANCE = 2.6;
-    private static final double READY_WEIGHT = 1.0;
     private static final double MUTATION_RATE = 0.15;
 
     private final int horizon;
@@ -189,9 +188,6 @@ public final class RollingHorizon
         }
         double dealt = theirs0 - Math.max(0.0f, sim.fighter(other).health);
         double taken = mine0 - Math.max(0.0f, sim.fighter(self).health);
-        DuelSim.Fighter f = sim.fighter(self);
-        double ready = CombatMath.chargeScale(f.ticksSinceSwing, f.attackSpeed);
-        return dealt - taken + READY_WEIGHT * ready
-                - DISTANCE_WEIGHT * Math.abs(sim.horizontalDistance() - PREFERRED_DISTANCE);
+        return dealt - taken - DISTANCE_WEIGHT * Math.abs(sim.horizontalDistance() - PREFERRED_DISTANCE);
     }
 }

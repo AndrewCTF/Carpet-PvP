@@ -9,8 +9,9 @@ import org.junit.jupiter.api.Test;
 class RollingHorizonTest
 {
     private static final int HORIZON = 10;
+    private static final int[] HORIZONS = {10, 14, 20};
     private static final int POPULATION = 10;
-    private static final int BUDGET = 3000;
+    private static final int BUDGET = 12000;
     private static final int DUELS = 40;
     private static final int MAX_TICKS = 600;
 
@@ -33,11 +34,11 @@ class RollingHorizonTest
     }
 
     /** Result {win, trace hash, planner hp bits, baseline hp bits, ticks planned, calls}; a win is a kill with the planner alive, or more health at the time limit. */
-    private static long[] duel(long seed, boolean plannerIsA)
+    private static long[] duel(long seed, boolean plannerIsA, int horizon)
     {
         Random rng = new Random(seed);
         DuelSim sim = newDuel(rng);
-        RollingHorizon planner = new RollingHorizon(HORIZON, POPULATION, new Random(seed * 31 + 7));
+        RollingHorizon planner = new RollingHorizon(horizon, POPULATION, new Random(seed * 31 + 7));
         OpponentModel model = new OpponentModel();
         int me = plannerIsA ? 0 : 1;
         long trace = 17;
@@ -89,30 +90,44 @@ class RollingHorizonTest
     @Test
     void sameSeedSameResult()
     {
-        long[] first = duel(123, true);
-        long[] second = duel(123, true);
+        long[] first = duel(123, true, HORIZON);
+        long[] second = duel(123, true, HORIZON);
         assertEquals(first[1], second[1]);
         assertEquals(first[2], second[2]);
         assertEquals(first[3], second[3]);
     }
 
-    @Test
-    void plannerBeatsChargeAndSprintBaseline()
+    private static void assertWinRates(long firstSeed, String label)
     {
-        int wins = 0;
-        long ticks = 0;
-        long calls = 0;
-        long start = System.nanoTime();
-        for (int i = 0; i < DUELS; i++)
+        for (int horizon : HORIZONS)
         {
-            long[] r = duel(7000 + i, i % 2 == 0);
-            wins += (int) r[0];
-            ticks += r[4];
-            calls += r[5];
+            int wins = 0;
+            long ticks = 0;
+            long calls = 0;
+            long start = System.nanoTime();
+            for (int i = 0; i < DUELS; i++)
+            {
+                long[] r = duel(firstSeed + i, i % 2 == 0, horizon);
+                wins += (int) r[0];
+                ticks += r[4];
+                calls += r[5];
+            }
+            double ms = (System.nanoTime() - start) / 1.0e6;
+            System.out.printf("%s horizon %d: win rate %d/%d, %.1f simulated ticks per call, %.3f ms per call%n",
+                    label, horizon, wins, DUELS, (double) ticks / calls, ms / calls);
+            assertTrue(wins >= DUELS * 0.7, label + " horizon " + horizon + " win rate " + wins + "/" + DUELS);
         }
-        double ms = (System.nanoTime() - start) / 1.0e6;
-        System.out.printf("planner win rate %d/%d, %.1f simulated ticks per call, %.3f ms per call%n",
-                wins, DUELS, (double) ticks / calls, ms / calls);
-        assertTrue(wins >= DUELS * 0.7, "win rate " + wins + "/" + DUELS);
+    }
+
+    @Test
+    void plannerBeatsChargeAndSprintBaselineOnTuningSeeds()
+    {
+        assertWinRates(7000, "tuning");
+    }
+
+    @Test
+    void plannerBeatsChargeAndSprintBaselineOnHeldOutSeeds()
+    {
+        assertWinRates(90000, "held-out");
     }
 }
