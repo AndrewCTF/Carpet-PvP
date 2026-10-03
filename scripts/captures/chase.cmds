@@ -1,0 +1,14 @@
+# Two fake players; one chase-attacks the other.
+gamemode spectator Viewer
+carpet fakePlayerNavigation true
+player Atk spawn at 0.5 -60 0.5 facing 0 0 in minecraft:overworld in survival
+player Tgt spawn at 8.5 -60 0.5 facing 90 0 in minecraft:overworld in survival
+item replace entity Atk weapon.mainhand with minecraft:diamond_sword
+item replace entity Tgt armor.chest with minecraft:diamond_chestplate
+time set noon
+tp Viewer 4.5 -57 -6.5 0 20
+sleep 4
+shot chase-before
+player Atk nav chase attack 3.0 0 Tgt
+sleep 3
+shot chase-fight

@@ -1,0 +1,9 @@
+gamemode spectator Viewer
+time set noon
+tp Viewer 4.5 -57 -6.5 0 20
+sleep 3
+shot 01-no-shape
+script run draw_shape('box', 600, 'from', [3,-60,3], 'to', [6,-57,6], 'color', 0xFF0000FF, 'fill', 0xFF000066)
+script run draw_shape('label', 600, 'pos', [4.5,-55.5,4.5], 'text', 'scarpet shape')
+sleep 3
+shot 02-shape
