@@ -21,6 +21,7 @@ import carpet.commands.SpawnCommand;
 import carpet.commands.SpawnPlayerCommand;
 import carpet.commands.TestCommand;
 import carpet.network.ServerNetworkHandler;
+import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.selftest.SelfTest;
 import carpet.helpers.HopperCounter;
 import carpet.logging.LoggerRegistry;
@@ -30,6 +31,7 @@ import carpet.logging.HUDController;
 import carpet.script.external.Carpet;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.ParticleParser;
+import carpet.utils.DelayedTasks;
 import carpet.utils.MobAI;
 import carpet.utils.SpawnReporter;
 import com.mojang.brigadier.CommandDispatcher;
@@ -110,6 +112,7 @@ public class CarpetServer
     {
         HUDController.update_hud(server, null);
         if (scriptServer != null) scriptServer.tick();
+        DelayedTasks.tick(server);
         ScheduleCommand.tick(server);
         CarpetSettings.impendingFillSkipUpdates.set(false);
         extensions.forEach(e -> e.onTick(server));
@@ -186,6 +189,8 @@ public class CarpetServer
 
             scriptServer = null;
             ServerNetworkHandler.close();
+            EntityPlayerMPFake.forgetSpawningPlayers();
+            DelayedTasks.clear();
             ScheduleCommand.onServerClosed();
 
             LoggerRegistry.stopLoggers();
