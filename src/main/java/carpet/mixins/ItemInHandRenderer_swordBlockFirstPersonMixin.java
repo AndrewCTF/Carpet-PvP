@@ -4,7 +4,7 @@ import carpet.client.SwordBlockVisuals;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.ItemInHandRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
     @Unique private boolean carpet$pushed;
 
-    @Inject(method = "renderArmWithItem", at = @At("HEAD"))
+    @Inject(method = "submitArmWithItem", at = @At("HEAD"))
     private void carpet$blockHitStart(
             AbstractClientPlayer player,
             float partialTick,
@@ -31,7 +31,7 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
             ItemStack stack,
             float equipProgress,
             PoseStack poseStack,
-            MultiBufferSource buffer,
+            SubmitNodeCollector buffer,
             int packedLight,
             CallbackInfo ci
     ) {
@@ -62,7 +62,7 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
         poseStack.mulPose(new Quaternionf().rotationXYZ(0f, 0f, (float) Math.toRadians(roll)));
     }
 
-    @Inject(method = "renderArmWithItem", at = @At("RETURN"))
+    @Inject(method = "submitArmWithItem", at = @At("RETURN"))
     private void carpet$blockHitEnd(
             AbstractClientPlayer player,
             float partialTick,
@@ -72,7 +72,7 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
             ItemStack stack,
             float equipProgress,
             PoseStack poseStack,
-            MultiBufferSource buffer,
+            SubmitNodeCollector buffer,
             int packedLight,
             CallbackInfo ci
     ) {

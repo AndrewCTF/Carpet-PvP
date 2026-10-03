@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "carpet",
-  "version": "26.1.2",
+  "version": "${version}",
   "name": "Carpet PVP",
   "description": "Carpet with some PVP tweaks",
   "authors": [
@@ -35,7 +35,7 @@
   ],
   "accessWidener" : "carpet.accesswidener",
   "depends": {
-    "minecraft": ">=26.1.2 <27",
+    "minecraft": "${minecraft_dependency}",
     "fabricloader": ">=0.19.2",
     "java": ">=21",
     "fabric-api": "*"

@@ -5,6 +5,7 @@ import carpet.utils.SpawnOverrides;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.ServerLevelAccessor;
@@ -25,7 +26,7 @@ public class Husk_templesMixin
         if (serverWorldAccess.canSeeSky(pos)) return true;
 
         if (!CarpetSettings.huskSpawningInTemples) return false;
-        if (entityType != EntityType.HUSK) return false;
+        if (entityType != EntityTypes.HUSK) return false;
         if (!(serverWorldAccess instanceof ServerLevel serverLevel)) return false;
 
         return SpawnOverrides.isStructureAtPosition(serverLevel, BuiltinStructures.DESERT_PYRAMID, pos);

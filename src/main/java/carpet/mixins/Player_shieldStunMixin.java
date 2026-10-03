@@ -2,6 +2,7 @@ package carpet.mixins;
 
 import carpet.CarpetSettings;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -25,7 +26,7 @@ public abstract class Player_shieldStunMixin extends LivingEntity {
     protected Player_shieldStunMixin(EntityType<? extends LivingEntity> entityType, Level level) { super(entityType, level); }
 
     @Inject(method = "blockUsingItem", at = @At("HEAD"))
-    private void onShieldDisabled(ServerLevel serverLevel, LivingEntity livingEntity, CallbackInfo ci) {
+    private void onShieldDisabled(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float damage, CallbackInfo ci) {
         if (CarpetSettings.shieldStunning) {
             executor.schedule(() -> {
                 this.invulnerableTime = 0;

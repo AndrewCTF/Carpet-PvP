@@ -3,7 +3,7 @@ package carpet.patches;
 import carpet.CarpetSettings;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.ParseResults;
-import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -821,7 +821,7 @@ public class EntityPlayerMPFake extends ServerPlayer
         return super.applyItemBlocking(serverLevel, damageSource, f);
     }
 
-    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity) {
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f) {
         // Commenting out original LivingEntity shield blocking knockback code that
         // caused the fake player to jump forward when holding a shield that was hit.
         //this.knockback(0.5, livingEntity.getX() - this.getX(), livingEntity.getZ() - this.getZ());

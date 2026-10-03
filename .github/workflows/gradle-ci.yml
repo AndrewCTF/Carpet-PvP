@@ -33,5 +33,5 @@ jobs:
         run: |
           java --version
           ./gradlew --version
-      - name: Build
+      - name: Build every Minecraft version
         run: ./gradlew --no-daemon build -x test

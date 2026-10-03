@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       minecraft_version:
-        description: 'Minecraft version (e.g. 1.21.11). Leave empty to use gradle.properties default.'
+        description: 'Minecraft version to release (a directory under versions/). Leave empty to release every version.'
         required: false
         type: string
       release_type:
@@ -34,10 +34,42 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  versions:
     runs-on: ubuntu-latest
     # Only run on main branch
     if: github.ref == 'refs/heads/main'
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+      latest: ${{ steps.list.outputs.latest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: List Minecraft versions
+        id: list
+        env:
+          REQUESTED: ${{ inputs.minecraft_version }}
+        run: |
+          # One directory per supported Minecraft version
+          if [ -n "$REQUESTED" ]; then
+            if [ ! -f "versions/$REQUESTED/gradle.properties" ]; then
+              echo "::error::No versions/$REQUESTED/gradle.properties; supported versions: $(ls versions | tr '\n' ' ')"
+              exit 1
+            fi
+            echo "matrix=$(jq -cn --arg v "$REQUESTED" '[$v]')" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=$(ls versions | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "latest=$(ls versions | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: versions
+    runs-on: ubuntu-latest
+    strategy:
+      # A failed version can be re-run on its own through the minecraft_version input
+      fail-fast: false
+      matrix:
+        minecraft: ${{ fromJson(needs.versions.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,25 +101,20 @@ jobs:
           MOD_VERSION=$(grep -E '^\s*mod_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
           echo "mod_version=$MOD_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Use input Minecraft version or fall back to gradle.properties
-          if [ -n "${{ inputs.minecraft_version }}" ]; then
-            MC_VERSION="${{ inputs.minecraft_version }}"
-          else
-            MC_VERSION=$(grep -E '^\s*minecraft_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
-          fi
+          MC_VERSION="${{ matrix.minecraft }}"
           echo "minecraft_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Read other properties
+          # Read other properties; the Fabric API version is per Minecraft version
           FABRIC_LOADER=$(grep -E '^\s*loader_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
-          FABRIC_API=$(grep -E '^\s*fabric_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          FABRIC_API=$(grep -E '^\s*fabric_version\s*=' "versions/$MC_VERSION/gradle.properties" | sed 's/.*=\s*//' | tr -d '[:space:]')
           echo "fabric_loader=$FABRIC_LOADER" >> "$GITHUB_OUTPUT"
           echo "fabric_api=$FABRIC_API" >> "$GITHUB_OUTPUT"
 
-          # Build date stamp matching build.gradle format (yyMMdd)
+          # Build date stamp (yyMMdd)
           BUILD_DATE=$(date +%y%m%d)
           echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
 
-          # Full version string matching build.gradle: minecraft_version-mod_version+vyyMMdd
+          # Full version string: minecraft_version-mod_version+vyyMMdd
           FULL_VERSION="${MC_VERSION}-${MOD_VERSION}+v${BUILD_DATE}"
           echo "full_version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
 
@@ -124,17 +151,18 @@ jobs:
           fi
 
       - name: Build
-        run: ./gradlew --no-daemon build -x test
+        run: ./gradlew --no-daemon ":${{ matrix.minecraft }}:build" -x test
 
       - name: Identify built artifacts
         id: artifacts
         run: |
           # Find the main jar (exclude sources and dev jars)
-          MAIN_JAR=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
-          SOURCES_JAR=$(find build/libs -name "*-sources.jar" | head -1)
+          LIBS="versions/${{ matrix.minecraft }}/build/libs"
+          MAIN_JAR=$(find "$LIBS" -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
+          SOURCES_JAR=$(find "$LIBS" -name "*-sources.jar" | head -1)
 
           if [ -z "$MAIN_JAR" ]; then
-            echo "::error::No build artifact found in build/libs"
+            echo "::error::No build artifact found in $LIBS"
             exit 1
           fi
 
@@ -150,7 +178,7 @@ jobs:
           fi
 
           echo "=== Artifacts ==="
-          ls -lh build/libs/
+          ls -lh "$LIBS"
 
       - name: Generate release notes
         id: notes
@@ -193,7 +221,7 @@ jobs:
           prerelease: ${{ inputs.release_type == 'pre-release' }}
           draft: false
           generate_release_notes: false
-          make_latest: ${{ inputs.release_type == 'release' }}
+          make_latest: ${{ inputs.release_type == 'release' && matrix.minecraft == needs.versions.outputs.latest }}
           files: |
             ${{ steps.artifacts.outputs.main_jar }}
             ${{ steps.artifacts.outputs.sources_jar }}
