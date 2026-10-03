@@ -37,5 +37,11 @@ final class ScenarioIndex
         SCENARIOS.put("gui_spawn", GuiScenarios::spawn);
         SCENARIOS.put("gui_no_item_theft", GuiScenarios::noItemTheft);
         SCENARIOS.put("gui_kit_editor_roundtrip", GuiScenarios::kitEditorRoundtrip);
+        SCENARIOS.put("logic_combat_start_stop", CombatNodeScenarios::combatStartStop);
+        SCENARIOS.put("logic_fight_node", CombatNodeScenarios::fightNode);
+        SCENARIOS.put("logic_combat_option", CombatNodeScenarios::combatOption);
+        SCENARIOS.put("logic_on_kill_event", CombatNodeScenarios::onKillEvent);
+        SCENARIOS.put("logic_totem_pop_event", CombatNodeScenarios::totemPopEvent);
+        SCENARIOS.put("logic_stop_program_stops_fight", CombatNodeScenarios::stopProgramStopsFight);
     }
 }

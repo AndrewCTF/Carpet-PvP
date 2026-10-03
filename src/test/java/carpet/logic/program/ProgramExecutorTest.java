@@ -169,7 +169,8 @@ class ProgramExecutorTest
                 [{type: IF_THEN_ELSE, condition: {type: CONDITION_DISTANCE, params: {target: Steve, operator: "<", value: 5}},
                   children: [{type: JUMP}], elseChildren: [{type: DISMOUNT}]}]""");
         tick(1);
-        assertEquals(List.of("distanceToPlayer[Steve]"), recorder.questions);
+        // combatEvents is asked first, so that the fight events of this tick are seen once and only once
+        assertEquals(List.of("combatEvents[]", "distanceToPlayer[Steve]"), recorder.questions);
         assertEquals(List.of("jump[]"), recorder.calls);
     }
 
@@ -191,7 +192,8 @@ class ProgramExecutorTest
         run("[{type: FLEE_FROM, params: {player: Steve, distance: 20, ticks: 3}}, {type: JUMP}]");
         tick(3);
         assertEquals(List.of(NAV_RULE), recorder.calls);
-        assertEquals(List.of("fleeFrom[Steve, 20.0]"), recorder.questions);
+        // every tick asks what the game reported about the fight, and once more for the retest below
+        assertEquals(List.of("combatEvents[]", "fleeFrom[Steve, 20.0]", "combatEvents[]", "combatEvents[]"), recorder.questions);
         tick(1);
         assertEquals(List.of(NAV_RULE, "stopNavigation[]", "jump[]"), recorder.calls);
     }

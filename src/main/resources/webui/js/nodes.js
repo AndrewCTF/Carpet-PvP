@@ -59,6 +59,11 @@ const Nodes = (() => {
         "Combat/SwordBlock":       { title: "Sword Block", desc: "Block with a sword (needs the swordBlockHitting rule)." },
         "Combat/ShieldBlock":      { title: "Shield Block", desc: "Hold a shield up for a number of ticks." },
         "Combat/UseItem":          { title: "Use Item", desc: "Right click: eat, throw, place or interact." },
+        "Combat/CombatStart":      { title: "Start Combat AI", desc: "Hand the bot to its combat AI. While a combat node is active the brain drives the body, so movement and click steps around it are skipped. CombatStop gives the body back." },
+        "Combat/CombatStop":       { title: "Stop Combat AI", desc: "Turn the combat AI off and release everything the style left running." },
+        "Combat/Fight":            { title: "Fight", desc: "Start Combat AI, wait out the fight, then Stop: one node. Ends when the target or the bot is gone, when the target stays out of range for rangeTicks, or at the timeout." },
+        "Combat/CombatOption":     { title: "Set Combat Option", desc: "One setting of the bot's combat AI, by the name /bot option takes, including the options only one style reads." },
+        "Combat/GiveKit":          { title: "Give Kit", desc: "Put a kit on the bot, clearing what it was carrying, as /bot kit give does." },
 
         "Equipment/Hotbar":        { title: "Hotbar Select", desc: "Switch to a hotbar slot (1-9)." },
         "Equipment/EquipArmor":    { title: "Equip Armor", desc: "Put on a full armor set." },
@@ -98,6 +103,10 @@ const Nodes = (() => {
                                      outputs: [["body", "flow"], ["next", "flow"]] },
 
         "Conditions/Health":       { title: "Health Check", desc: "Compare the bot's health (0-20)." },
+        "Conditions/IsFighting":     { title: "Is Fighting", desc: "True while the combat AI is on and the bot has a target." },
+        "Conditions/HasTarget":     { title: "Has Target", desc: "True while the combat AI has a target, fighting one or not." },
+        "Conditions/TargetDistance": { title: "Target Distance Check", desc: "Compare the distance to the combat target. Infinite while there is none." },
+        "Conditions/TargetHealth":  { title: "Target Health Check", desc: "Compare the combat target's health. Infinite while there is none, as for the distance." },
         "Conditions/Distance":     { title: "Distance Check", desc: "Compare the distance to a player. Leave the target empty for the nearest one." },
         "Conditions/Food":         { title: "Food Check", desc: "Compare the bot's food level (0-20)." },
         "Conditions/Armor":        { title: "Armor Check", desc: "Compare the bot's armor points." },
@@ -131,19 +140,36 @@ const Nodes = (() => {
         },
     };
 
+    // What the server reports and the schema cannot: the kits this server's folder holds, and every name
+    // /bot option takes. Both are filled in from GET /api/settings, so a kit folder or a new option needs no
+    // change here. The option key stays free text in the schema, so that a key the server does not know is
+    // reported by the server, with the message /bot option gives, rather than quietly lost in the editor.
+    let settings = {};
+
+    const FROM_SERVER = {
+        "Combat/GiveKit": { kit: "kits" },
+        "Combat/CombatOption": { key: "combatOptions" },
+    };
+
     function labelFor(name) {
         const spaced = name.replace(/([a-z])([A-Z0-9])/g, "$1 $2");
         return spaced.charAt(0).toUpperCase() + spaced.slice(1);
     }
 
-    function addParam(node, p) {
+    function addParam(node, p, fromServer) {
         node.addProperty(p.name, p.default);
         const label = labelFor(p.name);
+        // A parameter the schema marks optionsFrom names the list the server sends for it under the same name.
+        const served = fromServer || p.optionsFrom;
         // The widget is bound to the property by name, so loading a graph or setting the property updates it.
         if (p.type === "bool") {
             node.addWidget("toggle", label, p.default, p.name);
         } else if (p.options) {
             node.addWidget("combo", label, p.default, p.name, { values: p.options });
+        } else if (served && (settings[served] || []).length > 0) {
+            // A list the server sent: a dropdown of it, but still typed into, so that a name it does not
+            // know yet reaches the server to be complained about there.
+            node.addWidget("combo", label, p.default, p.name, { values: settings[served] });
         } else {
             // A number is text too, so that a variable reference can be typed where a number goes.
             node.addWidget("text", label, p.default, p.name);
@@ -154,10 +180,11 @@ const Nodes = (() => {
         const style = CATEGORY_STYLE[type.split("/")[0]];
         const inputs = ui.inputs || (isCondition ? [] : FLOW_IN);
         const outputs = ui.outputs || (isCondition ? [["condition", "condition"]] : FLOW_OUT);
+        const fromServer = FROM_SERVER[type] || {};
         function Node() {
             inputs.forEach(([name, kind]) => this.addInput(name, kind));
             outputs.forEach(([name, kind]) => this.addOutput(name, kind));
-            params.forEach(p => addParam(this, p));
+            params.forEach(p => addParam(this, p, fromServer[p.name]));
             this.title = ui.title;
             this.color = style.color;
             this.bgcolor = style.bg;
@@ -168,7 +195,8 @@ const Nodes = (() => {
     }
 
     /** Registers every node type. Only these are offered: LiteGraph's own demo nodes are removed. */
-    function register(schema) {
+    function register(schema, serverSettings) {
+        settings = serverSettings || {};
         LiteGraph.clearRegisteredTypes();
         define("Control/Start", NODES["Control/Start"], [], false);
         for (const def of Object.values(schema.actions)) {

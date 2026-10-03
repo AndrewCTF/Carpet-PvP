@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import carpet.pvp.BotPvpConfig;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
@@ -59,6 +61,15 @@ public final class ActionSchema
     }
 
     /**
+     * The parameters a string may take, where they do not depend on the running server: the combat styles
+     * {@code /bot spawn} takes and the difficulty presets it applies, both generated from the enums rather
+     * than written down, so that a style added to the bot appears here without anyone touching this file.
+     */
+    private static final Map<String, Supplier<List<String>>> GENERATED_OPTIONS = Map.of(
+            "combatStyles", () -> List.of(BotPvpConfig.styles()),
+            "difficulties", () -> List.of(BotPvpConfig.difficulties()));
+
+    /**
      * @param options the only values a string parameter may take, or empty when it is free text
      */
     public record Param(String name, ParamType type, Object defaultValue, double min, double max, List<String> options)
@@ -88,9 +99,10 @@ public final class ActionSchema
 
     /**
      * @param requires the boolean carpet rule that must be on for the action to work, or null
+     * @param drivesBody whether the action moves the bot or clicks for it, which a combat node does not allow
      * @param slots which of children, elseChildren and condition an action of this type carries
      */
-    public record Definition(String type, String kind, String requires, List<String> slots, Map<String, Param> params)
+    public record Definition(String type, String kind, String requires, boolean drivesBody, List<String> slots, Map<String, Param> params)
     {
     }
 
@@ -216,7 +228,8 @@ public final class ActionSchema
                 params.put(param.name(), param);
             }
             String requires = definition.has("requires") ? definition.get("requires").getAsString() : null;
-            definitions.put(type, new Definition(type, kind, requires, List.copyOf(slots), params));
+            boolean drivesBody = definition.has("drivesBody") && definition.get("drivesBody").getAsBoolean();
+            definitions.put(type, new Definition(type, kind, requires, drivesBody, List.copyOf(slots), params));
         }
     }
 
@@ -236,6 +249,20 @@ public final class ActionSchema
         {
             JsonArray array = json.getAsJsonArray("options");
             array.forEach(option -> options.add(option.getAsString()));
+        }
+        if (json.has("optionsFrom"))
+        {
+            String from = json.get("optionsFrom").getAsString();
+            Supplier<List<String>> generated = GENERATED_OPTIONS.get(from);
+            if (generated == null)
+            {
+                throw new IllegalStateException(action + "." + name + ": nothing generates the options of '" + from + "'");
+            }
+            options.addAll(generated.get());
+            // what the web editor is sent has to be the same list the interpreter checks against
+            JsonArray resolved = new JsonArray();
+            options.forEach(resolved::add);
+            json.add("options", resolved);
         }
         Param param = new Param(name, type, defaultValue,
                 json.has("min") ? json.get("min").getAsDouble() : -Double.MAX_VALUE,

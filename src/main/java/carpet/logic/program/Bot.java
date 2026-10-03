@@ -1,5 +1,8 @@
 package carpet.logic.program;
 
+import carpet.pvp.BotEvents;
+
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -68,6 +71,26 @@ public interface Bot
     void requireRule(String rule, UUID owner);
 
     /**
+     * Turns the bot's combat AI on and lets go of the body, so that the AI is the only thing driving the
+     * action pack until {@link #stopCombat()} is called.
+     *
+     * @param style      a combat style, by the name {@code /bot spawn} takes
+     * @param difficulty a difficulty preset name
+     * @param targets    which kinds of entity to fight: players, mobs, bots, all or none
+     * @param target     the name of one entity to fight, or empty to take any of the kinds
+     */
+    void startCombat(String style, String difficulty, String targets, String target);
+    /** Turns the combat AI off and releases whatever the style left running. */
+    void stopCombat();
+    /**
+     * Applies one combat setting by the name and value {@code /bot option} takes, including the options only
+     * one combat style reads. An unknown key or an unusable value throws.
+     */
+    void combatOption(String key, String value);
+    /** Puts the kit of that name on the bot, clearing what it was carrying, the way {@code /bot kit give} does. */
+    void giveKit(String kit);
+
+    /**
      * @param owner the player the program runs on behalf of, or null when there is none
      */
     void executeCommand(String command, UUID owner);
@@ -86,4 +109,20 @@ public interface Bot
     boolean isSneaking();
     boolean isSprinting();
     boolean isInWater();
+    boolean isAlive();
+
+    /** True while the combat AI is on and the bot has a target it is engaging. */
+    boolean isFighting();
+    /** True while the bot has a target it is fighting. */
+    boolean hasTarget();
+    /**
+     * @return the distance to the target, or infinity when there is none
+     */
+    double targetDistance();
+    /**
+     * @return the target's health, or infinity when there is no target, as there is no distance to it either
+     */
+    double targetHealth();
+    /** The fight events the game has reported since this was last called, and forgets them. */
+    Set<BotEvents.Event> combatEvents();
 }

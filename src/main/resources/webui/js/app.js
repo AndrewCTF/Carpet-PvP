@@ -56,11 +56,11 @@ document.addEventListener("DOMContentLoaded", () => {
     API.on("log", (data) => log(data.message, data.level));
 
     // Connect to the server this page came from. The node types are built from its action schema,
-    // so the editor starts once that has arrived.
+    // and the lists the schema cannot know come from its settings, so the editor starts once both are here.
     API.connect();
     if (API.hasToken()) {
-        API.getSchema().then((schema) => {
-            Nodes.register(schema);
+        Promise.all([API.getSchema(), API.getSettings()]).then(([schema, settings]) => {
+            Nodes.register(schema, settings);
             NodeCompiler.setSchema(schema);
             NodeEditor.init(schema);
             log("Node editor ready. Open the Bots panel (B) to spawn a bot, then press Run.");

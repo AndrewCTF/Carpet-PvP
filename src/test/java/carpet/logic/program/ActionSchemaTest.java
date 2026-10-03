@@ -4,9 +4,13 @@ import carpet.logic.program.ActionSchema.Definition;
 import carpet.logic.program.ActionSchema.Param;
 import carpet.logic.program.ActionSchema.Params;
 import carpet.logic.program.ActionSchema.Variables;
+import carpet.pvp.BotPvpConfig;
+import carpet.pvp.BotPvpConfig.CombatStyle;
+import carpet.pvp.BotPvpConfig.Difficulty;
 import carpet.utils.ArmorSetDefinition;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import org.junit.jupiter.api.Test;
@@ -20,6 +24,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -229,6 +234,92 @@ class ActionSchemaTest
         {
             assertTrue(param.options().contains(name), "EquipArmor is missing " + name);
         }
+    }
+
+    @Test
+    void theCombatStyleNodeOffersEveryStyleTheBotHasAndNothingElse()
+    {
+        Param param = schema.definitions().stream()
+                .filter(definition -> definition.type().equals("COMBAT_START"))
+                .findFirst().orElseThrow().params().get("style");
+        assertEquals(List.of(BotPvpConfig.styles()), param.options(), "the names /bot spawn takes, in the enum's order");
+        assertEquals("sword", param.defaultValue(), "the default has to be one of them");
+        for (String name : param.options())
+        {
+            assertEquals(name.toUpperCase(Locale.ROOT).equals("SWORD") ? CombatStyle.MELEE : CombatStyle.valueOf(name.toUpperCase(Locale.ROOT)),
+                    BotPvpConfig.styleOf(name), "styleOf takes every name the node offers");
+        }
+        assertThrows(IllegalArgumentException.class, () -> BotPvpConfig.styleOf("chainsaw"));
+    }
+
+    @Test
+    void theFightNodeOffersEveryDifficultyTheBotHas()
+    {
+        Param param = schema.definitions().stream()
+                .filter(definition -> definition.type().equals("FIGHT"))
+                .findFirst().orElseThrow().params().get("difficulty");
+        assertEquals(List.of(BotPvpConfig.difficulties()), param.options());
+        for (Difficulty difficulty : Difficulty.values())
+        {
+            assertTrue(param.options().contains(difficulty.name().toLowerCase(Locale.ROOT)),
+                    "FIGHT offers " + difficulty);
+        }
+    }
+
+    @Test
+    void theEditorIsSentTheOptionsTheSchemaChecksAgainst()
+    {
+        // The web editor is handed this very file, so a list that is generated here has to be in it too.
+        JsonObject json = schema.json();
+        for (Map.Entry<String, JsonElement> entry : json.getAsJsonObject("actions").entrySet())
+        {
+            for (JsonElement element : entry.getValue().getAsJsonObject().getAsJsonArray("params"))
+            {
+                JsonObject param = element.getAsJsonObject();
+                if (param.has("optionsFrom"))
+                {
+                    assertTrue(param.has("options"), entry.getKey() + "." + param.get("name") + " has no resolved options");
+                    assertFalse(param.getAsJsonArray("options").isEmpty(), entry.getKey() + "." + param.get("name"));
+                }
+            }
+        }
+    }
+
+    @Test
+    void onlyTheStepsThatDriveTheBodySaySo()
+    {
+        // A combat node keeps the program from driving the action pack, so every step that would is marked.
+        Set<String> moving = Set.of("MOVE", "STRAFE", "SPRINT", "SNEAK", "JUMP", "MOUNT", "DISMOUNT", "STOP_MOVEMENT",
+                "ATTACK", "ATTACK_CRIT", "SWORD_BLOCK", "SHIELD_BLOCK", "USE", "PLACE_BLOCK", "PLACE_CRYSTAL",
+                "DETONATE_CRYSTAL", "NAV_GOTO", "NAV_STOP", "FOLLOW_PLAYER", "CHASE_PLAYER", "PATROL", "FLEE_FROM",
+                "WANDER", "GLIDE_START", "GLIDE_STOP", "GLIDE_GOTO", "GLIDE_HEADING", "GLIDE_SPEED", "GLIDE_FREEZE",
+                "GLIDE_LAND");
+        for (Definition definition : schema.definitions())
+        {
+            assertEquals(moving.contains(definition.type()), definition.drivesBody(),
+                    definition.type() + (moving.contains(definition.type()) ? " drives the body" : " does not"));
+        }
+    }
+
+    @Test
+    void aStyleTheSchemaDoesNotKnowIsRejectedBeforeItRuns()
+    {
+        List<BotAction> actions = GSON.fromJson("[{\"type\": \"COMBAT_START\", \"params\": {\"style\": \"chainsaw\"}}]",
+                new TypeToken<List<BotAction>>() {}.getType());
+        assertThrows(IllegalArgumentException.class, () -> schema.validate(actions));
+    }
+
+    @Test
+    void anOptionKeyIsFreeTextSoThatTheServerCanRefuseIt()
+    {
+        Param param = schema.definitions().stream()
+                .filter(definition -> definition.type().equals("SET_COMBAT_OPTION"))
+                .findFirst().orElseThrow().params().get("key");
+        assertTrue(param.options().isEmpty(), "the option names live on the bot, not here");
+        List<BotAction> actions = GSON.fromJson(
+                "[{\"type\": \"SET_COMBAT_OPTION\", \"params\": {\"key\": \"chainsaw\", \"value\": \"1\"}}]",
+                new TypeToken<List<BotAction>>() {}.getType());
+        schema.validate(actions);
     }
 
     @Test
