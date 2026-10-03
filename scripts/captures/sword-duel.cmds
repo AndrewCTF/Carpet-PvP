@@ -1,5 +1,7 @@
 # Two sword bots duel on a flat world, one expert and one average. The camera is moved next to the
 # fight before every capture because the bots do not stay where they started.
+gamerule spawn_mobs false
+kill @e[type=!player]
 gamemode spectator Viewer
 time set noon
 weather clear

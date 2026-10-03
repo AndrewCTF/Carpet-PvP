@@ -1,4 +1,6 @@
 # The chest-screen menu a vanilla client sees for /bot gui.
+gamerule spawn_mobs false
+kill @e[type=!player]
 time set noon
 weather clear
 gamemode creative Viewer

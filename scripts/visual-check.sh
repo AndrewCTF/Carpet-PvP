@@ -13,6 +13,8 @@ DISP=${DISP:-:97}
 PORT=$((25700 + RANDOM % 200))
 mkdir -p "$OUT" "$ROOT/run/$V/server" "$ROOT/run/$V/client"
 echo "eula=true" > "$ROOT/run/$V/server/eula.txt"
+# Every check starts from a new world, so nothing an earlier check left behind is in the pictures.
+rm -rf "$ROOT/run/$V/server/world"
 # 26.3 servers default to a whitelist; turn it off so the test client can join.
 printf 'level-type=minecraft\\:flat\nonline-mode=false\ngamemode=creative\nspawn-protection=0\nserver-port=%s\nview-distance=8\nwhite-list=false\nenforce-whitelist=false\n' "$PORT" > "$ROOT/run/$V/server/server.properties"
 printf 'onboardAccessibility:false\nskipMultiplayerWarning:true\njoinedFirstServer:true\ntutorialStep:none\npauseOnLostFocus:false\nnarrator:0\nrenderDistance:6\nmaxFps:30\nguiScale:2\nfullscreen:false\nsoundCategory_master:0.0\n' > "$ROOT/run/$V/client/options.txt"
@@ -27,6 +29,9 @@ waitfor() { local t=0; until grep -qE "$2" "$1"; do sleep 1; t=$((t+1)); if [ "$
 cleanup() { say "stop"; sleep 5; kill $CP "$SP" 2>/dev/null; kill "$XP" 2>/dev/null; }
 if ! waitfor "$SLOG" 'Done \([0-9.]+s\)!' 300; then echo "RESULT server_boot=FAIL"; tail -20 "$SLOG"; kill "$SP" "$XP"; exit 1; fi
 echo "RESULT server_boot=OK port=$PORT"
+# A flat world breeds slimes, and one of them kills a player who joins in survival before the first
+# command runs. Mobs are removed and kept out before the client joins.
+say "gamerule spawn_mobs false"; say "kill @e[type=!player]"; say "gamerule immediate_respawn true"
 # The private display has no GPU: use Mesa's software renderer. From 26.3 the client's window comes
 # from SDL, which prefers a Wayland session if there is one, so X11 is forced.
 env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 SDL_VIDEODRIVER=x11 DISPLAY="$DISP" LIBGL_ALWAYS_SOFTWARE=1 \

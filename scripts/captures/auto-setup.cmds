@@ -1,4 +1,6 @@
 # /auto-setup run by the joining player: the menu, the arena with the bot, the fight, and the clean-up.
+gamerule spawn_mobs false
+kill @e[type=!player]
 time set noon
 weather clear
 gamemode survival Viewer
@@ -11,8 +13,12 @@ execute as Viewer run auto-setup sword beginner
 sleep 5
 shot auto-setup-02-countdown
 sleep 5
+execute as Viewer at Viewer run tp Viewer ~ ~ ~ facing entity AS_Viewer eyes
+sleep 1
 shot auto-setup-03-fighting
-sleep 4
+sleep 3
+execute as Viewer at Viewer run tp Viewer ~ ~ ~ facing entity AS_Viewer eyes
+sleep 1
 shot auto-setup-04-fighting
 execute as Viewer run auto-setup stop
 sleep 3
