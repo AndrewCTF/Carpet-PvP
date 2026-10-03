@@ -53,11 +53,13 @@ public final class ElytraAStarPathfinder
         final int x;
         final int y;
         final int z;
-        final long parent;
+        /** The node this one was reached from, or null at the start: a packed position cannot stand in for it,
+         * because zero is the position of the origin corner of the world. */
+        final Node parent;
         final float g;
         final float f;
 
-        Node(long key, int x, int y, int z, long parent, float g, float f)
+        Node(long key, int x, int y, int z, Node parent, float g, float f)
         {
             this.key = key;
             this.x = x;
@@ -86,7 +88,7 @@ public final class ElytraAStarPathfinder
         Map<Long, Node> best = new HashMap<>();
         Set<Long> closed = new HashSet<>();
 
-        Node startNode = new Node(startKey, safeStart.getX(), safeStart.getY(), safeStart.getZ(), 0L, 0.0F,
+        Node startNode = new Node(startKey, safeStart.getX(), safeStart.getY(), safeStart.getZ(), null, 0.0F,
                 heuristic(safeStart.getX(), safeStart.getY(), safeStart.getZ(), safeGoal));
         open.add(startNode);
         best.put(startKey, startNode);
@@ -141,7 +143,7 @@ public final class ElytraAStarPathfinder
                         if (prev != null && ng >= prev.g) continue;
 
                         float nf = ng + heuristic(nx, ny, nz, safeGoal);
-                        Node next = new Node(nKey, nx, ny, nz, cur.key, ng, nf);
+                        Node next = new Node(nKey, nx, ny, nz, cur, ng, nf);
                         best.put(nKey, next);
                         open.add(next);
                     }
@@ -245,8 +247,7 @@ public final class ElytraAStarPathfinder
         while (cur != null && guard++ < 200_000)
         {
             rev.add(new BlockPos(cur.x, cur.y, cur.z));
-            if (cur.parent == 0L) break;
-            cur = best.get(cur.parent);
+            cur = cur.parent;
         }
         // reverse
         List<BlockPos> out = new ArrayList<>(rev.size());

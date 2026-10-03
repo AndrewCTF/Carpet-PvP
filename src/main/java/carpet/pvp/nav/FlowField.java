@@ -97,6 +97,17 @@ public final class FlowField implements BudgetedSearch.Step
     }
 
     /**
+     * Points the field at a target and expands as much of it as {@code budget} has left, which is what lets a
+     * shared field be driven from the same per-tick budget as a bot's own search. Returns true once the whole
+     * region has been expanded.
+     */
+    public boolean step(Walkability view, int x, int y, int z, Budget budget)
+    {
+        rebuild(view, x, y, z);
+        return complete || expand(budget);
+    }
+
+    /**
      * Starts a rebuild if the target has moved further than the rebuild distance since the last one and returns
      * whether it did. A rebuild in flight is always finished first, so a target that moves every tick cannot stop
      * the field from ever completing.

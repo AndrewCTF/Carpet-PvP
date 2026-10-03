@@ -220,6 +220,12 @@ public class CarpetSettings
             @Rule(desc = "Allow underwater swimming during navigation (default: false = float on surface)", category = {FEATURE})
             public static boolean fakePlayerNavAllowSwimming = false;
 
+            @Rule(desc = "Node expansions one bot may pathfind in a single tick", category = {FEATURE}, options = {"500", "1500", "3000", "6000"})
+            public static int fakePlayerNavSearchBudget = 1500;
+
+            @Rule(desc = "Node expansions all the bots together may pathfind in a single tick", category = {FEATURE}, options = {"4000", "12000", "24000", "50000"})
+            public static int fakePlayerNavSearchBudgetTotal = 12000;
+
             @Rule(desc = "Enable fall damage for real players", category = {SURVIVAL, FEATURE})
             public static boolean playerFallDamage = true;
 
