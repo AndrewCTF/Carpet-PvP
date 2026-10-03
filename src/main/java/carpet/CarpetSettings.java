@@ -151,8 +151,8 @@ public class CarpetSettings
             @Rule(desc = "Allows fake players to use precise elytra gliding controls via /player <name> glide ...", category = {CREATIVE})
             public static boolean fakePlayerElytraGlide = false;
 
-            @Rule(desc = "Allows fake players to use built-in navigation/pathfinding via /player <name> nav ...", category = {CREATIVE})
-            public static boolean fakePlayerNavigation = false;
+            @Rule(desc = "Allows fake players to use built-in navigation/pathfinding: /player <name> nav ..., combat bots closing on a target and CarpetLogic navigation nodes", category = {CREATIVE})
+            public static boolean fakePlayerNavigation = true;
 
             @Rule(desc = "Allow fake-player navigation to break blocks in its way", category = {FEATURE})
             public static boolean fakePlayerNavBreakBlocks = false;

@@ -143,7 +143,7 @@ Who may do what:
 - `commandPlayer` gates the whole command. It is `"true"` by default.
 - A non-op player may control fake players and themselves, but not another real player:
   "Non OP players can't control other real players".
-- Navigation additionally needs `fakePlayerNavigation`, and only works on fake players.
+- Navigation additionally needs `fakePlayerNavigation` (on by default), and only works on fake players.
 - Gliding additionally needs `fakePlayerElytraGlide`, and only works on fake players.
 - `ai` and `faction` only do anything to fake players; naming a real player is silently skipped.
 
@@ -344,10 +344,10 @@ with nothing on cooldown gets 0 back.
 
 ## Navigation
 
-Navigation needs the rule:
+Navigation needs the rule `fakePlayerNavigation`, which is on by default. To switch navigation off for the whole server:
 
 ```
-/carpet fakePlayerNavigation true
+/carpet fakePlayerNavigation false
 ```
 
 Every `nav` subcommand only works on a fake player. `nav status` prints the mode, the target, the

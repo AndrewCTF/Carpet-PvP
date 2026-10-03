@@ -25,12 +25,12 @@ Two things to know about reading the tables:
 
 ## Fake-player navigation
 
-`fakePlayerNavigation` has to be on before any `/player <name> nav ...` command does anything, and
-only fake players can use it.
+`fakePlayerNavigation` is on by default; with it off no `/player <name> nav ...` command does anything
+and combat bots cannot walk to their target. Only fake players can use navigation.
 
 | Rule | Type | Default | What it does |
 |---|---|---|---|
-| `fakePlayerNavigation` | bool | `false` | Master switch for `/player <name> nav ...`. With it off, navigation also stops itself mid-run. |
+| `fakePlayerNavigation` | bool | `true` | Master switch for `/player <name> nav ...`, for combat bots closing on a target and for CarpetLogic navigation nodes. With it off, navigation also stops itself mid-run. |
 | `fakePlayerElytraGlide` | bool | `false` | Master switch for `/player <name> glide ...`, and for the `air` navigation mode. Fake players only. |
 | `playerFallDamage` | bool | `true` | Whether real players take fall damage at all. |
 | `fakePlayerFallDamage` | bool | `true` | Whether fake players take fall damage. |

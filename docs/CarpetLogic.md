@@ -132,7 +132,7 @@ Three more rules decide whether particular actions work:
 
 | Rule | Default | Affects |
 |---|---|---|
-| `fakePlayerNavigation` | `false` | `NAV_GOTO`, `FOLLOW_PLAYER`, `CHASE_PLAYER`, `PATROL`, `FLEE_FROM`, `WANDER` |
+| `fakePlayerNavigation` | `true` | `NAV_GOTO`, `FOLLOW_PLAYER`, `CHASE_PLAYER`, `PATROL`, `FLEE_FROM`, `WANDER` |
 | `fakePlayerElytraGlide` | `false` | `GLIDE_START`, `GLIDE_GOTO`, `GLIDE_HEADING`, `GLIDE_SPEED`, `GLIDE_FREEZE`, `GLIDE_LAND` |
 | `swordBlockHitting` | `false` | `SWORD_BLOCK` |
 
