@@ -1287,5 +1287,12 @@ public class CarpetSettings
     @Rule(desc = "Damage invulnerability ticks for other/unknown damage types", category = FEATURE, validate = Validators.NonNegativeNumber.class)
     public static int damageTickOther = 10;
 
+    @Rule(desc = "Enables /carpetlogic command to run bot programs on fake players", category = COMMAND)
+    public static String commandCarpetLogic = "ops";
+
+    @Rule(desc = "Maximum number of bot programs running at the same time", category = CREATIVE,
+            validate = Validators.NonNegativeNumber.class)
+    public static int carpetLogicMaxPrograms = 4;
+
     // ...existing code...
 }

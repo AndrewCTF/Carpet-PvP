@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarpetLogic — Node Editor</title>
+    <link rel="stylesheet" href="https://unpkg.com/litegraph.js@0.7.18/css/litegraph.css">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/litegraph.js@0.7.18/build/litegraph.min.js"></script>
+</head>
+<body>
+
+    <!-- ═══ Title Bar ═════════════════════════════════════════ -->
+    <header id="title-bar">
+        <div class="tb-left">
+            <span id="connection-dot" class="conn-dot disconnected"></span>
+            <span id="connection-text" class="conn-label">Offline</span>
+        </div>
+        <span class="tb-title">CarpetLogic Node Editor</span>
+        <div class="tb-right"></div>
+    </header>
+
+    <!-- ═══ Workspace ═════════════════════════════════════════ -->
+    <div id="workspace">
+
+        <!-- ── Left Sidebar (colored icon squares) ────────── -->
+        <nav id="sidebar">
+            <div class="cat-btn" data-category="control" title="Control Flow">
+                <div class="sb-icon" style="background:#f59e0b">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="combat" title="Combat">
+                <div class="sb-icon" style="background:#f43f5e">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="movement" title="Movement">
+                <div class="sb-icon" style="background:#06b6d4">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="5 12 12 5 19 12"/><line x1="12" y1="19" x2="12" y2="5"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="navigation" title="Navigation">
+                <div class="sb-icon" style="background:#22c55e">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="look" title="Look / Aim">
+                <div class="sb-icon" style="background:#8b5cf6">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="equipment" title="Equipment">
+                <div class="sb-icon" style="background:#f97316">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 0 0-8 0v2"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="crystal" title="Crystal PvP">
+                <div class="sb-icon" style="background:#ec4899">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="condition" title="Conditions">
+                <div class="sb-icon" style="background:#0ea5e9">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+            </div>
+            <div class="cat-btn" data-category="elytra" title="Elytra Flight">
+                <div class="sb-icon" style="background:#10b981">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M2 12L12 2l10 10"/><path d="M2 12l10 6 10-6"/></svg>
+                </div>
+            </div>
+        </nav>
+
+        <!-- ── Node Palette ───────────────────────────────── -->
+        <div id="node-palette" class="hidden">
+            <div id="palette-header">
+                <span id="palette-title">Category</span>
+                <button id="palette-close" class="pal-close">&times;</button>
+            </div>
+            <div id="palette-nodes"></div>
+        </div>
+
+        <!-- ── Canvas Area ────────────────────────────────── -->
+        <div id="canvas-wrap">
+            <canvas id="graph-canvas"></canvas>
+
+            <!-- Top-left toolbar -->
+            <div id="toolbar-tl">
+                <button class="tl-btn" id="btn-undo" title="Undo">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                </button>
+                <button class="tl-btn" id="btn-clear" title="Clear Canvas">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+                <button class="tl-btn" id="btn-save" title="Save Program">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </button>
+            </div>
+
+            <!-- Top-right controls -->
+            <div id="toolbar-tr">
+                <select id="program-select" title="Programs">
+                    <option value="">Default</option>
+                </select>
+            </div>
+
+            <!-- Bottom-left play button -->
+            <div id="play-area">
+                <button id="exec-run-btn" class="play-btn" title="Run Program">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                </button>
+            </div>
+
+            <!-- Bottom-right zoom -->
+            <div id="zoom-area">
+                <button class="zoom-btn" id="zoom-out" title="Zoom Out">−</button>
+                <button class="zoom-btn" id="zoom-in" title="Zoom In">+</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Bot Control Panel (right side, toggleable) ════ -->
+    <aside id="right-panel" class="panel-closed">
+        <button id="rp-close" class="rp-close-btn">&times;</button>
+
+        <section class="rp-section">
+            <div class="rp-header"><span>Bot Control</span></div>
+            <div class="rp-body">
+                <div class="rp-field">
+                    <label>Bot Name</label>
+                    <input id="bot-name-input" type="text" value="PvPBot" spellcheck="false" />
+                </div>
+                <div class="rp-row">
+                    <button id="spawn-bot-btn" class="btn-sm green">Spawn</button>
+                    <button id="kill-bot-btn" class="btn-sm red">Kill</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="rp-section">
+            <div class="rp-header"><span>Active Bots</span></div>
+            <div class="rp-body">
+                <div id="bot-list" class="item-list">
+                    <div class="empty-hint">No active bots</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="rp-section">
+            <div class="rp-header"><span>Execution</span></div>
+            <div class="rp-body">
+                <div class="rp-field">
+                    <label>Target Bot</label>
+                    <select id="target-bot-select">
+                        <option value="">Select a bot…</option>
+                    </select>
+                </div>
+                <div class="rp-row">
+                    <button id="btn-run" class="btn-sm green flex-1">▶ Run</button>
+                    <button id="exec-stop-btn" class="btn-sm red flex-1">■ Stop</button>
+                </div>
+                <div class="rp-status">
+                    <span class="rp-status-label">Status</span>
+                    <span id="exec-state" class="rp-status-value">Idle</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="rp-section" id="bot-status-section" style="display:none;">
+            <div class="rp-header"><span>Bot Status</span></div>
+            <div class="rp-body">
+                <div id="bot-status-content">
+                    <div class="empty-hint">Select a bot</div>
+                </div>
+            </div>
+        </section>
+    </aside>
+
+    <!-- ═══ Hidden elements for JS compatibility ══════════ -->
+    <input type="hidden" id="program-name" value="Untitled" />
+    <button id="btn-load" style="display:none"></button>
+    <button id="btn-new" style="display:none"></button>
+    <button id="btn-stop" style="display:none"></button>
+    <div id="preset-list" style="display:none"></div>
+    <button id="btn-settings" style="display:none"></button>
+
+    <!-- ═══ Console ═══════════════════════════════════════ -->
+    <div id="console-bar">
+        <div id="console-header">
+            <div class="console-title">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                <span>Console</span>
+            </div>
+            <div class="console-actions">
+                <button id="clear-log-btn" class="con-btn">Clear</button>
+                <button id="log-toggle" class="con-btn">▼</button>
+            </div>
+        </div>
+        <div id="log-panel" class="collapsed">
+            <div id="log-entries"></div>
+        </div>
+    </div>
+
+    <!-- ═══ Load Modal ════════════════════════════════════ -->
+    <div id="load-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-top">
+                <div class="modal-tabs">
+                    <button class="modal-tab active" data-tab="programs">My Programs</button>
+                    <button class="modal-tab" data-tab="presets">Presets</button>
+                </div>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <div id="panel-programs" class="modal-tab-panel active">
+                    <div id="load-program-list" class="modal-list"></div>
+                </div>
+                <div id="panel-presets" class="modal-tab-panel">
+                    <div id="preset-program-list" class="modal-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Settings Modal ════════════════════════════════ -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-card narrow">
+            <div class="modal-top">
+                <span class="modal-heading">Settings</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <div class="settings-content"><span class="rp-muted">Loading…</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Scripts ════════════════════════════════════════ -->
+    <script src="js/nodes/control.js"></script>
+    <script src="js/nodes/movement.js"></script>
+    <script src="js/nodes/combat.js"></script>
+    <script src="js/nodes/equipment.js"></script>
+    <script src="js/nodes/look.js"></script>
+    <script src="js/nodes/navigation.js"></script>
+    <script src="js/nodes/elytra.js"></script>
+    <script src="js/nodes/crystal.js"></script>
+    <script src="js/nodes/conditions.js"></script>
+    <script src="js/node-compiler.js"></script>
+    <script src="js/node-editor.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/bot-panel.js"></script>
+    <script src="js/program-panel.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
