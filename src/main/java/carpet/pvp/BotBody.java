@@ -111,6 +111,19 @@ public final class BotBody
         }
     }
 
+    /**
+     * An aim point for the view, in degrees. A projectile needs this: its yaw and pitch come out of the aim
+     * solver rather than out of a point in the world, and the view still has to be turned onto them at the
+     * bot's own speed and on its own mouse grid.
+     *
+     * @param yaw    yaw in degrees, Minecraft convention, 0 faces +z
+     * @param pitch  pitch in degrees, positive looking down
+     * @param radius angular radius of the aim point, which is how wide the controller treats it, in degrees
+     */
+    public record Aim(float yaw, float pitch, float radius)
+    {
+    }
+
     private final EntityPlayerMPFake bot;
     private final EntityPlayerActionPack pack;
     private final LookProfile profile;
@@ -121,6 +134,7 @@ public final class BotBody
 
     private int pendingSlot = -1;
     private int slot;
+    private boolean using;
     private boolean shieldRaised;
     private int lastAction;
     private boolean lastBlock;
@@ -192,11 +206,23 @@ public final class BotBody
      */
     public void tick(Perception.Snapshot seen, LivingEntity target, int action, boolean block)
     {
+        tick(seen, target, action, block, null);
+    }
+
+    /**
+     * One tick of the body with the view aimed at an explicit point rather than at the seen position of the
+     * target, which is what a projectile needs: its yaw and pitch come out of the aim solver and the solver
+     * leads the target, so the point the view belongs on is not where the target was.
+     *
+     * @param aim where the view goes, or null to put it on the seen position of the target
+     */
+    public void tick(Perception.Snapshot seen, LivingEntity target, int action, boolean block, Aim aim)
+    {
         lastAction = action;
         lastBlock = block;
         applyPendingSlot();
         followTarget(target);
-        aim(seen);
+        turn(aim != null ? aim : aimOf(seen));
         move(action);
         shield(block);
         strike(target, DuelSim.attack(action));
@@ -208,8 +234,14 @@ public final class BotBody
      */
     public void hold(Perception.Snapshot seen, LivingEntity target)
     {
+        hold(seen, target, null);
+    }
+
+    /** {@link #hold} with the view aimed at an explicit point instead of at the target. */
+    public void hold(Perception.Snapshot seen, LivingEntity target, Aim aim)
+    {
         tick(seen, target, DuelSim.action(DuelSim.forward(lastAction), DuelSim.strafe(lastAction),
-                DuelSim.jump(lastAction), DuelSim.sprint(lastAction), false), lastBlock);
+                DuelSim.jump(lastAction), DuelSim.sprint(lastAction), false), lastBlock, aim);
     }
 
     /**
@@ -313,7 +345,7 @@ public final class BotBody
     {
         if (!shieldRaised)
         {
-            pack.start(EntityPlayerActionPack.ActionType.USE, EntityPlayerActionPack.Action.continuous());
+            holdItem();
             shieldRaised = true;
             CombatTraces.used(bot, bot.getItemBlockingWith());
         }
@@ -325,10 +357,41 @@ public final class BotBody
     {
         if (shieldRaised)
         {
-            pack.start(EntityPlayerActionPack.ActionType.USE, null);
-            bot.releaseUsingItem();
+            releaseItem();
             shieldRaised = false;
         }
+    }
+
+    /**
+     * Holds the main hand item up through the action pack's item use action, which is what a player does with
+     * the right mouse button: a bow draw, a crossbow load, a trident throw or a spear charge. The action runs
+     * from this tick on, and the game counts the hold itself, so a draw cannot be faked any faster than it
+     * really happens.
+     */
+    public void holdItem()
+    {
+        if (!using)
+        {
+            pack.start(EntityPlayerActionPack.ActionType.USE, EntityPlayerActionPack.Action.continuous());
+            using = true;
+        }
+    }
+
+    /** Lets go of the main hand item, which is what fires a bow or a crossbow and what throws a trident. */
+    public void releaseItem()
+    {
+        if (using)
+        {
+            pack.start(EntityPlayerActionPack.ActionType.USE, null);
+            bot.releaseUsingItem();
+            using = false;
+        }
+    }
+
+    /** True while the bot holds its item up, which for a bow is a draw in progress. */
+    public boolean holdingItem()
+    {
+        return using;
     }
 
     /** The hotbar slot a weapon sits in, or -1 when the bot does not carry one. */
@@ -348,7 +411,8 @@ public final class BotBody
     public void reset()
     {
         pack.stopMovement();
-        lowerShield();
+        releaseItem();
+        shieldRaised = false;
         sprintLock.clear();
         clicks.reset();
         pendingSlot = -1;
@@ -462,14 +526,12 @@ public final class BotBody
         }
     }
 
-    /** Turns the view onto the seen position of the target, at the profile's speed. */
-    private void aim(Perception.Snapshot seen)
+    /** The aim point of the middle of the seen target, or null while nothing has been seen. */
+    private Aim aimOf(Perception.Snapshot seen)
     {
         if (seen == null || !seen.seen)
         {
-            look.clearTarget();
-            pack.look(look.yaw(), look.pitch());
-            return;
+            return null;
         }
         double dx = seen.x - bot.getX();
         double dy = seen.y + seen.height * 0.5 - bot.getEyeY();
@@ -478,7 +540,19 @@ public final class BotBody
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.max(flat, 1.0E-6)));
         float radius = (float) Math.toDegrees(Math.atan2(0.45, Math.max(flat, 0.1)));
-        look.aimAt(yaw, pitch, radius);
+        return new Aim(yaw, pitch, radius);
+    }
+
+    /** Turns the view onto an aim point at the profile's speed, or leaves it where it is for a null point. */
+    private void turn(Aim aim)
+    {
+        if (aim == null)
+        {
+            look.clearTarget();
+            pack.look(look.yaw(), look.pitch());
+            return;
+        }
+        look.aimAt(aim.yaw(), aim.pitch(), aim.radius());
         float beforeYaw = look.yaw();
         float beforePitch = look.pitch();
         look.tick();

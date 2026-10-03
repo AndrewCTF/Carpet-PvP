@@ -37,7 +37,7 @@ import java.util.WeakHashMap;
 public final class KitStore
 {
     /** One built-in kit per PvP mode. */
-    private static final List<String> BUILT_IN = List.of("sword", "axe", "smp", "mace", "crystal");
+    private static final List<String> BUILT_IN = List.of("sword", "axe", "smp", "mace", "crystal", "ranged");
 
     private static final String RESOURCE_FOLDER = "assets/carpet/kits/";
     private static final String CUSTOM_FOLDER = "carpet-kits";

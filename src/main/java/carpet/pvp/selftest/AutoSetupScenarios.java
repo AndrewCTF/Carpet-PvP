@@ -94,7 +94,10 @@ final class AutoSetupScenarios
                 }
                 if (player.getHealth() >= 20.0F)
                 {
-                    return pending("waiting for " + session.botName() + " to land a hit on " + a);
+                    // what the bot is doing goes into the message, so a timeout here says why
+                    return pending(SelfTest.fmt("waiting for %s to land a hit on %s: %.1f blocks apart, combat %s, navigation %s, the bot %s",
+                            session.botName(), a, bot.distanceTo(player), bot.getPvpConfig().combat, CarpetSettings.fakePlayerNavigation,
+                            bot.getBotBrain() == null || bot.getBotBrain().body() == null ? "has no body yet" : bot.getBotBrain().body().stats().describe()));
                 }
                 // The round ends when the bot goes down, which puts the menu up and the score on it;
                 // asking for the same mode again is the next round, with the score kept. A bot is only
