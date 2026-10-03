@@ -1745,7 +1745,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             float pct = player.getCooldowns().getCooldownPercent(item.getDefaultInstance(), 0.0F);
             int remaining = (int) Math.ceil(pct * 20); // approximate ticks remaining
             if (pct <= 0.0F)
@@ -1774,7 +1778,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             Identifier itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
             player.getCooldowns().removeCooldown(itemId);
             Messenger.m(context.getSource(), "g Cooldown reset for ", item.getDefaultInstance().getDisplayName().getString(),
@@ -1795,7 +1803,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             ItemStack stack = item.getDefaultInstance();
             // Default cooldowns: ender pearl = 20 ticks, chorus fruit = 20, shield = 100
             int defaultTicks = 20;
@@ -1818,7 +1830,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             ItemStack stack = item.getDefaultInstance();
             int ticks = IntegerArgumentType.getInteger(context, "ticks");
             player.getCooldowns().addCooldown(stack, ticks);
@@ -1961,7 +1977,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             ItemStack itemStack = itemInput.createItemStack(1);
+//?} else {
+/*            ItemStack itemStack = itemInput.createItemStack(1, false);
+*///?}
             
             // Validate that the item was created successfully
             if (itemStack.isEmpty()) {

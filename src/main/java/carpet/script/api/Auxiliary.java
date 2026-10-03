@@ -65,6 +65,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.StatType;
 import net.minecraft.world.entity.Entity;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -380,6 +381,7 @@ public class Auxiliary
                 throw new InternalExpressionException("'create_marker' requires a name and three coordinates, with optional direction, and optional block on its head");
             }
             Level level = cc.level();
+            //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
             ArmorStand armorstand = new ArmorStand(EntityTypes.ARMOR_STAND, level);
             double yoffset;
             if (targetBlock == null && name == null)
@@ -434,6 +436,8 @@ public class Auxiliary
             CarpetContext cc = (CarpetContext) c;
             int total = 0;
             String markerName = MARKER_STRING + "_" + ((cc.host.getName() == null) ? "" : cc.host.getName());
+            //~ if >=26.1 'getTags()' -> 'entityTags()'
+            //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
             for (Entity e : cc.level().getEntities(EntityTypes.ARMOR_STAND, as -> as.entityTags().contains(markerName)))
             {
                 total++;
@@ -730,11 +734,23 @@ public class Auxiliary
 
         expression.addContextFunction("day_time", -1, (c, t, lv) ->
         {
+//? if >=26.1 {
             // In 26.1, dayTime is part of WorldBorder data, not level directly
             // Use getGameTime() as approximation or return 0
             Value time = new NumericValue(((CarpetContext) c).level().getGameTime());
+//?} else {
+/*            Value time = new NumericValue(((CarpetContext) c).level().getDayTime());
+*///?}
             if (!lv.isEmpty())
             {
+//? if <26.1 {
+/*                long newTime = NumericValue.asNumber(lv.get(0)).getLong();
+                if (newTime < 0)
+                {
+                    newTime = 0;
+                }
+                ((CarpetContext) c).level().setDayTime(newTime);
+*///?}
                 // Cannot set day time in 26.1 without modifying world border
                 // Silently ignore the set operation
             }

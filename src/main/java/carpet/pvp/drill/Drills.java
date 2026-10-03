@@ -190,7 +190,11 @@ public final class Drills
             run.drill().tick(run);
             if (run.ticks() % SCORE_EVERY == 0)
             {
+//? if >=26.1 {
                 player.sendOverlayMessage(Component.literal(run.drill().name() + ": " + run.drill().score(run)));
+//? } else {
+/*                player.displayClientMessage(Component.literal(run.drill().name() + ": " + run.drill().score(run)), false);
+*///?}
             }
             if (run.over())
             {

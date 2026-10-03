@@ -67,7 +67,11 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
     }
 
     @Inject(method = "interactOn", cancellable = true, at = @At("HEAD"))
+//? if >=26.1 {
     private void doInteract(Entity entity, InteractionHand hand, Vec3 pos, CallbackInfoReturnable<InteractionResult> cir)
+//? } else {
+/*    private void doInteract(Entity entity, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir)
+*///?}
     {
         if (!level().isClientSide() && PLAYER_INTERACTS_WITH_ENTITY.isNeeded())
         {

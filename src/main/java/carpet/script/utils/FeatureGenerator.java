@@ -64,8 +64,12 @@ import net.minecraft.world.level.levelgen.feature.stateproviders.RotatedBlockPro
 import net.minecraft.world.level.levelgen.placement.BlockPredicateFilter;
 import net.minecraft.world.level.levelgen.placement.OffsetPlacement;
 import net.minecraft.world.level.levelgen.placement.RandomChancePlacement;
-//?} else {
-/*import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+//?}
+//? if <26.3 {
+/*import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+//~ if >=26.1 'SimpleRandomFeatureConfiguration' -> 'CompositeFeatureConfiguration'
 import net.minecraft.world.level.levelgen.feature.configurations.CompositeFeatureConfiguration;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration;
@@ -74,7 +78,9 @@ import net.minecraft.world.level.levelgen.feature.featuresize.TwoLayersFeatureSi
 import net.minecraft.world.level.levelgen.feature.foliageplacers.BlobFoliagePlacer;
 import net.minecraft.world.level.levelgen.feature.foliageplacers.FancyFoliagePlacer;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
-import net.minecraft.world.level.levelgen.feature.stateproviders.RuleBasedStateProvider;
+//? if >=26.1 && <26.3 {
+/*import net.minecraft.world.level.levelgen.feature.stateproviders.RuleBasedStateProvider;
+*///?}
 import net.minecraft.world.level.levelgen.heightproviders.ConstantHeight;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -93,8 +99,9 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProc
 
 import jakarta.annotation.Nullable;
 
-//? if <26.3
-//import static net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration.CAN_PLACE_BELOW_TREE_TRUNKS;
+//? if >=26.1 && <26.3 {
+/*import static net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration.CAN_PLACE_BELOW_TREE_TRUNKS;
+*///?}
 
 public class FeatureGenerator
 {
@@ -124,6 +131,7 @@ public class FeatureGenerator
             checks.set(true);
             try
             {
+//~ if >=26.1 'random' -> 'getRandom()'
                 return configuredFeature.place(world, world.getChunkSource().getGenerator(), world.getRandom(), pos);
             }
             finally
@@ -150,6 +158,7 @@ public class FeatureGenerator
                 checks.set(true);
                 try
                 {
+//~ if >=26.1 'random' -> 'getRandom()'
                     return configuredStandard.place(world, world.getChunkSource().getGenerator(), world.getRandom(), pos);
                 }
                 finally
@@ -196,6 +205,7 @@ public class FeatureGenerator
             checks.set(true);
             try
             {
+//~ if >=26.1 'random' -> 'getRandom()'
                 return feature.place(w, w.getChunkSource().getGenerator(), w.getRandom(), p);
             }
             finally
@@ -288,8 +298,13 @@ public class FeatureGenerator
         ChunkGenerator generator = chunkSource.getGenerator();
         ChunkGeneratorStructureState structureState = chunkSource.getGeneratorState();
         List<StructurePlacement> structureConfig = structureState.getPlacementsForStructure(Holder.direct(structure));
+//? if >=26.1 {
         ChunkPos chunkPos = new ChunkPos(pos.getX(), pos.getZ());
         boolean couldPlace = structureConfig.stream().anyMatch(p -> p.isStructureChunk(structureState, chunkPos.x(), chunkPos.z()));
+//?} else {
+/*        ChunkPos chunkPos = new ChunkPos(pos);
+        boolean couldPlace = structureConfig.stream().anyMatch(p -> p.isStructureChunk(structureState, chunkPos.x, chunkPos.z));
+*///?}
         if (!couldPlace)
         {
             return null;
@@ -324,7 +339,7 @@ public class FeatureGenerator
     }
 
     //? if >=26.3 {
-    private static RuleBasedStateProvider belowTrees = RuleBasedStateProvider.ifTrueThenProvide(BlockPredicate.not(BlockPredicate.matchesTag(BlockTags.CANNOT_REPLACE_BELOW_TREE_TRUNK)), Blocks.DIRT);
+    private static net.minecraft.world.level.levelgen.feature.stateproviders.RuleBasedStateProvider belowTrees = net.minecraft.world.level.levelgen.feature.stateproviders.RuleBasedStateProvider.ifTrueThenProvide(BlockPredicate.not(BlockPredicate.matchesTag(BlockTags.CANNOT_REPLACE_BELOW_TREE_TRUNK)), Blocks.DIRT);
 
     private static TreeFeature.Builder createTree(Block block, Block block2, int i, int j, int k, int l)
     {
@@ -400,15 +415,22 @@ public class FeatureGenerator
                 )
         );
     }
-    //?} else {
-    /*private static RuleBasedStateProvider belowTrees = RuleBasedStateProvider.ifTrueThenProvide(CAN_PLACE_BELOW_TREE_TRUNKS, Blocks.DIRT);
+
+    //?}
+    //? if >=26.1 {
+/*    private static RuleBasedStateProvider belowTrees = RuleBasedStateProvider.ifTrueThenProvide(CAN_PLACE_BELOW_TREE_TRUNKS, Blocks.DIRT);
 
     private static TreeConfiguration.TreeConfigurationBuilder createTree(Block block, Block block2, int i, int j, int k, int l)
     {
         return new TreeConfiguration.TreeConfigurationBuilder(BlockStateProvider.simple(block), new StraightTrunkPlacer(i, j, k), BlockStateProvider.simple(block2), new BlobFoliagePlacer(ConstantInt.of(l), ConstantInt.of(0), 3), new TwoLayersFeatureSize(1, 0, 1), belowTrees);
     }
-    *///?}
-
+*///?}
+//? if <26.1 {
+/*    private static TreeConfiguration.TreeConfigurationBuilder createTree(Block block, Block block2, int i, int j, int k, int l)
+    {
+        return new TreeConfiguration.TreeConfigurationBuilder(BlockStateProvider.simple(block), new StraightTrunkPlacer(i, j, k), BlockStateProvider.simple(block2), new BlobFoliagePlacer(ConstantInt.of(l), ConstantInt.of(0), 3), new TwoLayersFeatureSize(1, 0, 1));
+    }
+*///?}
     public static final Map<String, Function<ServerLevel, Thing>> featureMap = new HashMap<>()
     {{
 
@@ -424,8 +446,8 @@ public class FeatureGenerator
         put("coral_mushroom", l -> simplePlop(coral(l , 2)));
 
         put("coral", l -> simplePlop( l.registryAccess().lookupOrThrow(Registries.FEATURE).getOrThrow(AquaticFeatures.WARM_OCEAN_VEGETATION).value()));
-        //?} else {
-        /*put("oak_bees", l -> simpleTree(createTree(Blocks.OAK_LOG, Blocks.OAK_LEAVES, 4, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
+        //? } else if >=26.1 {
+        /*    put("oak_bees", l -> simpleTree(createTree(Blocks.OAK_LOG, Blocks.OAK_LEAVES, 4, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
         put("fancy_oak_bees", l -> simpleTree((new TreeConfiguration.TreeConfigurationBuilder(BlockStateProvider.simple(Blocks.OAK_LOG), new FancyTrunkPlacer(3, 11, 0), BlockStateProvider.simple(Blocks.OAK_LEAVES), new FancyFoliagePlacer(ConstantInt.of(2), ConstantInt.of(4), 4), new TwoLayersFeatureSize(0, 0, 0, OptionalInt.of(4)), belowTrees)).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
         put("birch_bees", l -> simpleTree(createTree(Blocks.BIRCH_LOG, Blocks.BIRCH_LEAVES, 5, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
 
@@ -433,12 +455,16 @@ public class FeatureGenerator
 
         put("coral_claw", l -> simplePlop(Feature.CORAL_CLAW, FeatureConfiguration.NONE));
         put("coral_mushroom", l -> simplePlop(Feature.CORAL_MUSHROOM, FeatureConfiguration.NONE));
-        put("coral", l -> simplePlop(Feature.SIMPLE_RANDOM_SELECTOR, new CompositeFeatureConfiguration(HolderSet.direct(
+//~ if >=26.1 'SimpleRandomFeatureConfiguration' -> 'CompositeFeatureConfiguration'
+        put("coral", l -> simplePlop(Feature.SIMPLE_RANDOM_SELECTOR, new SimpleRandomFeatureConfiguration(HolderSet.direct(
                 PlacementUtils.inlinePlaced(Feature.CORAL_TREE, FeatureConfiguration.NONE),
                 PlacementUtils.inlinePlaced(Feature.CORAL_CLAW, FeatureConfiguration.NONE),
                 PlacementUtils.inlinePlaced(Feature.CORAL_MUSHROOM, FeatureConfiguration.NONE)
         ))));
         *///?}
+//? if <26.1 {
+/*        put("fancy_oak_bees", l -> simpleTree((new TreeConfiguration.TreeConfigurationBuilder(BlockStateProvider.simple(Blocks.OAK_LOG), new FancyTrunkPlacer(3, 11, 0), BlockStateProvider.simple(Blocks.OAK_LEAVES), new FancyFoliagePlacer(ConstantInt.of(2), ConstantInt.of(4), 4), new TwoLayersFeatureSize(0, 0, 0, OptionalInt.of(4)))).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
+*///?}
         put("bastion_remnant_units", l -> {
             RegistryAccess regs = l.registryAccess();
 
@@ -564,9 +590,15 @@ public class FeatureGenerator
         checks.set(true);
         try
         {
-            //~ if >=26.3 'getStructureManager()' -> 'getStructureTemplateManager()' {
-            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), /*? if >=26.3 {*/world.getChunkSource().randomState().createClimateSampler(SamplerContext.EMPTY_UNCACHED), /*?}*/world.getChunkSource().randomState(), world.getStructureTemplateManager(), world.getSeed(), new ChunkPos(pos.getX(), pos.getZ()), 0, world, b -> true);
-            //~}
+//? if >=26.3 {
+            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), world.getChunkSource().randomState().createClimateSampler(SamplerContext.EMPTY_UNCACHED), world.getChunkSource().randomState(), world.getStructureTemplateManager(), world.getSeed(), new ChunkPos(pos.getX(), pos.getZ()), 0, world, b -> true);
+//?}
+//? if <26.3 && >=26.1 {
+/*            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), world.getChunkSource().randomState(), world.getStructureManager(), world.getSeed(), new ChunkPos(pos.getX(), pos.getZ()), 0, world, b -> true);
+*///?}
+//? if <26.1 {
+/*            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), world.getChunkSource().randomState(), world.getStructureManager(), world.getSeed(), new ChunkPos(pos), 0, world, b -> true);
+*///?}
             if (start == StructureStart.INVALID_START)
             {
                 return false;
@@ -574,8 +606,12 @@ public class FeatureGenerator
             RandomSource rand = RandomSource.create(world.getRandom().nextInt());
             int j = pos.getX() >> 4;
             int k = pos.getZ() >> 4;
+//? if >=26.1 {
             // ChunkPos.asLong was replaced with toLong() in 26.1
             long chId = ((long)j & 0xFFFFFFFFL) | ((long)k << 32);
+//?} else {
+/*            long chId = ChunkPos.asLong(j, k);
+*///?}
             world.getChunk(j, k).setStartForStructure(structure, start);
             world.getChunk(j, k).addReferenceForStructure(structure, chId);
 

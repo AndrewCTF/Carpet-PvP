@@ -8,6 +8,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+//~ if <26.1 'ContainerInput' -> 'ClickType' {
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -80,6 +81,7 @@ final class KitEditorMenu extends BotMenu
         }
         super.clicked(slot, button, input, player);
     }
+//~}
 
     @Override
     protected boolean shiftClickAllowed(int index)

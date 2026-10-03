@@ -38,6 +38,9 @@ import net.minecraft.world.inventory.BlastFurnaceMenu;
 import net.minecraft.world.inventory.BrewingStandMenu;
 import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ChestMenu;
+//? if <26.1 {
+/*import net.minecraft.world.inventory.ClickType;
+*///?}
 import net.minecraft.world.inventory.ContainerListener;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.DataSlot;
@@ -224,12 +227,27 @@ public class ScreenValue extends Value
         screenHandler.addSlotListener(new ScarpetScreenHandlerListener()
         {
             @Override
+//? if >=26.1 {
             public boolean onSlotClick(ServerPlayer player, int slot, int button)
+//?} else {
+/*            public boolean onSlotClick(ServerPlayer player, ClickType actionType, int slot, int button)
+*///?}
             {
                 Map<Value, Value> data = new HashMap<>();
                 data.put(StringValue.of("slot"), slot == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE ? Value.NULL : NumericValue.of(slot));
+//? if <26.1 {
+/*                if (actionType == ClickType.QUICK_CRAFT)
+                {
+                    data.put(StringValue.of("quick_craft_stage"), NumericValue.of(AbstractContainerMenu.getQuickcraftHeader(button)));
+                    button = AbstractContainerMenu.getQuickcraftType(button);
+                }
+*///?}
                 data.put(StringValue.of("button"), NumericValue.of(button));
+//? if >=26.1 {
                 return ScreenValue.this.callListener(player, "slot", data);
+//?} else {
+/*                return ScreenValue.this.callListener(player, actionTypeToString(actionType), data);
+*///?}
             }
 
             @Override
@@ -395,7 +413,11 @@ public class ScreenValue extends Value
 
     public interface ScarpetScreenHandlerListener extends ContainerListener
     {
+//? if >=26.1 {
         boolean onSlotClick(ServerPlayer player, int slot, int button);
+//?} else {
+/*        boolean onSlotClick(ServerPlayer player, ClickType actionType, int slot, int button);
+*///?}
 
         boolean onButtonClick(ServerPlayer player, int button);
 
@@ -539,10 +561,12 @@ public class ScreenValue extends Value
         }
     }
 
+//~ if >=26.1 'ClickType' -> 'int'
     private static String actionTypeToString(int actionType)
     {
         return switch (actionType)
         {
+//? if >=26.1 {
             case 0 -> "pickup";
             case 1 -> "quick_move";
             case 2 -> "swap";
@@ -551,6 +575,15 @@ public class ScreenValue extends Value
             case 5 -> "quick_craft";
             case 6 -> "pickup_all";
             default -> "unknown";
+//?} else {
+/*            case PICKUP -> "pickup";
+            case QUICK_MOVE -> "quick_move";
+            case SWAP -> "swap";
+            case CLONE -> "clone";
+            case THROW -> "throw";
+            case QUICK_CRAFT -> "quick_craft";
+            case PICKUP_ALL -> "pickup_all";
+*///?}
         };
     }
 }

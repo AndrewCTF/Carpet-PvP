@@ -38,6 +38,7 @@ import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.ScoreHolder;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Team;
+//~ if >=26.1 'ChatFormatting' -> 'world.scores.TeamColor'
 import net.minecraft.world.scores.TeamColor;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import org.jetbrains.annotations.Nullable;
@@ -436,20 +437,31 @@ public class Scoreboards
                 case "color" -> {
                     if (!modifying)
                     {
+//? if <26.1 {
+/*                        return new StringValue(team.getColor().getName());
+*///?} else {
                         return new StringValue(team.getColor().get().getSerializedName());
+//?}
                     }
                     if (!(settingVal instanceof StringValue))
                     {
                         throw new InternalExpressionException("'team_property' requires a string as the third argument for the property " + propertyVal.getString());
                     }
+//? if <26.1 {
+/*                    ChatFormatting color = ChatFormatting.getByName(settingVal.getString().toUpperCase());
+                    if (color == null || !color.isColor())
+                    {
+                        throw new InternalExpressionException("Unknown value for property " + propertyVal.getString() + ": " + settingVal.getString());
+                    }
+                    team.setColor(color);
+*///?} else {
                     TeamColor teamColor = TeamColor.byName(settingVal.getString().toLowerCase());
-                    //DataResult<TextColor> color = TextColor.parseColor(settingVal.getString().toUpperCase());
-                    //ChatFormatting color = ChatFormatting.valueOf(settingVal.getString().toUpperCase());;
                     if (teamColor == null)
                     {
                         throw new InternalExpressionException("Unknown value for property " + propertyVal.getString() + ": " + settingVal.getString());
                     }
                     team.setColor(Optional.of(teamColor));
+//?}
                 }
                 case "deathMessageVisibility" -> {
                     if (!modifying)
@@ -553,7 +565,11 @@ public class Scoreboards
 
             if (lv.isEmpty())
             {
+//? if >=26.1 {
                 return ListValue.wrap(bossBarManager.getEvents().stream().map(bossEvent -> StringValue.of(bossEvent.getDisplayName().getString())));
+//?} else {
+/*                return ListValue.wrap(bossBarManager.getEvents().stream().map(CustomBossEvent::getTextId).map(Identifier::toString).map(StringValue::of));
+*///?}
             }
 
             String id = lv.get(0).getString();
@@ -565,8 +581,12 @@ public class Scoreboards
                 {
                     return Value.FALSE;
                 }
+//? if >=26.1 {
                 CustomBossEvent newBossBar = bossBarManager.create(((CarpetContext) c).level().getRandom(), identifier, Component.literal(id));
                 return StringValue.of(newBossBar != null ? newBossBar.getDisplayName().getString() : id);
+//?} else {
+/*                return StringValue.of(bossBarManager.create(identifier, Component.literal(id)).getTextId().toString());
+*///?}
             }
 
             String property = lv.get(1).getString();
@@ -598,15 +618,23 @@ public class Scoreboards
                 case "max" -> {
                     if (propertyValue == null)
                     {
+//? if >=26.1 {
                         // In 26.1, CustomBossEvent may use progress instead of max value
                         // Use getProgress() * 100 as approximation
                         return NumericValue.of((int)(bossBar.getProgress() * 100));
+//?} else {
+/*                        return NumericValue.of(bossBar.getMax());
+*///?}
                     }
                     if (!(propertyValue instanceof final NumericValue number))
                     {
                         throw new InternalExpressionException("'bossbar' requires a number as the value for the property " + property);
                     }
+//? if >=26.1 {
                     bossBar.setProgress((float)(number.getInt() / 100.0));
+//?} else {
+/*                    bossBar.setMax(number.getInt());
+*///?}
                     return Value.TRUE;
                 }
                 case "name" -> {
@@ -683,14 +711,22 @@ public class Scoreboards
                 case "value" -> {
                     if (propertyValue == null)
                     {
+//? if >=26.1 {
                         // In 26.1, CustomBossEvent uses progress instead of value
                         return NumericValue.of((int)(bossBar.getProgress() * 100));
+//?} else {
+/*                        return NumericValue.of(bossBar.getValue());
+*///?}
                     }
                     if (!(propertyValue instanceof final NumericValue number))
                     {
                         throw new InternalExpressionException("'bossbar' requires a number as the value for the property " + property);
                     }
+//? if >=26.1 {
                     bossBar.setProgress((float)(number.getInt() / 100.0));
+//?} else {
+/*                    bossBar.setValue(number.getInt());
+*///?}
                     return Value.TRUE;
                 }
                 case "visible" -> {

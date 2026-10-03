@@ -104,11 +104,13 @@ jobs:
           MC_VERSION="${{ matrix.minecraft }}"
           echo "minecraft_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Read other properties; the Fabric API version is per Minecraft version
+          # Read other properties; the Fabric API version and the Minecraft range are per Minecraft version
           FABRIC_LOADER=$(grep -E '^\s*loader_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
           FABRIC_API=$(grep -E '^\s*fabric_version\s*=' "versions/$MC_VERSION/gradle.properties" | sed 's/.*=\s*//' | tr -d '[:space:]')
+          MC_DEPENDENCY=$(grep -E '^\s*minecraft_dependency\s*=' "versions/$MC_VERSION/gradle.properties" | sed 's/.*=\s*//' | tr -d '[:space:]')
           echo "fabric_loader=$FABRIC_LOADER" >> "$GITHUB_OUTPUT"
           echo "fabric_api=$FABRIC_API" >> "$GITHUB_OUTPUT"
+          echo "minecraft_dependency=$MC_DEPENDENCY" >> "$GITHUB_OUTPUT"
 
           # Build date stamp (yyMMdd)
           BUILD_DATE=$(date +%y%m%d)
@@ -140,6 +142,10 @@ jobs:
             echo "::error::Could not determine Minecraft version"
             exit 1
           fi
+          if [ -z "${{ steps.version.outputs.minecraft_dependency }}" ]; then
+            echo "::error::Could not determine the Minecraft range of versions/${{ matrix.minecraft }}/gradle.properties"
+            exit 1
+          fi
           echo "Version validation passed."
 
       - name: Check tag does not already exist
@@ -166,6 +172,13 @@ jobs:
             exit 1
           fi
 
+          # The jar carries the Minecraft version of its node in its own name, so the three releases
+          # can never be confused with each other
+          case "$(basename "$MAIN_JAR")" in
+            *"${{ matrix.minecraft }}"*) ;;
+            *) echo "::error::$(basename "$MAIN_JAR") is not a ${{ matrix.minecraft }} jar"; exit 1 ;;
+          esac
+
           echo "main_jar=$MAIN_JAR" >> "$GITHUB_OUTPUT"
           echo "main_jar_name=$(basename "$MAIN_JAR")" >> "$GITHUB_OUTPUT"
 
@@ -191,7 +204,7 @@ jobs:
             echo "| Component | Version |"
             echo "|-----------|---------|"
             echo "| **Carpet PvP** | ${{ steps.version.outputs.mod_version }} |"
-            echo "| **Minecraft** | ${{ steps.version.outputs.minecraft_version }} |"
+            echo "| **Minecraft** | ${{ steps.version.outputs.minecraft_version }} (`${{ steps.version.outputs.minecraft_dependency }}`) |"
             echo "| **Fabric Loader** | ${{ steps.version.outputs.fabric_loader }} |"
             echo "| **Fabric API** | ${{ steps.version.outputs.fabric_api }} |"
             echo "| **Java** | ${{ steps.java.outputs.version }}+ |"

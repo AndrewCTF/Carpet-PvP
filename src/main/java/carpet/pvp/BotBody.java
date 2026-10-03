@@ -223,7 +223,11 @@ public final class BotBody
             return false;
         }
         AABB box = target.getBoundingBox();
+//? if <26.1 {
+/*        if (!bot.isWithinAttackRange(box, 0.0))
+*///?} else {
         if (!bot.isWithinAttackRange(bot.getWeaponItem(), box, 0.0))
+//?}
         {
             return false;
         }

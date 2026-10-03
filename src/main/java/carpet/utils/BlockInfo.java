@@ -10,6 +10,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
@@ -74,6 +75,7 @@ public class BlockInfo
 
     private static Component wander_chances(BlockPos pos, ServerLevel worldIn)
     {
+        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
         PathfinderMob creature = new ZombifiedPiglin(EntityTypes.ZOMBIFIED_PIGLIN, worldIn);
         creature.finalizeSpawn(worldIn, worldIn.getCurrentDifficultyAt(pos), EntitySpawnReason.NATURAL, null);
         creature.snapTo(pos, 0.0F, 0.0F);

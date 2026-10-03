@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class ReloadCommand_reloadAppsMixin {
     //lambda$register$0(Lcom/mojang/brigadier/context/CommandContext;)I
     // internal of register.
+//~ if <26.1 'lambda$register$0' -> 'method_13530'
     @Inject(method = "lambda$register$0", at = @At("TAIL"), remap = false)
     private static void onReload(CommandContext<CommandSourceStack> context, CallbackInfoReturnable<Integer> cir)
     {

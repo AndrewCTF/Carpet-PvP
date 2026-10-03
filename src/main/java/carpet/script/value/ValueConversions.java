@@ -7,6 +7,7 @@ import carpet.script.external.Vanilla;
 import carpet.script.utils.Colors;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+//~ if >=26.1 'advancements.criterion' -> 'advancements.predicates'
 import net.minecraft.advancements.predicates.MinMaxBounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;

@@ -33,6 +33,17 @@ jobs:
         run: |
           java --version
           ./gradlew --version
+      - name: List Minecraft versions
+        run: |
+          # One Stonecutter node per directory under versions/, and the self-test runs one server each
+          for dir in versions/*/; do
+            version="${dir%/}"
+            if [ ! -f "$version/gradle.properties" ]; then
+              echo "::error::$version has no gradle.properties"
+              exit 1
+            fi
+            echo "building and self-testing $version"
+          done
       - name: Build, test and self-test every Minecraft version
         run: ./gradlew --no-daemon build runSelfTest
       - name: Upload self-test reports
@@ -40,5 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: selftest-reports
-          path: run/selftest-*/selftest-report.json
+          path: |
+            run/selftest-*/selftest-report.json
+            run/selftest-*/logs/latest.log
           if-no-files-found: ignore

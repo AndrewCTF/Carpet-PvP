@@ -2,6 +2,9 @@ package carpet.mixins;
 
 import carpet.fakes.AbstractContainerMenuInterface;
 import carpet.script.value.ScreenValue;
+//? if <26.1 {
+/*import net.minecraft.world.item.crafting.RecipeHolder;
+*///?}
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -13,7 +16,11 @@ import java.util.List;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+//? if >=26.1 {
 import net.minecraft.world.inventory.ContainerInput;
+//? } else {
+/*import net.minecraft.world.inventory.ClickType;
+*///?}
 import net.minecraft.world.inventory.ContainerListener;
 import net.minecraft.world.inventory.DataSlot;
 
@@ -25,6 +32,7 @@ public abstract class AbstractContainerMenu_scarpetMixin implements AbstractCont
     @Shadow @Final private List<DataSlot> dataSlots;
 
     @Inject(method = "doClick", at = @At("HEAD"), cancellable = true)
+//? if >=26.1 {
     private void callSlotClickListener(int slotIndex, int button, ContainerInput actionType, Player player, CallbackInfo ci) {
         if(!(player instanceof ServerPlayer serverPlayerEntity)) return;
         for(ContainerListener screenHandlerListener : this.containerListeners) {
@@ -36,6 +44,19 @@ public abstract class AbstractContainerMenu_scarpetMixin implements AbstractCont
             }
         }
     }
+//? } else {
+/*    private void callSlotClickListener(int slotIndex, int button, ClickType actionType, Player player, CallbackInfo ci) {
+        if(!(player instanceof ServerPlayer serverPlayerEntity)) return;
+        for(ContainerListener screenHandlerListener : this.containerListeners) {
+            if(screenHandlerListener instanceof ScreenValue.ScarpetScreenHandlerListener scarpetScreenHandlerListener) {
+                if(scarpetScreenHandlerListener.onSlotClick(serverPlayerEntity, actionType, slotIndex, button)) {
+                    ci.cancel();
+                    sendAllDataToRemote();
+                }
+            }
+        }
+    }
+*///?}
 
     @Inject(method = "removed", at = @At("HEAD"), cancellable = true)
     private void callCloseListener(Player player, CallbackInfo ci) {
@@ -51,4 +72,28 @@ public abstract class AbstractContainerMenu_scarpetMixin implements AbstractCont
     public DataSlot getDataSlot(int index) {
         return this.dataSlots.get(index);
     }
+//? if <26.1 {
+    /*@Override
+    public boolean callButtonClickListener(int button, Player player) {
+        if(!(player instanceof ServerPlayer serverPlayerEntity)) return false;
+        for(ContainerListener screenHandlerListener : containerListeners) {
+            if(screenHandlerListener instanceof ScreenValue.ScarpetScreenHandlerListener scarpetScreenHandlerListener) {
+                if(scarpetScreenHandlerListener.onButtonClick(serverPlayerEntity, button))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean callSelectRecipeListener(ServerPlayer player, RecipeHolder<?> recipe, boolean craftAll) {
+        for(ContainerListener screenHandlerListener : containerListeners) {
+            if(screenHandlerListener instanceof ScreenValue.ScarpetScreenHandlerListener scarpetScreenHandlerListener) {
+                if(scarpetScreenHandlerListener.onSelectRecipe(player, recipe, craftAll))
+                    return true;
+            }
+        }
+        return false;
+    }
+    *///?}
 }

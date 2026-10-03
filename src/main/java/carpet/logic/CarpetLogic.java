@@ -66,7 +66,9 @@ public class CarpetLogic implements CarpetExtension
             return;
         }
         String address = CarpetSettings.carpetLogicBindAddress;
-        int port = CarpetSettings.carpetLogicPort;
+        // carpet.logicPort wins over the rule, so a run that must not clash with another one (the
+        // self-test servers all start at once) can ask the OS for a free port with 0.
+        int port = Integer.getInteger("carpet.logicPort", CarpetSettings.carpetLogicPort);
         try
         {
             webServer = new WebServer(server, auth, new Api(server, this), address, port);

@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.phys.Vec3;
 
@@ -79,7 +80,9 @@ public class MobAI
 
     public enum TrackingType
     {
+        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
         IRON_GOLEM_SPAWNING(Set.of(EntityTypes.VILLAGER)),
+        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
         BREEDING(Set.of(EntityTypes.VILLAGER));
         public final Set<EntityType<?>> types;
         TrackingType(Set<EntityType<?>> applicableTypes)

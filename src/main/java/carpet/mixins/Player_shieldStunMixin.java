@@ -20,7 +20,11 @@ public abstract class Player_shieldStunMixin extends LivingEntity {
     protected Player_shieldStunMixin(EntityType<? extends LivingEntity> entityType, Level level) { super(entityType, level); }
 
     @Inject(method = "blockUsingItem", at = @At("HEAD"))
+//? if <26.1 {
+/*    private void onShieldDisabled(ServerLevel serverLevel, LivingEntity livingEntity, CallbackInfo ci) {
+*///?} else {
     private void onShieldDisabled(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float damage/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/, CallbackInfo ci) {
+//?}
         MinecraftServer server = serverLevel.getServer();
         if (CarpetSettings.shieldStunning && server != null) {
             // The shield stun is set while the hit is processed, so clear it again on the next tick.

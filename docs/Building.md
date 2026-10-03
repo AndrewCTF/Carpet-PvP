@@ -2,20 +2,37 @@
 
 ## Supported Minecraft versions
 
-One source tree builds two Minecraft versions:
+One source tree builds three Minecraft versions:
 
 | Minecraft | Node | Fabric API | Notes |
 |---|---|---|---|
 | 26.3 | `:26.3` | `0.161.0+26.3` | the active development version |
 | 26.2 | `:26.2` | `0.161.0+26.2` | still supported |
+| 1.21.11 | `:1.21.11` | `0.141.6+1.21.11` | the last obfuscated release |
 
-Both are listed in `settings.gradle.kts` and both are Gradle subprojects, so a plain
-`./gradlew build` compiles and tests both. `stonecutter.gradle.kts` marks `26.3` as the active
-node, which is what an IDE opens when you import the project.
+All three are listed in `settings.gradle.kts` and all three are Gradle subprojects, so a plain
+`./gradlew build` compiles and tests all of them. `stonecutter.gradle.kts` marks `26.3` as the
+active node, which is what an IDE opens when you import the project.
+
+### What differs between 26.x and 1.21.11
+
+| | 26.2, 26.3 | 1.21.11 |
+|---|---|---|
+| obfuscation | ships unobfuscated | last obfuscated version |
+| Loom plugin | `net.fabricmc.fabric-loom` | `net.fabricmc.fabric-loom-remap` |
+| mappings | none needed | `loom.officialMojangMappings()` |
+| bytecode | Java 25 (`options.release = 25`) | Java 21 (`options.release = 21`) |
+| Fabric dependencies | `implementation` | `modImplementation` (they are remapped mods) |
+| access widener | `src/main/resources/carpet.accesswidener`, `accessWidener v2 official` | `versions/1.21.11/carpet.accesswidener`, `accessWidener v2 named`, swapped in by `processResources` |
+| `javax.annotation` | gone from the JDK | still there, so `com.google.code.findbugs:jsr305` is a `compileOnly` dependency |
+
+`build.gradle.kts` picks the plugin, the mappings and the bytecode level from
+`stonecutter.semantics.eval(mcVersion, ">=26.1")`, so nothing about the two kinds of version is
+repeated per node.
 
 Everything else the build needs is shared:
 
-- Java 25 (`java_version` in `gradle.properties`, `options.release = 25` for every compile task)
+- Java 25 to run Gradle (`java_version` in `gradle.properties`)
 - Fabric Loom 1.18.2
 - Fabric Loader 0.19.5
 - Gson, which ships with Minecraft
@@ -23,12 +40,11 @@ Everything else the build needs is shared:
 
 ## How the multi-version build works
 
-### One tree, two nodes
+### One tree, three nodes
 
-`src/` holds the 26.3 code. The 26.2 build gets a generated copy of it under
-`versions/26.2/remappedSrc` (and `versions/26.3/remappedSrc` for the active node), produced by
-Stonecutter's `stonecutterGenerate` task. You never edit those directories; they are in
-`.gitignore` and rebuilt from `src/`.
+`src/` holds the 26.3 code. The 26.2 and 1.21.11 builds get a generated copy of it under
+`versions/<minecraft>/build/generated/stonecutter/main/java`, produced by Stonecutter's
+`stonecutterPrepare` task. You never edit those directories; they are rebuilt from `src/`.
 
 `versions/<minecraft>/gradle.properties` holds the things that differ per version:
 
@@ -42,8 +58,8 @@ declares the Minecraft range it actually works on.
 
 ### Version conditions in comments
 
-Where a Minecraft API differs between the two versions, the 26.3 call stays active and the 26.2
-call goes in a comment block:
+Where a Minecraft API differs, the 26.3 code stays active and the older code goes in a comment
+block:
 
 ```java
 //? if >=26.3 {
@@ -53,10 +69,35 @@ this.setInvulnerableTime(0);
 *///?}
 ```
 
-A pure rename uses the line-above form:
+The conditions compare Minecraft versions, so `>=26.1` means 26.1 and up, `<26.1` means **1.21.11
+only** and `<26.3` means 1.21.11 and 26.2. A whole file that only exists on 1.21.11 is written the
+same way, with the `//? if <26.1 {` on the first line and the `*///?}` on the last:
+
+```java
+//? if <26.1 {
+/*package carpet.mixins;
+...
+}
+*///?}
+```
+
+**The 26.3 node compiles `src/main/java` directly**, so a file that is `//?` conditional has to be
+valid Java as it stands: the active branch plain, the other branch inside `/* … */`. Stonecutter
+strips the comment markers for the versions it generates and leaves the block alone for 26.3. A
+branch written the other way round compiles for 1.21.11 and breaks 26.3.
+
+A pure rename uses the line-above form, which applies to the line directly below it:
 
 ```java
 //~ if >=26.3 '.getHand()' -> '.hand()'
+```
+
+A rename that has to cover several lines opens a scope, which `//~}` closes:
+
+```java
+//~ if >=26.1 'ContainerInput' -> 'ClickType' {
+...
+//~}
 ```
 
 And an extra argument only needed on one version uses the inline form:
@@ -73,28 +114,42 @@ javap -cp ~/.gradle/caches/fabric-loom/26.3/minecraft-merged.jar -p net.minecraf
 javap -c -p -cp ~/.gradle/caches/fabric-loom/26.2/minecraft-merged.jar net.minecraft.world.entity.player.Player
 ```
 
+1.21.11 is obfuscated, so it is read out of the Loom-produced named jar rather than
+`~/.gradle/caches/fabric-loom/1.21.11/`:
+
+```
+javap -p -cp ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged/1.21.11-*/minecraft-merged-*.jar net.minecraft.world.entity.player.Player
+```
+
 ### `excluded_mixins`
 
-A mixin whose target does not exist in a Minecraft version has to leave that version's mixin
-config. JSON cannot carry a version condition, so the drop is done at build time instead:
-list the mixin in `versions/<minecraft>/gradle.properties` and `processResources` removes it from
-`carpet.mixins.json` for that version only.
+`carpet.mixins.json` lists the union of every mixin the mod has, because JSON cannot carry a
+version condition. A mixin that must not load on a version is listed in
+`versions/<minecraft>/gradle.properties` and `processResources` removes it from the config for that
+version only:
 
 ```properties
 excluded_mixins=CoralFeature_renewableCoralMixin,PieceGeneratorSupplier_plopMixin
 ```
 
-Currently set on 26.3 only. 26.2 keeps both.
+A mixin belongs in that list only when it really cannot apply. Two cases need it:
+
+- the file only exists for other versions, because it is a whole-file `//? if <26.1 {` block;
+- the target class or method is gone or was renamed in a way a condition cannot express, as with
+  `PieceGeneratorSupplier_plopMixin`, which `@Redirect`s inside a lambda of an interface.
+
+Everything else must work on every version, even the old ones: a rule that works on 26.3 and
+existed on 1.21.11 has to work on 1.21.11 too.
 
 ## Gradle commands
 
-Build both versions at once, so every core is used:
+Build all versions at once, so every core is used:
 
 ```
 ./gradlew build
 ```
 
-`build` compiles both versions, runs the JUnit tests (`tasks.test` runs one JVM per core) and runs
+`build` compiles every version, runs the JUnit tests (`tasks.test` runs one JVM per core) and runs
 `webuiTest`, which executes the CarpetLogic web editor's own tests under `node` when `node` is on
 the `PATH`. If `node` is missing the task logs that it was skipped and passes.
 
@@ -103,6 +158,7 @@ Build one version:
 ```
 ./gradlew :26.3:build
 ./gradlew :26.2:build
+./gradlew :1.21.11:build
 ```
 
 Run a dev server or client:
@@ -110,7 +166,7 @@ Run a dev server or client:
 ```
 ./gradlew :26.3:runServer
 ./gradlew :26.3:runClient
-./gradlew :26.2:runServer
+./gradlew :1.21.11:runServer
 ```
 
 Each combination gets its own directory under `run/`, so they can all be up at once:
@@ -120,6 +176,7 @@ Each combination gets its own directory under `run/`, so they can all be up at o
 | `:26.3:runServer` | `run/26.3/server` |
 | `:26.3:runClient` | `run/26.3/client` |
 | `:26.2:runServer` | `run/26.2/server` |
+| `:1.21.11:runServer` | `run/1.21.11/server` |
 | `:26.3:runSelfTest` | `run/selftest-26.3` |
 
 The world is per Minecraft version because an older server cannot open a newer world.
@@ -144,11 +201,21 @@ The same check can be run without a server:
 ### Self-test
 
 ```
-./gradlew build runSelfTest                        # both versions, every scenario
+./gradlew build runSelfTest                        # every version, every scenario
 ./gradlew :26.3:runSelfTest -PselfTest=spawn,nav_goto   # chosen scenarios, one version
 ```
 
 See [SelfTest.md](SelfTest.md).
+
+All three self-test servers start at once, so each one is given its own world directory, gets the
+Minecraft server on an ephemeral port (`server-port=0`) and is told to let the CarpetLogic web
+editor take an ephemeral port too (`-Dcarpet.logicPort=0`, which `carpet.logic.CarpetLogic` reads
+instead of the `carpetLogicPort` rule). Without that the second server to start logs a port clash.
+
+`runSelfTest` fails when the run wrote no report and also when the server threw on its way out:
+`Exception stopping the server` anywhere in `run/selftest-<version>/logs/latest.log` fails the
+task, because a shutdown that throws loses whatever still had to be written even when every
+scenario passed.
 
 ## Where the jars land
 
@@ -158,7 +225,7 @@ Each version builds into its own directory:
 versions/26.3/build/libs/carpet-pvp-26.3-18.jar
 versions/26.3/build/libs/carpet-pvp-26.3-18-sources.jar
 versions/26.2/build/libs/carpet-pvp-26.2-18.jar
-versions/26.2/build/libs/carpet-pvp-26.2-18-sources.jar
+versions/1.21.11/build/libs/carpet-pvp-1.21.11-18.jar
 ```
 
 The name comes from `archives_base_name` (`carpet-pvp`), the Minecraft version and `mod_version`
@@ -182,7 +249,7 @@ Say `26.4`.
    ```kotlin
    stonecutter {
        create(rootProject) {
-           versions("26.2", "26.3", "26.4")
+           versions("1.21.11", "26.2", "26.3", "26.4")
            vcsVersion = "26.4"
        }
    }
@@ -200,11 +267,18 @@ Say `26.4`.
    Add `excluded_mixins=A,B` listing every mixin whose target is gone in 26.4. Leave it out if
    none are.
 
-3. Run `./gradlew build`. Stonecutter generates the new node and `javac` lists everything that does
+3. A version at or above 26.1 needs nothing else: `build.gradle.kts` gives it the no-remap Loom
+   plugin, no mappings, Java 25 bytecode and `src/main/resources/carpet.accesswidener`. A version
+   below 26.1 is obfuscated and needs the entries of
+   [What differs between 26.x and 1.21.11](#what-differs-between-26x-and-12111) instead, with the
+   access widener copied into `versions/<version>/carpet.accesswidener` and its namespace changed
+   to whatever that version's mappings use (`named` for Mojang mappings).
+
+4. Run `./gradlew build`. Stonecutter generates the new node and `javac` lists everything that does
    not compile. `options.compilerArgs` adds `-Xmaxerrs 2000` so you get the whole list instead of
    the first 100.
 
-4. Fix each error in `src/` with a version condition. `src/` keeps the newest form active:
+5. Fix each error in `src/` with a version condition. `src/` keeps the newest form active:
 
    ```
    //? if >=26.4 {
@@ -223,8 +297,8 @@ Say `26.4`.
    javap -p -cp ~/.gradle/caches/fabric-loom/26.4/minecraft-merged.jar <class>
    ```
 
-5. Run `./gradlew build runSelfTest`. The self-test covers the parts a compiler cannot: fake
+6. Run `./gradlew build runSelfTest`. The self-test covers the parts a compiler cannot: fake
    player spawning, navigation, kits, sword blocking and CarpetLogic.
 
-6. Bump `mod_version` in `gradle.properties` when you release. The release workflow picks up every
+7. Bump `mod_version` in `gradle.properties` when you release. The release workflow picks up every
    directory under `versions/` on its own.

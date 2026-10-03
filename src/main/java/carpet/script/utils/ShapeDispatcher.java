@@ -2245,6 +2245,7 @@ public class ShapeDispatcher
         int pcount = 0;
         if (distance < 100)
         {
+//~ if >=26.1 'random' -> 'getRandom()'
             RandomSource rand = players.get(0).level().getRandom();
             int particles = (int) (distance / density) + 1;
             Vec3 towards = to.subtract(from);
