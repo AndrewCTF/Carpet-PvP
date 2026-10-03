@@ -1,11 +1,14 @@
 package carpet.mixins;
 
+import carpet.client.SwordBlockVisuals;
 import carpet.network.CarpetClient;
 import carpet.network.ClientNetworkHandler;
+import carpet.network.payload.SwordBlockPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.CommonListenerCookie;
+import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
@@ -37,6 +40,15 @@ public abstract class ClientPacketListener_customPacketsMixin extends ClientComm
         if (packet instanceof CarpetClient.CarpetPayload cpp)
         {
             ClientNetworkHandler.onServerData(cpp.data(), minecraft.player);
+            ci.cancel();
+            return;
+        }
+        if (packet instanceof SwordBlockPayload swordBlock)
+        {
+            if (minecraft.level != null && minecraft.level.getEntity(swordBlock.entityId()) instanceof AbstractClientPlayer player)
+            {
+                SwordBlockVisuals.activate(player, swordBlock.ticks());
+            }
             ci.cancel();
         }
     }

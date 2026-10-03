@@ -5,6 +5,7 @@ import carpet.logic.program.BotAction;
 import carpet.logic.program.BotProgram;
 import carpet.logic.program.ProgramExecutor.ProgramInfo;
 import carpet.pvp.selftest.SelfTestReport.Result;
+import carpet.CarpetSettings;
 import carpet.pvp.kit.Kit;
 import carpet.pvp.kit.KitEntry;
 import carpet.pvp.kit.KitInventory;
@@ -51,7 +52,7 @@ public final class SelfTest
     private static final List<String> SCENARIOS = List.of(
             "spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow",
             "chase_attack", "chase_crit", "script_run", "fill_updates", "logic_program", "logic_forever_budget",
-            "spawn_exact_name", "spawn_gamemode", "shield_disable", "kit_give", "kit_roundtrip");
+            "spawn_exact_name", "spawn_gamemode", "shield_disable", "kit_give", "kit_roundtrip", "sword_block");
 
     /** What every built-in kit has to put on the player it is given to. */
     private record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
@@ -70,6 +71,7 @@ public final class SelfTest
     /** How long the server thread gets to stop, and then how long its worker threads get to finish. */
     private static final long EXIT_WAIT_MILLIS = 120_000L;
     private static volatile MinecraftServer stoppingServer;
+    private static final float SWORD_BLOCK_HIT = 4.0F;
 
     private record Bot(String name, Vec3 pos, String gamemode)
     {
@@ -393,6 +395,43 @@ public final class SelfTest
                     if (!store.delete(kitName) || store.get(kitName).isPresent()) return new Probe(false, kitName + " was not deleted");
                     return new Probe(true, fmt("all %d slots of %s survived both round trips", before.size(), a));
                 });
+            case "sword_block":
+            {
+                // One player holds its sword up, the other one stands idle, both take the same fixed hit. With the rule
+                // on the blocking one must lose swordBlockDamageMultiplier of it, with the rule off it must lose all of it.
+                int[] phase = {0};
+                float[] guarding = new float[2];
+                float[] open = new float[2];
+                return new Scenario(300, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, -2.0D))),
+                        List.of("carpet swordBlockHitting true",
+                                "player " + a + " equip mainhand minecraft:diamond_sword",
+                                "player " + a + " use continuous"), server ->
+                {
+                    ServerPlayer blocker = player(server, a);
+                    ServerPlayer idle = player(server, b);
+                    if (!blocker.isUsingItem()) return pending(a + " is not holding the sword up yet");
+                    if (!hittable(blocker, idle)) return pending(hitWaitReason(blocker, idle));
+                    if (phase[0] == 0)
+                    {
+                        guarding[0] = damage(server, blocker);
+                        open[0] = damage(server, idle);
+                        run(server, "carpet swordBlockHitting false");
+                        phase[0] = 1;
+                        return pending(fmt("with the rule on %s lost %.1f health while blocking and %s lost %.1f",
+                                a, guarding[0], b, open[0]));
+                    }
+                    guarding[1] = damage(server, blocker);
+                    open[1] = damage(server, idle);
+                    // both idle players have to take the whole hit, otherwise the numbers below mean nothing
+                    boolean hitsLanded = same(open[0], SWORD_BLOCK_HIT) && same(open[1], SWORD_BLOCK_HIT);
+                    float factor = (float) CarpetSettings.swordBlockDamageMultiplier;
+                    boolean halved = same(guarding[0], SWORD_BLOCK_HIT * factor);
+                    boolean wholeAgain = same(guarding[1], SWORD_BLOCK_HIT);
+                    return new Probe(hitsLanded && halved && wholeAgain, fmt(
+                            "with the rule on %s lost %.1f of the %.1f health a hit takes, with the rule off %.1f",
+                            a, guarding[0], SWORD_BLOCK_HIT, guarding[1]));
+                });
+            }
             default:
                 return null;
         }
@@ -680,6 +719,46 @@ public final class SelfTest
     private static void run(MinecraftServer server, String command, Vec3 sourcePos)
     {
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withPosition(sourcePos), command);
+    }
+
+    private static Probe pending(String detail)
+    {
+        return new Probe(false, detail);
+    }
+
+    /** A hit counts in full only when the player is loaded, off the damage cooldown of the last one and healthy. */
+    private static boolean hittable(ServerPlayer... players)
+    {
+        for (ServerPlayer player : players)
+        {
+            // a fake player cannot be hurt while its connection is still counted as loading
+            if (!player.connection.hasClientLoaded()) return false;
+            if (player.hurtTime > 0 || player.getHealth() <= SWORD_BLOCK_HIT) return false;
+        }
+        return true;
+    }
+
+    private static String hitWaitReason(ServerPlayer... players)
+    {
+        for (ServerPlayer player : players)
+        {
+            if (!player.connection.hasClientLoaded()) return player.getName().getString() + " is still loading";
+            if (player.getHealth() <= SWORD_BLOCK_HIT) return player.getName().getString() + " has too little health left";
+        }
+        return "the last hit is still on cooldown";
+    }
+
+    /** Hits a player for a fixed amount and returns what it cost them in health. */
+    private static float damage(MinecraftServer server, ServerPlayer victim)
+    {
+        float before = victim.getHealth();
+        result(server, "damage " + victim.getName().getString() + " " + SWORD_BLOCK_HIT);
+        return before - victim.getHealth();
+    }
+
+    private static boolean same(float one, float other)
+    {
+        return Math.abs(one - other) < 0.05F;
     }
 
     private static void log(MinecraftServer server, String message)

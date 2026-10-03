@@ -15,7 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(AvatarRenderer.class)
 public class PlayerRenderer_swordBlockArmPoseMixin {
-    @Inject(method = "getArmPose", at = @At("HEAD"), cancellable = true)
+    // the descriptor picks the one of the two getArmPose overloads that takes a hand rather than a stack
+    @Inject(method = "getArmPose(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/world/entity/HumanoidArm;)Lnet/minecraft/client/model/HumanoidModel$ArmPose;", at = @At("HEAD"), cancellable = true)
     private static void carpet$forceBlockPose(Avatar avatar, HumanoidArm arm, CallbackInfoReturnable<HumanoidModel.ArmPose> cir) {
         if (!(avatar instanceof AbstractClientPlayer player)) return;
         if (!SwordBlockVisuals.isActive(player)) return;
