@@ -70,6 +70,8 @@ const Nodes = (() => {
         "Navigation/NavGoto":      { title: "Navigate To", desc: "Pathfind to world coordinates, then continue." },
         "Navigation/NavStop":      { title: "Nav Stop", desc: "Cancel the current navigation." },
         "Navigation/FollowPlayer": { title: "Follow Player", desc: "Follow a player for a number of ticks. Leave the name empty for the nearest one." },
+        "Navigation/ChasePlayer":  { title: "Chase Player", desc: "Run a player down and attack within range, for a number of ticks. Interval 0 attacks as fast as possible." },
+        "Navigation/Patrol":       { title: "Patrol", desc: "Walk back and forth between two points for a number of ticks." },
         "Navigation/FleeFrom":     { title: "Flee From", desc: "Run away from a player until far enough or out of ticks." },
         "Navigation/Wander":       { title: "Wander", desc: "Walk to random spots within a radius for a number of ticks." },
 

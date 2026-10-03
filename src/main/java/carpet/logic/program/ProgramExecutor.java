@@ -260,6 +260,11 @@ public class ProgramExecutor
 
     private void execute(BotAction action, ProgramState state, Bot bot)
     {
+        String requiredRule = schema.definition(action).requires();
+        if (requiredRule != null)
+        {
+            bot.requireRule(requiredRule, state.owner);
+        }
         Params p = schema.params(action);
         switch (action.getType())
         {
@@ -309,12 +314,7 @@ public class ProgramExecutor
                 bot.attack("once", 0, true);
                 hold(state, bot, p.integer("ticks"), Bot::stopAttack);
             }
-            case "SWORD_BLOCK" ->
-            {
-                bot.swordBlock();
-                hold(state, bot, p.integer("ticks"), Bot::stopUse);
-            }
-            case "SHIELD_BLOCK" ->
+            case "SWORD_BLOCK", "SHIELD_BLOCK" ->
             {
                 bot.use("continuous", 0);
                 hold(state, bot, p.integer("ticks"), Bot::stopUse);
@@ -373,6 +373,22 @@ public class ProgramExecutor
             case "FOLLOW_PLAYER" ->
             {
                 bot.follow(p.string("player"), p.number("distance"));
+                Wait wait = hold(state, bot, p.integer("ticks"), Bot::stopNavigation);
+                wait.done = b -> !b.isNavigating();
+            }
+            case "CHASE_PLAYER" ->
+            {
+                bot.chase(p.string("player"), p.bool("critical"), p.number("range"), p.integer("interval"));
+                Wait wait = hold(state, bot, p.integer("ticks"), b ->
+                {
+                    b.stopNavigation();
+                    b.stopAttack();
+                });
+                wait.done = b -> !b.isNavigating();
+            }
+            case "PATROL" ->
+            {
+                bot.patrol(p.number("x1"), p.number("y1"), p.number("z1"), p.number("x2"), p.number("y2"), p.number("z2"), p.bool("loop"));
                 Wait wait = hold(state, bot, p.integer("ticks"), Bot::stopNavigation);
                 wait.done = b -> !b.isNavigating();
             }

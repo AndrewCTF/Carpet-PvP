@@ -22,10 +22,6 @@ public interface Bot
     void attack(String mode, int interval, boolean critical);
     void stopAttack();
     void use(String mode, int interval);
-    /**
-     * Holds right click to block with a sword, until {@link #stopUse()}.
-     */
-    void swordBlock();
     void stopUse();
 
     void selectHotbar(int slot);
@@ -43,6 +39,8 @@ public interface Bot
 
     void navGoto(double x, double y, double z, String mode, double radius);
     void follow(String player, double distance);
+    void chase(String player, boolean critical, double range, int interval);
+    void patrol(double x1, double y1, double z1, double x2, double y2, double z2, boolean loop);
     /**
      * Heads directly away from the player.
      *
@@ -60,6 +58,14 @@ public interface Bot
     void glideFreeze(boolean frozen);
     void glideLand();
     boolean isGliding();
+
+    /**
+     * Makes sure a boolean carpet rule an action depends on is on. If it is off, it is turned on when the
+     * program's owner is allowed to change carpet rules; otherwise this throws.
+     *
+     * @param owner the player the program runs on behalf of, or null when there is none
+     */
+    void requireRule(String rule, UUID owner);
 
     /**
      * @param owner the player the program runs on behalf of, or null when there is none

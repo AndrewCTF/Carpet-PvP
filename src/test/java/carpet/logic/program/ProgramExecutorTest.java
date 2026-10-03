@@ -20,6 +20,8 @@ class ProgramExecutorTest
     private final RecordingBot recorder = new RecordingBot();
     private final ProgramExecutor executor = new ProgramExecutor(schema, name -> "bot".equals(name) ? recorder.bot : null, () -> 4);
 
+    private static final String NAV_RULE = "requireRule[fakePlayerNavigation, null]";
+
     private final List<String> warnings = new ArrayList<>();
 
     // Programs are written in Gson's lenient JSON: no quotes needed around names and plain words.
@@ -114,8 +116,8 @@ class ProgramExecutorTest
     {
         run("[{type: ATTACK_CRIT, params: {ticks: 10}}, {type: SWORD_BLOCK, params: {ticks: 2}}, {type: SHIELD_BLOCK, params: {ticks: 2}}]");
         tick(15);
-        assertEquals(List.of("attack[once, 0, true]", "stopAttack[]", "swordBlock[]", "stopUse[]", "use[continuous, 0]", "stopUse[]", "stopAll[]"),
-                recorder.calls);
+        assertEquals(List.of("attack[once, 0, true]", "stopAttack[]", "requireRule[swordBlockHitting, null]", "use[continuous, 0]", "stopUse[]",
+                "use[continuous, 0]", "stopUse[]", "stopAll[]"), recorder.calls);
     }
 
     @Test
@@ -170,9 +172,9 @@ class ProgramExecutorTest
         recorder.answers.put("isNavigating", true);
         run("[{type: FOLLOW_PLAYER, params: {player: Steve, distance: 4, ticks: 3}}, {type: JUMP}]");
         tick(3);
-        assertEquals(List.of("follow[Steve, 4.0]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "follow[Steve, 4.0]"), recorder.calls);
         tick(1);
-        assertEquals(List.of("follow[Steve, 4.0]", "stopNavigation[]", "jump[]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "follow[Steve, 4.0]", "stopNavigation[]", "jump[]"), recorder.calls);
     }
 
     @Test
@@ -181,10 +183,10 @@ class ProgramExecutorTest
         recorder.answers.put("fleeFrom", true);
         run("[{type: FLEE_FROM, params: {player: Steve, distance: 20, ticks: 3}}, {type: JUMP}]");
         tick(3);
-        assertEquals(List.of(), recorder.calls);
+        assertEquals(List.of(NAV_RULE), recorder.calls);
         assertEquals(List.of("fleeFrom[Steve, 20.0]"), recorder.questions);
         tick(1);
-        assertEquals(List.of("stopNavigation[]", "jump[]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "stopNavigation[]", "jump[]"), recorder.calls);
     }
 
     @Test
@@ -193,10 +195,10 @@ class ProgramExecutorTest
         recorder.answers.put("fleeFrom", true);
         run("[{type: FLEE_FROM, params: {distance: 20, ticks: 500}}, {type: JUMP}]");
         tick(5);
-        assertEquals(List.of(), recorder.calls);
+        assertEquals(List.of(NAV_RULE), recorder.calls);
         recorder.answers.put("fleeFrom", false);
         tick(6);
-        assertEquals(List.of("stopNavigation[]", "jump[]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "stopNavigation[]", "jump[]"), recorder.calls);
     }
 
     @Test
@@ -204,7 +206,7 @@ class ProgramExecutorTest
     {
         run("[{type: WANDER, params: {radius: 8, ticks: 3}}, {type: JUMP}]");
         tick(4);
-        assertEquals(List.of("wander[8.0]", "wander[8.0]", "wander[8.0]", "wander[8.0]", "stopNavigation[]", "jump[]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "wander[8.0]", "wander[8.0]", "wander[8.0]", "wander[8.0]", "stopNavigation[]", "jump[]"), recorder.calls);
     }
 
     @Test
@@ -213,10 +215,64 @@ class ProgramExecutorTest
         recorder.answers.put("isNavigating", true);
         run("[{type: NAV_GOTO, params: {x: 10, y: 64, z: -3, mode: land, radius: 2}}, {type: JUMP}]");
         tick(50);
-        assertEquals(List.of("navGoto[10.0, 64.0, -3.0, land, 2.0]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "navGoto[10.0, 64.0, -3.0, land, 2.0]"), recorder.calls);
         recorder.answers.put("isNavigating", false);
         tick(1);
-        assertEquals(List.of("navGoto[10.0, 64.0, -3.0, land, 2.0]", "jump[]"), recorder.calls);
+        assertEquals(List.of(NAV_RULE, "navGoto[10.0, 64.0, -3.0, land, 2.0]", "jump[]"), recorder.calls);
+    }
+
+    @Test
+    void chaseAttacksUntilItsTicksRunOut()
+    {
+        recorder.answers.put("isNavigating", true);
+        run("[{type: CHASE_PLAYER, params: {player: Steve, critical: true, range: 2.5, interval: 5, ticks: 3}}, {type: JUMP}]");
+        tick(3);
+        assertEquals(List.of(NAV_RULE, "chase[Steve, true, 2.5, 5]"), recorder.calls);
+        tick(1);
+        assertEquals(List.of(NAV_RULE, "chase[Steve, true, 2.5, 5]", "stopNavigation[]", "stopAttack[]", "jump[]"), recorder.calls);
+    }
+
+    @Test
+    void chaseEndsWhenItsTargetIsGone()
+    {
+        recorder.answers.put("isNavigating", true);
+        run("[{type: CHASE_PLAYER, params: {ticks: 500}}, {type: JUMP}]");
+        tick(5);
+        recorder.answers.put("isNavigating", false);
+        tick(1);
+        assertEquals(List.of(NAV_RULE, "chase[, false, 3.0, 0]", "stopNavigation[]", "stopAttack[]", "jump[]"), recorder.calls);
+    }
+
+    @Test
+    void patrolWalksBetweenItsPointsForItsTicks()
+    {
+        recorder.answers.put("isNavigating", true);
+        run("[{type: PATROL, params: {x1: 1, y1: 2, z1: 3, x2: 4, y2: 5, z2: 6, loop: false, ticks: 2}}, {type: JUMP}]");
+        tick(3);
+        assertEquals(List.of(NAV_RULE, "patrol[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, false]", "stopNavigation[]", "jump[]"), recorder.calls);
+    }
+
+    @Test
+    void glidingActionsAskForTheGlideRule()
+    {
+        run("""
+                [{type: GLIDE_START}, {type: GLIDE_HEADING, params: {yaw: 90, pitch: -10}}, {type: GLIDE_SPEED, params: {speed: 2}},
+                 {type: GLIDE_FREEZE}, {type: GLIDE_LAND}, {type: GLIDE_STOP}, {type: NAV_STOP}]""");
+        tick(1);
+        String rule = "requireRule[fakePlayerElytraGlide, null]";
+        assertEquals(List.of(rule, "setGliding[true]", rule, "glideHeading[90.0, -10.0]", rule, "glideSpeed[2.0]",
+                rule, "glideFreeze[true]", rule, "glideLand[]", "setGliding[false]", "stopNavigation[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void anActionWhoseRuleIsOffStopsTheProgramBeforeActing()
+    {
+        recorder.failures.put("requireRule", new BotActionException("The carpet rule 'fakePlayerNavigation' is off"));
+        run("[{type: SPRINT}, {type: NAV_GOTO}, {type: JUMP}]");
+        tick(2);
+        assertEquals(List.of("setSprinting[true]", "stopAll[]"), recorder.calls);
+        assertEquals("ERROR", status());
+        assertEquals("The carpet rule 'fakePlayerNavigation' is off", executor.getPrograms().get("bot").error());
     }
 
     @Test

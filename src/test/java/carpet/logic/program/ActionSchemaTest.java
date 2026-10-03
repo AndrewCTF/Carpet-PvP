@@ -12,6 +12,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -176,6 +178,25 @@ class ActionSchemaTest
         }
         List<BotAction> actions = List.of(action);
         assertThrows(IllegalArgumentException.class, () -> schema.validate(actions));
+    }
+
+    @Test
+    void requiredRulesAreBooleanCarpetRules() throws ReflectiveOperationException
+    {
+        // Looked up without initialising CarpetSettings, which needs a running game.
+        Class<?> settings = Class.forName("carpet.CarpetSettings", false, getClass().getClassLoader());
+        int actionsWithARule = 0;
+        for (Definition definition : schema.definitions())
+        {
+            if (definition.requires() != null)
+            {
+                actionsWithARule++;
+                Field rule = settings.getField(definition.requires());
+                assertEquals(boolean.class, rule.getType(), definition.type() + " requires " + definition.requires());
+                assertTrue(Modifier.isStatic(rule.getModifiers()));
+            }
+        }
+        assertTrue(actionsWithARule > 0);
     }
 
     @Test

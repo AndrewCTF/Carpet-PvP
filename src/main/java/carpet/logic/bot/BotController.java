@@ -1,15 +1,30 @@
 package carpet.logic.bot;
 
+import carpet.CarpetServer;
+import carpet.CarpetSettings;
+import carpet.api.settings.CarpetRule;
+import carpet.api.settings.InvalidRuleValueException;
+import carpet.api.settings.SettingsManager;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
+import carpet.helpers.pathfinding.BotNavMode;
 import carpet.logic.program.Bot;
 import carpet.logic.program.BotActionException;
 import carpet.patches.EntityPlayerMPFake;
+import carpet.utils.ArmorSetDefinition;
+import carpet.utils.CommandHelper;
+import carpet.utils.EquipmentSlotMapping;
+import carpet.utils.Messenger;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
@@ -18,11 +33,13 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * A fake player as the program interpreter sees it.
+ * A fake player as the program interpreter sees it. Everything is done through the player's action pack,
+ * the same way /player does it, or directly on the player; nothing goes through a command string.
  */
 public class BotController implements Bot
 {
-    private static final List<String> EQUIPMENT_SLOTS = List.of("mainhand", "offhand", "head", "chest", "legs", "feet");
+    private static final List<EquipmentSlot> EQUIPMENT_SLOTS = List.of(
+            EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND, EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
 
     private final ServerPlayer player;
     private final EntityPlayerActionPack actionPack;
@@ -114,12 +131,6 @@ public class BotController implements Bot
     }
 
     @Override
-    public void swordBlock()
-    {
-        actionPack.start(ActionType.USE, Action.continuous());
-    }
-
-    @Override
     public void stopUse()
     {
         actionPack.start(ActionType.USE, null);
@@ -144,22 +155,49 @@ public class BotController implements Bot
     @Override
     public void equipArmor(String armorSet)
     {
-        playerCommand("equip " + armorSet);
+        ArmorSetDefinition set = ArmorSetDefinition.getArmorSet(armorSet);
+        if (set == null)
+        {
+            throw new BotActionException("Unknown armor set '" + armorSet + "'");
+        }
+        set.getPieces().forEach((slot, item) -> player.setItemSlot(slot, new ItemStack(item(item))));
     }
 
     @Override
     public void equipItem(String slot, String item)
     {
-        playerCommand("equip " + slot + " " + item);
+        player.setItemSlot(slot(slot), new ItemStack(item(item)));
     }
 
     @Override
     public void unequip(String slot)
     {
-        for (String each : "all".equals(slot) ? EQUIPMENT_SLOTS : List.of(slot))
+        for (EquipmentSlot each : "all".equals(slot) ? EQUIPMENT_SLOTS : List.of(slot(slot)))
         {
-            playerCommand("unequip " + each);
+            player.setItemSlot(each, ItemStack.EMPTY);
         }
+    }
+
+    private static EquipmentSlot slot(String name)
+    {
+        EquipmentSlot slot = EquipmentSlotMapping.fromString(name);
+        if (slot == null)
+        {
+            throw new BotActionException("Unknown equipment slot '" + name + "'");
+        }
+        return slot;
+    }
+
+    private Item item(String id)
+    {
+        Identifier identifier = Identifier.tryParse(id);
+        Item item = identifier == null ? null
+                : player.registryAccess().lookupOrThrow(Registries.ITEM).get(identifier).map(Holder::value).orElse(null);
+        if (item == null)
+        {
+            throw new BotActionException("Unknown item '" + id + "'");
+        }
+        return item;
     }
 
     @Override
@@ -215,19 +253,43 @@ public class BotController implements Bot
     @Override
     public void navGoto(double x, double y, double z, String mode, double radius)
     {
-        String modeArgument = "auto".equals(mode) ? "" : mode + " ";
-        playerCommand(String.format(Locale.ROOT, "nav goto %s%.2f %.2f %.2f %.2f", modeArgument, x, y, z, radius));
+        Vec3 goal = new Vec3(x, y, z);
+        if ("air".equals(mode))
+        {
+            actionPack.setNavGotoAir(goal, radius, true);
+        }
+        else
+        {
+            actionPack.setNavGoto(goal, BotNavMode.valueOf(mode.toUpperCase(Locale.ROOT)), radius);
+        }
     }
 
     @Override
     public void follow(String playerName, double distance)
     {
+        actionPack.setNavFollow(target(playerName, "follow").getUUID(), distance);
+    }
+
+    @Override
+    public void chase(String playerName, boolean critical, double range, int interval)
+    {
+        actionPack.setNavChase(target(playerName, "chase").getUUID(), critical, range, interval);
+    }
+
+    @Override
+    public void patrol(double x1, double y1, double z1, double x2, double y2, double z2, boolean loop)
+    {
+        actionPack.setNavPatrol(List.of(new Vec3(x1, y1, z1), new Vec3(x2, y2, z2)), loop);
+    }
+
+    private ServerPlayer target(String playerName, String purpose)
+    {
         ServerPlayer target = findPlayer(playerName);
         if (target == null)
         {
-            throw new BotActionException("There is no player to follow");
+            throw new BotActionException(playerName.isEmpty() ? "There is no player to " + purpose : "There is no player named '" + playerName + "' to " + purpose);
         }
-        playerCommand(String.format(Locale.ROOT, "nav follow %s %.2f", target.getGameProfile().name(), distance));
+        return target;
     }
 
     @Override
@@ -268,43 +330,76 @@ public class BotController implements Bot
     @Override
     public void setGliding(boolean gliding)
     {
-        playerCommand(gliding ? "glide start" : "glide stop");
+        actionPack.setGlideEnabled(gliding);
     }
 
     @Override
     public void glideGoto(double x, double y, double z, double radius)
     {
-        playerCommand(String.format(Locale.ROOT, "glide goto %.2f %.2f %.2f %.2f", x, y, z, radius));
+        actionPack.setGlideEnabled(true);
+        actionPack.setGlideGoto(new Vec3(x, y, z), radius);
     }
 
     @Override
     public void glideHeading(float yaw, float pitch)
     {
-        playerCommand(String.format(Locale.ROOT, "glide heading %.1f %.1f", yaw, pitch));
+        actionPack.setGlideEnabled(true);
+        actionPack.setGlideHeading(yaw, pitch);
     }
 
     @Override
     public void glideSpeed(double speed)
     {
-        playerCommand(String.format(Locale.ROOT, "glide speed %.2f", speed));
+        actionPack.setGlideSpeed(speed);
     }
 
     @Override
     public void glideFreeze(boolean frozen)
     {
-        playerCommand("glide freeze " + frozen);
+        actionPack.setGlideFrozen(frozen);
     }
 
     @Override
     public void glideLand()
     {
-        playerCommand("glide arrival land");
+        actionPack.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.LAND);
     }
 
     @Override
     public boolean isGliding()
     {
         return actionPack.isGlideEnabled();
+    }
+
+    /**
+     * The action pack stops navigation and gliding by itself while their rule is off, and a sword does not block.
+     * Checking here turns that silent nothing into a reason the program's author gets to read.
+     */
+    @Override
+    public void requireRule(String ruleName, UUID owner)
+    {
+        SettingsManager settings = CarpetServer.settingsManager;
+        CarpetRule<?> rule = settings.getCarpetRule(ruleName);
+        if (Boolean.TRUE.equals(rule.value()))
+        {
+            return;
+        }
+        ServerPlayer ownerPlayer = owner == null ? null : player.level().getServer().getPlayerList().getPlayer(owner);
+        if (ownerPlayer != null && !settings.locked()
+                && CommandHelper.canUseCommand(ownerPlayer.createCommandSourceStack(), CarpetSettings.carpetCommandPermissionLevel))
+        {
+            try
+            {
+                rule.set(ownerPlayer.createCommandSourceStack(), "true");
+                Messenger.m(ownerPlayer, "w Your bot program turned on the carpet rule ", "y " + ruleName);
+                return;
+            }
+            catch (InvalidRuleValueException e)
+            {
+                // refused by the rule itself: report it as off
+            }
+        }
+        throw new BotActionException("The carpet rule '" + ruleName + "' is off. Turn it on with /carpet " + ruleName + " true");
     }
 
     /**
@@ -427,12 +522,5 @@ public class BotController implements Bot
             }
         }
         return nearest;
-    }
-
-    private void playerCommand(String arguments)
-    {
-        MinecraftServer server = player.level().getServer();
-        String command = "player " + player.getGameProfile().name() + " " + arguments;
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), command);
     }
 }

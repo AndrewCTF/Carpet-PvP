@@ -66,9 +66,10 @@ public final class ActionSchema
     }
 
     /**
+     * @param requires the boolean carpet rule that must be on for the action to work, or null
      * @param slots which of children, elseChildren and condition an action of this type carries
      */
-    public record Definition(String type, String kind, List<String> slots, Map<String, Param> params)
+    public record Definition(String type, String kind, String requires, List<String> slots, Map<String, Param> params)
     {
     }
 
@@ -175,7 +176,8 @@ public final class ActionSchema
                 Param param = readParam(type, element.getAsJsonObject());
                 params.put(param.name(), param);
             }
-            definitions.put(type, new Definition(type, kind, List.copyOf(slots), params));
+            String requires = definition.has("requires") ? definition.get("requires").getAsString() : null;
+            definitions.put(type, new Definition(type, kind, requires, List.copyOf(slots), params));
         }
     }
 
