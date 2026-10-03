@@ -1162,7 +1162,7 @@ public class PlayerCommand
             .then(literal("show").executes(PlayerCommand::aiShow))
             .then(literal("reset").executes(PlayerCommand::aiReset))
             .then(argument("setting", StringArgumentType.word())
-                .suggests((c, b) -> suggest(List.of(BotPvpConfig.KEYS), b))
+                .suggests((c, b) -> suggest(List.of(BotPvpConfig.keys()), b))
                 .then(argument("value", StringArgumentType.greedyString())
                     .executes(PlayerCommand::aiSet)));
     }

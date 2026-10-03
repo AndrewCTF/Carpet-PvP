@@ -24,5 +24,6 @@ final class ScenarioIndex
     static
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
+        SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
     }
 }

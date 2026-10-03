@@ -133,7 +133,7 @@ public class Api
         JsonObject state = new JsonObject();
         state.add("bots", BotSnapshot.of(logic.getBotManager(), programs));
         state.add("programs", GSON.toJsonTree(programs));
-        state.add("combatSettings", GSON.toJsonTree(List.of(BotPvpConfig.KEYS)));
+        state.add("combatSettings", GSON.toJsonTree(List.of(BotPvpConfig.keys())));
         state.addProperty("viewerMode", CarpetSettings.carpetLogicViewerMode);
         return state;
     }

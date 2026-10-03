@@ -16,7 +16,10 @@ import java.util.UUID;
 public final class BotPvpConfig
 {
     /** Combat styles a bot can use against its target. */
-    public enum CombatStyle { MELEE, CRYSTAL, ANCHOR, RANGED, MACE }
+    public enum CombatStyle { MELEE, CRYSTAL, ANCHOR, RANGED, MACE, SMP }
+
+    /** Options only one combat style reads, by the names {@link carpet.pvp.style.StyleIndex#options()} declares. */
+    private final java.util.Map<String, String> styleOptions = new java.util.HashMap<>();
 
     /** Skill presets; {@link #difficulty} picks the one a bot starts from. */
     public enum Difficulty { BEGINNER, CASUAL, AVERAGE, SKILLED, EXPERT }
@@ -154,8 +157,40 @@ public final class BotPvpConfig
 
     private static CombatStyle parseStyle(String s)
     {
-        try { return CombatStyle.valueOf(s.toUpperCase(Locale.ROOT)); }
+        try { return styleOf(s); }
         catch (IllegalArgumentException e) { return CombatStyle.MELEE; }
+    }
+
+    /** A combat style by name; "sword" is the melee style. Throws IllegalArgumentException for an unknown name. */
+    public static CombatStyle styleOf(String name)
+    {
+        String upper = name.toUpperCase(Locale.ROOT);
+        return upper.equals("SWORD") ? CombatStyle.MELEE : CombatStyle.valueOf(upper);
+    }
+
+    /** The value of a style option, or the default the style declared for it. */
+    public String option(String key)
+    {
+        String value = styleOptions.get(key);
+        return value != null ? value : carpet.pvp.style.StyleIndex.options().get(key);
+    }
+
+    public boolean flag(String key)
+    {
+        return Boolean.parseBoolean(option(key));
+    }
+
+    public double number(String key)
+    {
+        return Double.parseDouble(option(key));
+    }
+
+    /** Every setting name /bot option and /player ai accept: the common ones and the style options. */
+    public static String[] keys()
+    {
+        java.util.List<String> all = new java.util.ArrayList<>(java.util.List.of(KEYS));
+        all.addAll(carpet.pvp.style.StyleIndex.options().keySet());
+        return all.toArray(new String[0]);
     }
 
     private static Difficulty parseDifficulty(String s)
@@ -236,7 +271,7 @@ public final class BotPvpConfig
                 case "autoweapon" -> autoWeapon = parseBool(value);
                 case "autorepair" -> autoRepair = parseBool(value);
 
-                case "combatstyle"    -> combatStyle = CombatStyle.valueOf(value.toUpperCase(Locale.ROOT));
+                case "combatstyle"    -> combatStyle = styleOf(value);
                 case "difficulty"     -> {
                     String error = applyDifficulty(value);
                     if (error != null) return error;
@@ -264,7 +299,15 @@ public final class BotPvpConfig
 
                 case "faction" -> faction = value.isEmpty() || value.equalsIgnoreCase("none") ? null : value;
 
-                default -> { return "Unknown setting: " + key; }
+                default -> {
+                    String option = key.toLowerCase(Locale.ROOT);
+                    String standard = carpet.pvp.style.StyleIndex.options().get(option);
+                    if (standard == null) return "Unknown setting: " + key;
+                    // a style option keeps the type of its default: a number stays a number, a switch a switch
+                    if (standard.equals("true") || standard.equals("false")) value = String.valueOf(parseBool(value));
+                    else if (isNumber(standard)) value = String.valueOf(Double.parseDouble(value));
+                    styleOptions.put(option, value);
+                }
             }
         }
         catch (NumberFormatException e)
@@ -296,7 +339,14 @@ public final class BotPvpConfig
                 + ",clicks/s=" + clicksPerSecond + ",plannerRange=" + plannerRange + "]"
                 + " planner[horizon=" + plannerHorizon + ",population=" + plannerPopulation + "]"
                 + " | realism[miss=" + missChance + ",mistake=" + mistakeChance + "]"
-                + " | faction=" + (faction == null ? "none" : faction);
+                + " | faction=" + (faction == null ? "none" : faction)
+                + (styleOptions.isEmpty() ? "" : " | style options " + new java.util.TreeMap<>(styleOptions));
+    }
+
+    private static boolean isNumber(String v)
+    {
+        try { Double.parseDouble(v); return true; }
+        catch (NumberFormatException e) { return false; }
     }
 
     private static boolean parseBool(String v)

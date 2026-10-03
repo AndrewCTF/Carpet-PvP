@@ -4,7 +4,7 @@ import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.style.BotStyle;
-import carpet.pvp.style.SwordStyle;
+import carpet.pvp.style.StyleIndex;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -128,14 +128,14 @@ public final class BotBrain
         }
         styleKind = cfg.combatStyle;
         difficulty = cfg.difficulty;
-        if (cfg.combatStyle != BotPvpConfig.CombatStyle.MELEE && !warnedFallback)
+        if (!StyleIndex.has(cfg.combatStyle) && !warnedFallback)
         {
             warnedFallback = true;
             bot.level().getServer().getPlayerList().broadcastSystemMessage(Component.literal(
                     "Bot " + bot.getName().getString() + ": combat style " + cfg.combatStyle
                             + " has no implementation yet, fighting with the sword"), false);
         }
-        style = new SwordStyle(bot, body, cfg, new Random(bot.getRandom().nextLong()));
+        style = StyleIndex.create(cfg.combatStyle, bot, body, cfg, new Random(bot.getRandom().nextLong()));
         return styleKind;
     }
 

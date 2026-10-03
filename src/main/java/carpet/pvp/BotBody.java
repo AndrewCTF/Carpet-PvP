@@ -140,6 +140,16 @@ public final class BotBody
         this.previousHealth = bot.getHealth() + bot.getAbsorptionAmount();
     }
 
+    public EntityPlayerMPFake bot()
+    {
+        return bot;
+    }
+
+    public EntityPlayerActionPack pack()
+    {
+        return pack;
+    }
+
     public BotStats stats()
     {
         return stats;

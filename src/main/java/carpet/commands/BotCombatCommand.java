@@ -5,6 +5,9 @@ import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBody;
 import carpet.pvp.BotPvpConfig;
+import carpet.pvp.kit.KitInventory;
+import carpet.pvp.kit.KitStore;
+import carpet.pvp.style.StyleIndex;
 import carpet.pvp.FactionManager;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
@@ -106,7 +109,7 @@ public class BotCombatCommand
                         .suggests((c, b) -> suggest(bots(c), b))
                         .executes(BotCombatCommand::showOption)
                         .then(argument("key", StringArgumentType.word())
-                                .suggests((c, b) -> suggest(List.of(BotPvpConfig.KEYS), b))
+                                .suggests((c, b) -> suggest(List.of(BotPvpConfig.keys()), b))
                                 .then(argument("value", StringArgumentType.greedyString())
                                         .executes(BotCombatCommand::setOption))));
     }
@@ -127,7 +130,7 @@ public class BotCombatCommand
         String[] names = new String[values.length];
         for (int i = 0; i < values.length; i++)
         {
-            names[i] = values[i].name().toLowerCase(Locale.ROOT);
+            names[i] = values[i] == BotPvpConfig.CombatStyle.MELEE ? "sword" : values[i].name().toLowerCase(Locale.ROOT);
         }
         return names;
     }
@@ -157,7 +160,7 @@ public class BotCombatCommand
         BotPvpConfig.CombatStyle style;
         try
         {
-            style = BotPvpConfig.CombatStyle.valueOf(mode.toUpperCase(Locale.ROOT));
+            style = BotPvpConfig.styleOf(mode);
         }
         catch (IllegalArgumentException e)
         {
@@ -198,12 +201,15 @@ public class BotCombatCommand
         return 1;
     }
 
-    /**
-     * Turns the bot into a fighter. A fake player spawns without a kit in this version, so the gear is
-     * left to {@code /player <name> equip} or {@code /give}.
-     */
+    /** Turns the bot into a fighter: the kit of its style, the style itself and the difficulty preset. */
     private static void applySpawn(EntityPlayerMPFake bot, PendingSpawn spawn)
     {
+        MinecraftServer server = bot.level().getServer();
+        String kitName = StyleIndex.kit(spawn.style());
+        if (kitName != null)
+        {
+            KitStore.of(server).get(kitName).ifPresent(kit -> KitInventory.apply(bot, kit, server.registryAccess()));
+        }
         BotPvpConfig cfg = bot.getPvpConfig();
         cfg.combatStyle = spawn.style();
         cfg.combat = true;
