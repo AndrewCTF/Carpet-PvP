@@ -26,6 +26,8 @@ public final class BotBrain
     private final EntityPlayerMPFake bot;
 
     private UUID pendingTarget;
+    /** Target of the chase this brain started; a chase with any other target is manual and left alone. */
+    private UUID brainChaseTarget;
     private int reactionCountdown;
     private int strafeDir = 1;
     private int strafeTimer;
@@ -87,6 +89,7 @@ public final class BotBrain
                 return;
             }
             pack.setNavChase(target.getUUID(), cfg.critical, cfg.meleeRange, cfg.attackCooldown);
+            brainChaseTarget = target.getUUID();
         }
 
         // 5) Strafe while in melee range for less predictable movement.
@@ -120,10 +123,12 @@ public final class BotBrain
 
     private void disengage(EntityPlayerActionPack pack)
     {
-        if (pack.getNavChaseTarget() != null)
+        // Only stop a chase this brain started, so /player ... nav chase keeps working with combat off.
+        if (brainChaseTarget != null && brainChaseTarget.equals(pack.getNavChaseTarget()))
         {
             pack.stopNavigation();
         }
+        brainChaseTarget = null;
         pendingTarget = null;
     }
 
