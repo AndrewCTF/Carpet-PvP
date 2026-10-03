@@ -42,6 +42,8 @@ public class WebServer
     private static final int SERVER_THREAD_TIMEOUT_SECONDS = 5;
     private static final int KEEP_ALIVE_SECONDS = 15;
     private static final Pattern STATIC_PATH = Pattern.compile("/[A-Za-z0-9_./-]+");
+    private static final String CONTENT_SECURITY_POLICY = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            + "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
     private static final Map<String, String> CONTENT_TYPES = Map.of(
             "html", "text/html; charset=utf-8",
             "css", "text/css; charset=utf-8",
@@ -65,6 +67,13 @@ public class WebServer
         EventStream(AuthManager.Session session)
         {
             this.session = session;
+        }
+
+        void close()
+        {
+            closed = true;
+            // Wakes the request thread if it is waiting for a message.
+            queue.offer("");
         }
     }
 
@@ -101,7 +110,7 @@ public class WebServer
 
     public void stop()
     {
-        streams.forEach(stream -> stream.closed = true);
+        streams.forEach(EventStream::close);
         http.stop(0);
         executor.shutdownNow();
     }
@@ -131,7 +140,7 @@ public class WebServer
         {
             if (api.denied(stream.session) != null)
             {
-                stream.closed = true;
+                stream.close();
             }
         }
         streams.removeIf(stream -> stream.closed);
@@ -244,9 +253,13 @@ public class WebServer
             exchange.getResponseHeaders().set("Cache-Control", "no-store");
             exchange.sendResponseHeaders(200, 0);
             OutputStream out = exchange.getResponseBody();
-            while (!stream.closed && auth.validate(token) != null)
+            while (true)
             {
                 String message = stream.queue.poll(KEEP_ALIVE_SECONDS, TimeUnit.SECONDS);
+                if (stream.closed || auth.validate(token) == null)
+                {
+                    break;
+                }
                 String event = message == null ? ": keep-alive\n\n" : "data: " + message + "\n\n";
                 out.write(event.getBytes(StandardCharsets.UTF_8));
                 out.flush();
@@ -322,6 +335,9 @@ public class WebServer
         exchange.getResponseHeaders().set("Content-Type", contentType);
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+        // The page only ever needs its own files. This keeps anything injected into it from running or phoning home.
+        exchange.getResponseHeaders().set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+        exchange.getResponseHeaders().set("Referrer-Policy", "no-referrer");
         exchange.sendResponseHeaders(status, content.length);
         exchange.getResponseBody().write(content);
     }

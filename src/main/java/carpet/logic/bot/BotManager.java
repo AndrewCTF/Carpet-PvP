@@ -1,13 +1,13 @@
 package carpet.logic.bot;
 
 import carpet.patches.EntityPlayerMPFake;
+import carpet.utils.Messenger;
 import com.google.gson.JsonObject;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -68,11 +68,14 @@ public class BotManager
         return null;
     }
 
-    public boolean kill(String name)
+    /**
+     * Takes a bot out of the world. Killing one would not: a fake player that dies respawns.
+     */
+    public boolean remove(String name)
     {
         if (server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake)
         {
-            fake.kill((ServerLevel) fake.level());
+            fake.fakePlayerDisconnect(Messenger.s(""));
             return true;
         }
         return false;

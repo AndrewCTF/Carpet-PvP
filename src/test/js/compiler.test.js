@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const resources = path.join(__dirname, "..", "..", "main", "resources");
-const { LiteGraph, LGraph } = require(path.join(resources, "webui", "lib", "litegraph-0.7.18.min.js"));
+const { LiteGraph, LGraph } = require(path.join(resources, "webui", "lib", "litegraph-0.7.18.core.min.js"));
 global.LiteGraph = LiteGraph;
 const Nodes = require(path.join(resources, "webui", "js", "nodes.js"));
 const NodeCompiler = require(path.join(resources, "webui", "js", "node-compiler.js"));

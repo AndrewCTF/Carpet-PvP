@@ -2,145 +2,111 @@
    App — Bootstrap & global utilities
    ═══════════════════════════════════════════════════════════════ */
 
-// ── Global log function ──────────────────────────────────────
+// ── DOM helper ───────────────────────────────────────────────
+// Everything that comes from the server or the user (names, messages, values) goes into the page as text
+// through this helper, never as HTML.
+function el(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined && text !== null) element.textContent = String(text);
+    return element;
+}
+
+// ── Console log ──────────────────────────────────────────────
 function log(msg, level) {
+    const kind = String(level || "info").toLowerCase();
     const entries = document.getElementById("log-entries");
-    if (!entries) return;
-    const time = new Date().toLocaleTimeString("en-GB", { hour12: false });
-    const cls = level === "error" ? 'style="color:#ef4444"' : "";
-    entries.innerHTML += `<div class="log-entry"><span class="log-time">${time}</span><span class="log-msg" ${cls}>${msg}</span></div>`;
+    const entry = el("div", "log-entry");
+    entry.append(
+        el("span", "log-time", new Date().toLocaleTimeString("en-GB", { hour12: false })),
+        el("span", "log-msg" + (kind === "error" ? " log-error" : kind === "warn" ? " log-warn" : ""), msg));
+    entries.append(entry);
+    while (entries.childElementCount > 500) entries.firstElementChild.remove();
     entries.parentElement.scrollTop = entries.parentElement.scrollHeight;
-    if (level === "error") console.error("[CarpetLogic]", msg);
-    else console.log("[CarpetLogic]", msg);
+    if (kind === "error") {
+        document.getElementById("log-panel").classList.remove("collapsed");
+        console.error("[CarpetLogic]", msg);
+    } else {
+        console.log("[CarpetLogic]", msg);
+    }
+}
+
+function isInputFocused() {
+    const active = document.activeElement;
+    return active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
 }
 
 // ── Init ─────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
 
-    // 1. Boot panels
     BotPanel.init();
     ProgramPanel.init();
 
-    // 3. Connection status
+    // Connection status
     API.on("connectionChange", (connected) => {
-        const dot = document.getElementById("connection-dot");
-        const text = document.getElementById("connection-text");
-        dot.className = "conn-dot " + (connected ? "connected" : "disconnected");
-        text.textContent = connected ? "Online" : "Offline";
-        if (connected) {
-            log("Connected to server");
-            BotPanel.refreshBotList();
-            refreshProgramDropdown();
-        } else {
-            log("Disconnected — retrying…", "error");
-        }
+        document.getElementById("connection-dot").className = "conn-dot " + (connected ? "connected" : "disconnected");
+        document.getElementById("connection-text").textContent = connected ? "Online" : "Offline";
+        log(connected ? "Connected to server" : "Disconnected, retrying…", connected ? "info" : "error");
     });
-
     API.on("unauthorized", (message) => {
         document.getElementById("connection-text").textContent = "No access";
-        log(message || "Not authorised. Run /carpetlogic open in game for a link.", "error");
+        document.getElementById("no-access-text").textContent = message || "This page has no valid access token.";
+        document.getElementById("no-access").classList.add("active");
     });
+    API.on("log", (data) => log(data.message, data.level));
 
-    // 4. Connect to the server this page came from. The node types are built from its action schema,
-    //    so the editor starts once that has arrived.
+    // Connect to the server this page came from. The node types are built from its action schema,
+    // so the editor starts once that has arrived.
     API.connect();
     if (API.hasToken()) {
         API.getSchema().then((schema) => {
             Nodes.register(schema);
             NodeCompiler.setSchema(schema);
-            NodeEditor.init();
-            log("CarpetLogic Node Editor ready");
+            NodeEditor.init(schema);
+            log("Node editor ready. Open the Bots panel (B) to spawn a bot, then press Run.");
         }).catch((e) => log("Could not load the action schema: " + e.message, "error"));
     }
 
-    // 5. Console toggle
+    // Console
     const logPanel = document.getElementById("log-panel");
     const logToggle = document.getElementById("log-toggle");
     logToggle.addEventListener("click", () => {
         logPanel.classList.toggle("collapsed");
         logToggle.textContent = logPanel.classList.contains("collapsed") ? "▲" : "▼";
     });
-
-    // 6. Clear log
     document.getElementById("clear-log-btn").addEventListener("click", () => {
-        document.getElementById("log-entries").innerHTML = "";
+        document.getElementById("log-entries").replaceChildren();
     });
 
-    // 7. SSE log forwarding
-    API.on("log", (data) => {
-        log(data.message || JSON.stringify(data), data.level);
-    });
-
-    // 8. Bot panel toggle — right-click on play opens bot panel
+    // Bot panel
     const rightPanel = document.getElementById("right-panel");
-    const rpClose = document.getElementById("rp-close");
+    document.getElementById("btn-bots").addEventListener("click", () => rightPanel.classList.toggle("panel-closed"));
+    document.getElementById("rp-close").addEventListener("click", () => rightPanel.classList.add("panel-closed"));
 
-    // Open bot panel on right-click on play button or via keyboard B
-    document.getElementById("exec-run-btn").addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        rightPanel.classList.toggle("panel-closed");
-    });
-
-    rpClose.addEventListener("click", () => {
-        rightPanel.classList.add("panel-closed");
-    });
-
-    // 9. Program dropdown — load selected program
-    const progSelect = document.getElementById("program-select");
-    progSelect.addEventListener("change", function() {
-        const id = this.value;
-        if (id) {
-            ProgramPanel.loadProgram(id);
-            log("Loading program: " + id);
-        }
-    });
-    // Refresh on focus
-    progSelect.addEventListener("focus", refreshProgramDropdown);
-
-    // 10. Keyboard shortcuts
+    // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
-        // Ctrl+S = save
-        if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        const ctrl = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
+        if (ctrl && key === "s") {
             e.preventDefault();
-            document.getElementById("btn-save").click();
-        }
-        // Ctrl+O = load modal
-        if ((e.ctrlKey || e.metaKey) && e.key === "o") {
+            ProgramPanel.saveProgram();
+        } else if (ctrl && key === "o") {
             e.preventDefault();
             document.getElementById("btn-load").click();
-        }
-        // Ctrl+N = new
-        if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        } else if (ctrl && key === "n") {
             e.preventDefault();
             document.getElementById("btn-new").click();
-        }
-        // B = toggle bot panel (when not focused on input)
-        if (e.key === "b" && !isInputFocused()) {
+        } else if (ctrl && key === "z" && !isInputFocused()) {
+            e.preventDefault();
+            if (e.shiftKey) NodeEditor.redo(); else NodeEditor.undo();
+        } else if (ctrl && key === "y" && !isInputFocused()) {
+            e.preventDefault();
+            NodeEditor.redo();
+        } else if (key === "b" && !ctrl && !isInputFocused()) {
             rightPanel.classList.toggle("panel-closed");
-        }
-        // Escape = close panels
-        if (e.key === "Escape") {
+        } else if (e.key === "Escape") {
             rightPanel.classList.add("panel-closed");
-            document.querySelectorAll(".modal-overlay.active").forEach(m => m.classList.remove("active"));
+            document.querySelectorAll(".modal-overlay.active:not(#no-access)").forEach(m => m.classList.remove("active"));
         }
     });
-
-    log("Press B to toggle bot panel • Right-click Play for controls");
 });
-
-// ── Helpers ──────────────────────────────────────────────────
-function isInputFocused() {
-    const el = document.activeElement;
-    return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
-}
-
-async function refreshProgramDropdown() {
-    try {
-        const data = await API.getPrograms();
-        const programs = Array.isArray(data) ? data : (data.programs || Object.values(data));
-        const sel = document.getElementById("program-select");
-        const current = sel.value;
-        sel.innerHTML = '<option value="">Default</option>' +
-            programs.map(p => `<option value="${p.id}"${p.id === current ? " selected" : ""}>${p.name || p.id}</option>`).join("");
-    } catch (e) { /* not connected yet */ }
-}

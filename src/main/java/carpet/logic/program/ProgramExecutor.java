@@ -187,8 +187,10 @@ public class ProgramExecutor
         }
     }
 
-    private void fail(ProgramState state, Bot bot, String botName, String message)
+    private void fail(ProgramState state, Bot bot, String botName, String reason)
     {
+        // The reason may quote text from the program; keep it on one line in the log.
+        String message = reason.replaceAll("\\p{Cntrl}", " ");
         state.status = Status.ERROR;
         state.error = message;
         state.wait = null;

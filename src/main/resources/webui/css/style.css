@@ -253,6 +253,26 @@ body { display: flex; flex-direction: column; }
     border-color: var(--line-3);
 }
 
+.tl-btn.text {
+    width: auto;
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+#program-name {
+    height: 32px;
+    width: 180px;
+    padding: 0 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r);
+    color: var(--t1);
+    font-size: 12px;
+    font-weight: 600;
+}
+#program-name:focus { border-color: var(--accent); outline: none; }
+
 /* ── Top-right Controls ────────────────────────────────────── */
 #toolbar-tr {
     position: absolute;
@@ -669,3 +689,19 @@ body { display: flex; flex-direction: column; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--line-1); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--line-2); }
+
+/* ═══════════════════════════════════════════════════════════════
+   Small additions
+   ═══════════════════════════════════════════════════════════════ */
+.hidden { display: none; }
+.play-btn.stop { width: 40px; height: 40px; }
+#play-area { display: flex; align-items: center; gap: 8px; }
+.run-target { font-size: 11px; color: var(--t2); }
+.log-msg.log-error { color: var(--red); }
+.log-msg.log-warn { color: #f59e0b; }
+.bot-status-badge.error { background: rgba(239,68,68,.15); color: var(--red); }
+.status-error { color: var(--red); }
+.notice-text { font-size: 12px; color: var(--t2); line-height: 1.6; margin-bottom: 8px; }
+.notice-text code { font-family: var(--fm); color: var(--t1); background: var(--bg-3); padding: 1px 5px; border-radius: 3px; }
+.status-row { gap: 10px; }
+.status-value { text-align: right; overflow-wrap: anywhere; }

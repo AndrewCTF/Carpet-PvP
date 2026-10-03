@@ -1,127 +1,131 @@
 /* ═══════════════════════════════════════════════════════════════
-   Bot Panel — Spawn, kill, list, status
+   Bot Panel — spawn, remove, pick and watch bots
    ═══════════════════════════════════════════════════════════════ */
 const BotPanel = (() => {
 
-    let selectedBot = null;
+    let bots = {};          // name → bot state, as the server last sent it
+    let programs = {};      // name → state of the program on that bot
+    let targetBot = "";
 
     function init() {
         document.getElementById("spawn-bot-btn").addEventListener("click", spawnBot);
-        document.getElementById("kill-bot-btn").addEventListener("click", killSelectedBot);
-
-        // Listen for SSE updates
-        API.on("botUpdate", refreshBotList);
-        API.on("connectionChange", (connected) => {
-            if (connected) refreshBotList();
+        document.getElementById("remove-bot-btn").addEventListener("click", removeBot);
+        document.getElementById("target-bot-select").addEventListener("change", (e) => selectBot(e.target.value));
+        API.on("botUpdate", (update) => {
+            bots = update.bots || {};
+            programs = update.programs || {};
+            if (targetBot && !bots[targetBot]) targetBot = "";
+            // A single bot is the obvious target.
+            if (!targetBot && Object.keys(bots).length === 1) targetBot = Object.keys(bots)[0];
+            render();
         });
-
-        console.log("[BotPanel] Initialised");
     }
 
     async function spawnBot() {
         const name = document.getElementById("bot-name-input").value.trim();
         if (!name) return;
         try {
+            // No position is sent: the server puts the bot where the player this link belongs to is standing.
             await API.spawnBot(name);
-            log("Spawned bot: " + name);
+            targetBot = name;
+            log("Spawning bot " + name);
         } catch (e) {
-            log("Failed to spawn: " + e.message, "error");
+            log("Could not spawn " + name + ": " + e.message, "error");
         }
     }
 
-    async function killSelectedBot() {
+    async function removeBot() {
         const name = document.getElementById("bot-name-input").value.trim();
         if (!name) return;
         try {
-            await API.killBot(name);
-            log("Killed bot: " + name);
+            const result = await API.removeBot(name);
+            log(result.success ? "Removed bot " + name : "There is no bot named " + name, result.success ? "info" : "error");
         } catch (e) {
-            log("Failed to kill: " + e.message, "error");
+            log("Could not remove " + name + ": " + e.message, "error");
         }
     }
 
-    async function refreshBotList() {
-        try {
-            const data = await API.getBots();
-            const bots = normalizeBots(data);
-            renderBotList(bots);
-            updateTargetSelect(bots);
-            if (selectedBot) updateBotStatus(bots.find(b => b.name === selectedBot));
-        } catch (e) { /* ignore */ }
+    function selectBot(name) {
+        targetBot = name;
+        if (name) document.getElementById("bot-name-input").value = name;
+        render();
     }
 
-    function normalizeBots(data) {
-        if (Array.isArray(data)) {
-            return data.map((b) => b && b.name ? b : { ...(b || {}), name: b?.id || b?.botName || b?.uuid || "" })
-                       .filter(b => b.name);
-        }
-        if (data && typeof data === "object") {
-            if (Array.isArray(data.bots)) return data.bots;
-            // Map<String,BotState> -> add name from key if missing
-            return Object.entries(data).map(([name, bot]) => ({ name, ...(bot || {}) }))
-                         .filter(b => b.name);
-        }
-        return [];
+    function stateOf(name) {
+        const program = programs[name];
+        if (!program) return "idle";
+        return program.running ? "running" : program.status === "ERROR" ? "error" : "idle";
     }
 
-    function renderBotList(bots) {
+    // The lists are only rebuilt when they would look different, so an open dropdown is not reset four
+    // times a second by status updates.
+    let rendered = null;
+
+    function render() {
+        const names = Object.keys(bots).sort();
+        const signature = JSON.stringify([targetBot, names.map(name => [name, stateOf(name)])]);
+        if (signature !== rendered) {
+            rendered = signature;
+            renderLists(names);
+        }
+        renderStatus();
+    }
+
+    function renderLists(names) {
         const list = document.getElementById("bot-list");
-        if (bots.length === 0) {
-            list.innerHTML = '<div class="empty-hint">No active bots</div>';
-            return;
+        list.replaceChildren();
+        if (names.length === 0) list.append(el("div", "empty-hint", "No active bots"));
+        for (const name of names) {
+            const state = stateOf(name);
+            const item = el("div", "bot-list-item" + (name === targetBot ? " selected" : ""));
+            const info = el("div", "bot-info");
+            info.append(el("span", "conn-dot " + (state === "running" ? "connected" : "disconnected")), el("span", "bot-name", name));
+            item.append(info, el("span", "bot-status-badge " + state, state));
+            item.addEventListener("click", () => selectBot(name));
+            list.append(item);
         }
-        list.innerHTML = bots.map(b => {
-            const sel = b.name === selectedBot ? " selected" : "";
-            const running = Boolean(b.running) || b.programState === "RUNNING";
-            const st = running ? "running" : "idle";
-            return `<div class="bot-list-item${sel}" data-name="${b.name}">
-                <div class="bot-info">
-                    <span class="conn-dot ${running ? 'connected' : 'disconnected'}" style="width:6px;height:6px;"></span>
-                    <span class="bot-name">${b.name}</span>
-                </div>
-                <span class="bot-status-badge ${st}">${st}</span>
-            </div>`;
-        }).join("");
 
-        list.querySelectorAll(".bot-list-item").forEach(el => {
-            el.addEventListener("click", () => {
-                selectedBot = el.dataset.name;
-                document.getElementById("bot-name-input").value = selectedBot;
-                // Auto-select in target dropdown too
-                const sel = document.getElementById("target-bot-select");
-                if (sel) sel.value = selectedBot;
-                refreshBotList();
-            });
-        });
+        const select = document.getElementById("target-bot-select");
+        select.replaceChildren(new Option("Select a bot…", ""));
+        for (const name of names) select.append(new Option(name, name));
+        select.value = targetBot;
+
+        document.getElementById("run-target").textContent = targetBot ? "Runs on " + targetBot : "No bot selected";
     }
 
-    function updateTargetSelect(bots) {
-        const sel = document.getElementById("target-bot-select");
-        const current = sel.value;
-        sel.innerHTML = '<option value="">Select a bot…</option>' +
-            bots.map(b => `<option value="${b.name}"${b.name === current ? " selected" : ""}>${b.name}</option>`).join("");
-    }
+    function renderStatus() {
+        const bot = bots[targetBot];
+        const program = programs[targetBot];
+        const state = document.getElementById("exec-state");
+        const label = !program ? "Idle" : program.running ? "Running" : program.status === "ERROR" ? "Error" : "Finished";
+        state.textContent = label;
+        state.className = "rp-status-value" + (label === "Running" ? " status-running" : label === "Error" ? " status-error" : "");
 
-    function updateBotStatus(bot) {
         const section = document.getElementById("bot-status-section");
-        const content = document.getElementById("bot-status-content");
-        if (!bot) {
-            section.style.display = "none";
-            return;
+        section.classList.toggle("hidden", !bot);
+        if (!bot) return;
+        const rows = [
+            ["Name", bot.name],
+            ["Health", Math.round(bot.health * 10) / 10 + " / " + bot.maxHealth],
+            ["Position", [bot.x, bot.y, bot.z].map(v => v.toFixed(1)).join(", ")],
+            ["Dimension", bot.dimension],
+            ["Main hand", bot.mainhand],
+        ];
+        if (program) {
+            rows.push(["Program", program.programName]);
+            if (program.currentAction) rows.push(["Action", program.currentAction]);
+            if (program.error) rows.push(["Error", program.error]);
         }
-        section.style.display = "";
-        content.innerHTML = `
-            <div class="status-grid">
-                <div class="status-row"><span class="status-label">Name</span><span class="status-value">${bot.name}</span></div>
-                <div class="status-row"><span class="status-label">Health</span><span class="status-value">${bot.health ?? "?"} / 20</span></div>
-                <div class="status-row"><span class="status-label">Position</span><span class="status-value">${bot.x?.toFixed(0) ?? "?"}, ${bot.y?.toFixed(0) ?? "?"}, ${bot.z?.toFixed(0) ?? "?"}</span></div>
-                <div class="status-row"><span class="status-label">Dimension</span><span class="status-value">${bot.dimension ?? "?"}</span></div>
-                <div class="status-row"><span class="status-label">Program</span><span class="status-value ${(bot.running || bot.programState === 'RUNNING') ? 'status-running' : 'status-idle'}">${(bot.running || bot.programState === 'RUNNING') ? "Running" : "Idle"}</span></div>
-            </div>`;
+        const content = document.getElementById("bot-status-content");
+        content.replaceChildren();
+        for (const [name, value] of rows) {
+            const row = el("div", "status-row");
+            row.append(el("span", "status-label", name), el("span", "status-value" + (name === "Error" ? " status-error" : ""), value));
+            content.append(row);
+        }
     }
 
-    function getSelectedBot() { return selectedBot; }
-    function getTargetBot() { return document.getElementById("target-bot-select").value; }
+    function getTargetBot() { return targetBot; }
 
-    return { init, refreshBotList, getSelectedBot, getTargetBot };
+    return { init, getTargetBot };
 })();

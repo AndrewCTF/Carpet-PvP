@@ -89,7 +89,7 @@ public class Api
                 case "POST /api/programs" -> saveProgram(parse(body));
                 case "GET /api/bots" -> ok(bots());
                 case "POST /api/bots/spawn" -> spawnBot(parse(body), session);
-                case "POST /api/bots/kill" -> killBot(parse(body));
+                case "POST /api/bots/remove" -> removeBot(parse(body));
                 case "POST /api/execute" -> execute(parse(body), session);
                 case "POST /api/stop" -> stop(parse(body));
                 default ->
@@ -222,11 +222,11 @@ public class Api
         return ok(result);
     }
 
-    private Response killBot(JsonObject request)
+    private Response removeBot(JsonObject request)
     {
         String name = string(request, "name");
         logic.getProgramExecutor().stopProgram(name);
-        return success(logic.getBotManager().kill(name));
+        return success(logic.getBotManager().remove(name));
     }
 
     // Programs are run from the action tree the editor sends, never by id: commands in a program run as the
@@ -249,14 +249,15 @@ public class Api
         return success(logic.getProgramExecutor().stopProgram(string(request, "botName")));
     }
 
+    // Names end up in the server log and in chat: one line, of a sane length.
     private static String cleanName(String name)
     {
-        if (name == null || name.isBlank())
+        String clean = name == null ? "" : name.replaceAll("\\p{Cntrl}", " ").strip();
+        if (clean.isEmpty())
         {
             return "Untitled";
         }
-        name = name.strip();
-        return name.length() > MAX_NAME_LENGTH ? name.substring(0, MAX_NAME_LENGTH) : name;
+        return clean.length() > MAX_NAME_LENGTH ? clean.substring(0, MAX_NAME_LENGTH) : clean;
     }
 
     private static JsonObject parse(String body)
@@ -278,7 +279,7 @@ public class Api
     private static double number(JsonObject object, String key)
     {
         JsonElement value = object.get(key);
-        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber())
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber() || !Double.isFinite(value.getAsDouble()))
         {
             throw new IllegalArgumentException("'" + key + "' must be a number");
         }

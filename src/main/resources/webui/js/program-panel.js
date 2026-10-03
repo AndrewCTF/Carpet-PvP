@@ -1,203 +1,135 @@
 /* ═══════════════════════════════════════════════════════════════
-   Program Panel — Save, Load, Presets, Execution
+   Program Panel — new, open, save, run, stop, settings
    ═══════════════════════════════════════════════════════════════ */
 const ProgramPanel = (() => {
 
-    let currentProgramId = null;
+    let currentProgramId = null;    // the saved program being edited, or null for one not saved yet
 
     function init() {
-        // Save / Load / New
-        document.getElementById("btn-save").addEventListener("click", saveProgram);
-        document.getElementById("btn-load").addEventListener("click", () => openModal("load-modal"));
         document.getElementById("btn-new").addEventListener("click", newProgram);
-
-        // Run / Stop (top bar)
-        document.getElementById("btn-run").addEventListener("click", runProgram);
-        document.getElementById("btn-stop").addEventListener("click", stopProgram);
-
-        // Run / Stop (right panel)
-        document.getElementById("exec-run-btn").addEventListener("click", runProgram);
-        document.getElementById("exec-stop-btn").addEventListener("click", stopProgram);
-
-        // Clear / Undo
+        document.getElementById("btn-load").addEventListener("click", openLoadModal);
+        document.getElementById("btn-save").addEventListener("click", saveProgram);
+        document.getElementById("btn-undo").addEventListener("click", () => NodeEditor.undo());
+        document.getElementById("btn-redo").addEventListener("click", () => NodeEditor.redo());
         document.getElementById("btn-clear").addEventListener("click", () => {
-            if (confirm("Clear the entire canvas?")) {
-                NodeEditor.clearGraph();
-                log("Canvas cleared");
-            }
+            NodeEditor.clearGraph();
+            log("Canvas cleared (Undo brings it back)");
         });
-        document.getElementById("btn-undo").addEventListener("click", () => {
-            // LiteGraph doesn't have built-in undo, but we can try
-            log("Undo not yet implemented");
-        });
+        document.getElementById("btn-settings").addEventListener("click", openSettings);
 
-        // Presets dropdown
-        loadPresets();
+        for (const id of ["exec-run-btn", "btn-run"]) document.getElementById(id).addEventListener("click", runProgram);
+        for (const id of ["btn-stop", "exec-stop-btn"]) document.getElementById(id).addEventListener("click", stopProgram);
 
-        // Load modal tabs
         document.querySelectorAll(".modal-tab").forEach(tab => {
             tab.addEventListener("click", () => {
-                const panel = tab.dataset.tab;
-                document.querySelectorAll(".modal-tab").forEach(t => t.classList.remove("active"));
-                tab.classList.add("active");
-                document.querySelectorAll(".modal-tab-panel").forEach(p => p.classList.remove("active"));
-                document.getElementById("panel-" + panel).classList.add("active");
+                document.querySelectorAll(".modal-tab").forEach(t => t.classList.toggle("active", t === tab));
+                document.querySelectorAll(".modal-tab-panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + tab.dataset.tab));
             });
         });
-
-        // Modal close buttons
         document.querySelectorAll(".modal-close").forEach(btn => {
-            btn.addEventListener("click", () => {
-                btn.closest(".modal-overlay").classList.remove("active");
-            });
+            btn.addEventListener("click", () => btn.closest(".modal-overlay").classList.remove("active"));
         });
-        document.querySelectorAll(".modal-overlay").forEach(overlay => {
+        document.querySelectorAll(".modal-overlay:not(#no-access)").forEach(overlay => {
             overlay.addEventListener("click", (e) => {
                 if (e.target === overlay) overlay.classList.remove("active");
             });
         });
-
-        // Settings
-        document.getElementById("btn-settings").addEventListener("click", openSettings);
-
-        // SSE - botUpdate carries program state too
-        API.on("botUpdate", (data) => {
-            // Check if our target bot has program status
-            const bot = BotPanel.getTargetBot();
-            if (bot && data.programs && data.programs[bot]) {
-                const state = document.getElementById("exec-state");
-                const ps = data.programs[bot];
-                state.textContent = ps.running ? "Running" : "Idle";
-                state.className = "rp-status-value" + (ps.running ? " status-running" : "");
-            }
-        });
-
-        console.log("[ProgramPanel] Initialised");
     }
 
-    // ── Save ─────────────────────────────────────────────────
+    function programName() {
+        return document.getElementById("program-name").value.trim() || "Untitled";
+    }
+
+    // ── New / Save ───────────────────────────────────────────
+    function newProgram() {
+        NodeEditor.clearGraph();
+        NodeEditor.resetHistory();
+        document.getElementById("program-name").value = "Untitled";
+        currentProgramId = null;
+        log("New program");
+    }
+
     async function saveProgram() {
         try {
-            const name = document.getElementById("program-name").value.trim() || "Untitled";
-            const graphData = NodeEditor.getGraphJSON();
-            const actions = NodeCompiler.compile(NodeEditor.getGraph());
-            // A new program has no id yet: the server assigns one.
-            const program = { name: name, actions: actions, graphData: graphData };
+            const program = {
+                name: programName(),
+                actions: NodeCompiler.compile(NodeEditor.getGraph()),
+                graphData: NodeEditor.getGraphJSON()
+            };
+            // A program that has not been saved yet has no id: the server assigns one.
             if (currentProgramId) program.id = currentProgramId;
             const result = await API.saveProgram(program);
             currentProgramId = result.id;
-            log("Saved: " + name);
+            log("Saved: " + program.name);
         } catch (e) {
             log("Save failed: " + e.message, "error");
         }
     }
 
-    // ── New ──────────────────────────────────────────────────
-    function newProgram() {
-        NodeEditor.clearGraph();
-        document.getElementById("program-name").value = "Untitled";
-        currentProgramId = null;
-        log("New program created");
-    }
-
-    // ── Load modal ───────────────────────────────────────────
-    async function loadPrograms() {
+    // ── Open ─────────────────────────────────────────────────
+    async function openLoadModal() {
+        document.getElementById("load-modal").classList.add("active");
         try {
-            const data = await API.getPrograms();
-            const list = document.getElementById("load-program-list");
-            // Server returns List directly (array) or {programs: [...]}
-            const programs = Array.isArray(data) ? data : (data.programs || Object.values(data));
-            if (!programs || programs.length === 0) {
-                list.innerHTML = '<div class="empty-hint">No saved programs</div>';
-                return;
-            }
-            list.innerHTML = programs.map(p => `
-                <div class="program-list-item">
-                    <div class="program-info">
-                        <span class="program-name">${p.name || p.id}</span>
-                        <span class="program-meta">${p.actions ? p.actions.length + " actions" : ""}</span>
-                    </div>
-                    <div class="program-actions">
-                        <button class="btn-sm primary" onclick="ProgramPanel.loadProgram('${p.id}')">Load</button>
-                        <button class="btn-sm red" onclick="ProgramPanel.deleteProgram('${p.id}')">Del</button>
-                    </div>
-                </div>
-            `).join("");
+            const [programs, presets] = await Promise.all([API.getPrograms(), API.getPresets()]);
+            programs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            renderList("load-program-list", programs, "No saved programs", true);
+            renderList("preset-program-list", presets, "No presets", false);
         } catch (e) {
-            log("Failed to load programs: " + e.message, "error");
+            log("Could not list programs: " + e.message, "error");
         }
     }
 
-    async function loadPresets() {
-        try {
-            const data = await API.getPresets();
-            // Server returns List directly (array) or {presets: [...]}
-            const presets = Array.isArray(data) ? data : (data.presets || Object.values(data));
-            // Preset dropdown in top bar
-            const dropList = document.getElementById("preset-list");
-            dropList.innerHTML = presets.map(p =>
-                `<div class="dd-item" data-id="${p.id}">${p.name || p.id}</div>`
-            ).join("");
-            dropList.querySelectorAll(".dd-item").forEach(item => {
-                item.addEventListener("click", () => loadPresetById(item.dataset.id));
-            });
-            // Preset tab in modal
-            const presetList = document.getElementById("preset-program-list");
-            presetList.innerHTML = presets.map(p => `
-                <div class="program-list-item">
-                    <div class="program-info">
-                        <span class="program-name">${p.name || p.id}</span>
-                        <span class="program-meta">Built-in preset</span>
-                    </div>
-                    <div class="program-actions">
-                        <button class="btn-sm primary" onclick="ProgramPanel.loadPresetById('${p.id}')">Load</button>
-                    </div>
-                </div>
-            `).join("");
-        } catch (e) { /* presets not available yet */ }
+    function renderList(listId, programs, emptyText, deletable) {
+        const list = document.getElementById(listId);
+        list.replaceChildren();
+        if (programs.length === 0) list.append(el("div", "empty-hint", emptyText));
+        for (const program of programs) {
+            const info = el("div", "program-info");
+            info.append(
+                el("span", "program-name", program.name || program.id),
+                el("span", "program-meta", program.description || (program.actions || []).length + " top-level actions"));
+
+            const actions = el("div", "program-actions");
+            const open = el("button", "btn-sm primary", "Open");
+            open.addEventListener("click", () => loadProgram(program));
+            actions.append(open);
+            if (deletable) {
+                const remove = el("button", "btn-sm red", "Delete");
+                remove.addEventListener("click", () => deleteProgram(program));
+                actions.append(remove);
+            }
+
+            const item = el("div", "program-list-item");
+            item.append(info, actions);
+            list.append(item);
+        }
     }
 
-    async function loadProgram(id) {
+    // A saved program reopens as the graph it was saved from. A program that has no graph, as the presets
+    // do, gets one built from its actions. A preset opens as a copy: saving it creates a new program.
+    function loadProgram(program) {
         try {
-            const data = await API.getPrograms();
-            const programs = Array.isArray(data) ? data : (data.programs || Object.values(data));
-            const program = programs.find(p => p.id === id);
-            if (!program) throw new Error("Program not found");
             if (program.graphData) {
                 NodeEditor.loadGraphJSON(program.graphData);
+            } else {
+                NodeEditor.loadActions(program.actions || []);
             }
-            document.getElementById("program-name").value = program.name || id;
-            currentProgramId = id;
-            closeAllModals();
-            log("Loaded: " + (program.name || id));
+            document.getElementById("program-name").value = program.name || "Untitled";
+            currentProgramId = program.isPreset ? null : program.id;
+            document.getElementById("load-modal").classList.remove("active");
+            log("Opened: " + (program.name || program.id));
         } catch (e) {
-            log("Load failed: " + e.message, "error");
+            log("Could not open " + (program.name || program.id) + ": " + e.message, "error");
         }
     }
 
-    async function loadPresetById(id) {
+    async function deleteProgram(program) {
+        if (!confirm("Delete the program \"" + (program.name || program.id) + "\"?")) return;
         try {
-            const data = await API.getPresets();
-            const presets = Array.isArray(data) ? data : (data.presets || Object.values(data));
-            const preset = presets.find(p => p.id === id);
-            if (!preset) throw new Error("Preset not found");
-            // Presets don't have graphData, create a new graph
-            NodeEditor.clearGraph();
-            document.getElementById("program-name").value = preset.name || id;
-            currentProgramId = null;
-            closeAllModals();
-            log("Loaded preset: " + (preset.name || id));
-        } catch (e) {
-            log("Preset load failed: " + e.message, "error");
-        }
-    }
-
-    async function deleteProgram(id) {
-        if (!confirm("Delete this program?")) return;
-        try {
-            await API.deleteProgram(id);
-            loadPrograms();
-            log("Deleted program");
+            await API.deleteProgram(program.id);
+            if (currentProgramId === program.id) currentProgramId = null;
+            log("Deleted: " + (program.name || program.id));
+            openLoadModal();
         } catch (e) {
             log("Delete failed: " + e.message, "error");
         }
@@ -206,14 +138,13 @@ const ProgramPanel = (() => {
     // ── Run / Stop ───────────────────────────────────────────
     async function runProgram() {
         const bot = BotPanel.getTargetBot();
-        if (!bot) { log("Select a target bot first", "error"); return; }
+        if (!bot) {
+            document.getElementById("right-panel").classList.remove("panel-closed");
+            log("Pick a bot to run on first (Bots panel)", "error");
+            return;
+        }
         try {
-            const name = document.getElementById("program-name").value.trim() || "Untitled";
-            const actions = NodeCompiler.compile(NodeEditor.getGraph());
-            await API.runProgram(bot, name, actions);
-            document.getElementById("exec-state").textContent = "Running";
-            document.getElementById("exec-state").className = "rp-status-value status-running";
-            log("Running program on " + bot);
+            await API.runProgram(bot, programName(), NodeCompiler.compile(NodeEditor.getGraph()));
         } catch (e) {
             log("Run failed: " + e.message, "error");
         }
@@ -224,9 +155,6 @@ const ProgramPanel = (() => {
         if (!bot) return;
         try {
             await API.stopProgram(bot);
-            document.getElementById("exec-state").textContent = "Stopped";
-            document.getElementById("exec-state").className = "rp-status-value";
-            log("Stopped program on " + bot);
         } catch (e) {
             log("Stop failed: " + e.message, "error");
         }
@@ -234,41 +162,21 @@ const ProgramPanel = (() => {
 
     // ── Settings ─────────────────────────────────────────────
     async function openSettings() {
-        openModal("settings-modal");
+        const content = document.querySelector("#settings-modal .settings-content");
+        content.replaceChildren(el("span", "rp-muted", "Loading…"));
+        document.getElementById("settings-modal").classList.add("active");
         try {
-            const data = await API.getSettings();
-            const content = document.querySelector("#settings-modal .settings-content");
-            // Server returns settings at root level, not wrapped
-            const settings = data.settings || data;
-            const entries = Object.entries(settings);
-            if (entries.length === 0) {
-                content.innerHTML = '<span class="rp-muted">No settings available</span>';
-                return;
+            const settings = await API.getSettings();
+            content.replaceChildren(el("p", "notice-text", "Carpet rules, read only here. Change them in game with /carpet <rule> <value>."));
+            for (const [rule, value] of Object.entries(settings)) {
+                const row = el("div", "settings-row");
+                row.append(el("span", "settings-key", rule), el("span", "settings-value", value));
+                content.append(row);
             }
-            content.innerHTML = entries.map(([k, v]) =>
-                `<div class="settings-row"><span class="settings-key">${k}</span><span class="settings-value">${v}</span></div>`
-            ).join("");
         } catch (e) {
-            document.querySelector("#settings-modal .settings-content").innerHTML =
-                '<span class="rp-muted">Failed to load settings</span>';
+            content.replaceChildren(el("span", "rp-muted", "Could not load settings: " + e.message));
         }
     }
 
-    // ── Modals ───────────────────────────────────────────────
-    function openModal(id) {
-        document.getElementById(id).classList.add("active");
-        if (id === "load-modal") {
-            loadPrograms();
-            loadPresets();
-        }
-    }
-
-    function closeAllModals() {
-        document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
-    }
-
-    return {
-        init, saveProgram, loadProgram, loadPresetById, deleteProgram,
-        runProgram, stopProgram
-    };
+    return { init, saveProgram };
 })();

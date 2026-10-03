@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CarpetLogic — Node Editor</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="lib/litegraph-0.7.18.css">
     <link rel="stylesheet" href="css/style.css">
-    <script src="lib/litegraph-0.7.18.min.js"></script>
+    <script src="lib/litegraph-0.7.18.core.min.js"></script>
 </head>
 <body>
 
@@ -85,31 +86,32 @@
         <div id="canvas-wrap">
             <canvas id="graph-canvas"></canvas>
 
-            <!-- Top-left toolbar -->
+            <!-- Top-left toolbar: the program being edited -->
             <div id="toolbar-tl">
-                <button class="tl-btn" id="btn-undo" title="Undo">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                </button>
-                <button class="tl-btn" id="btn-clear" title="Clear Canvas">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
-                <button class="tl-btn" id="btn-save" title="Save Program">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                </button>
+                <button class="tl-btn text" id="btn-new" title="New program (Ctrl+N)">New</button>
+                <button class="tl-btn text" id="btn-load" title="Open a saved program or a preset (Ctrl+O)">Open</button>
+                <button class="tl-btn text" id="btn-save" title="Save program (Ctrl+S)">Save</button>
+                <input id="program-name" type="text" value="Untitled" maxlength="64" spellcheck="false" title="Program name" aria-label="Program name" />
+                <button class="tl-btn text" id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
+                <button class="tl-btn text" id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
+                <button class="tl-btn text" id="btn-clear" title="Remove every node">Clear</button>
             </div>
 
             <!-- Top-right controls -->
             <div id="toolbar-tr">
-                <select id="program-select" title="Programs">
-                    <option value="">Default</option>
-                </select>
+                <button class="tl-btn text" id="btn-bots" title="Bots: spawn, pick and watch (B)">Bots</button>
+                <button class="tl-btn text" id="btn-settings" title="Settings">Settings</button>
             </div>
 
-            <!-- Bottom-left play button -->
+            <!-- Bottom-left run and stop -->
             <div id="play-area">
-                <button id="exec-run-btn" class="play-btn" title="Run Program">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                <button id="exec-run-btn" class="play-btn" title="Run the program on the selected bot">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#22c55e"><polygon points="6 3 20 12 6 21 6 3"/></svg>
                 </button>
+                <button id="btn-stop" class="play-btn stop" title="Stop the selected bot's program">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#ef4444"><rect x="5" y="5" width="14" height="14"/></svg>
+                </button>
+                <span id="run-target" class="run-target">No bot selected</span>
             </div>
 
             <!-- Bottom-right zoom -->
@@ -125,21 +127,21 @@
         <button id="rp-close" class="rp-close-btn">&times;</button>
 
         <section class="rp-section">
-            <div class="rp-header"><span>Bot Control</span></div>
+            <div class="rp-header"><span>Spawn a bot where you stand</span></div>
             <div class="rp-body">
                 <div class="rp-field">
-                    <label>Bot Name</label>
-                    <input id="bot-name-input" type="text" value="PvPBot" spellcheck="false" />
+                    <label for="bot-name-input">Bot Name</label>
+                    <input id="bot-name-input" type="text" value="PvPBot" maxlength="16" spellcheck="false" />
                 </div>
                 <div class="rp-row">
                     <button id="spawn-bot-btn" class="btn-sm green">Spawn</button>
-                    <button id="kill-bot-btn" class="btn-sm red">Kill</button>
+                    <button id="remove-bot-btn" class="btn-sm red">Remove</button>
                 </div>
             </div>
         </section>
 
         <section class="rp-section">
-            <div class="rp-header"><span>Active Bots</span></div>
+            <div class="rp-header"><span>Bots</span></div>
             <div class="rp-body">
                 <div id="bot-list" class="item-list">
                     <div class="empty-hint">No active bots</div>
@@ -148,10 +150,10 @@
         </section>
 
         <section class="rp-section">
-            <div class="rp-header"><span>Execution</span></div>
+            <div class="rp-header"><span>Run on</span></div>
             <div class="rp-body">
                 <div class="rp-field">
-                    <label>Target Bot</label>
+                    <label for="target-bot-select">Target Bot</label>
                     <select id="target-bot-select">
                         <option value="">Select a bot…</option>
                     </select>
@@ -167,23 +169,24 @@
             </div>
         </section>
 
-        <section class="rp-section" id="bot-status-section" style="display:none;">
+        <section class="rp-section hidden" id="bot-status-section">
             <div class="rp-header"><span>Bot Status</span></div>
             <div class="rp-body">
-                <div id="bot-status-content">
-                    <div class="empty-hint">Select a bot</div>
-                </div>
+                <div id="bot-status-content" class="status-grid"></div>
             </div>
         </section>
     </aside>
 
-    <!-- ═══ Hidden elements for JS compatibility ══════════ -->
-    <input type="hidden" id="program-name" value="Untitled" />
-    <button id="btn-load" style="display:none"></button>
-    <button id="btn-new" style="display:none"></button>
-    <button id="btn-stop" style="display:none"></button>
-    <div id="preset-list" style="display:none"></div>
-    <button id="btn-settings" style="display:none"></button>
+    <!-- ═══ No-access notice ═══════════════════════════════ -->
+    <div id="no-access" class="modal-overlay">
+        <div class="modal-card narrow">
+            <div class="modal-top"><span class="modal-heading">No access</span></div>
+            <div class="modal-content">
+                <p id="no-access-text" class="notice-text"></p>
+                <p class="notice-text">Run <code>/carpetlogic open</code> in game and use the link it gives you.</p>
+            </div>
+        </div>
+    </div>
 
     <!-- ═══ Console ═══════════════════════════════════════ -->
     <div id="console-bar">
@@ -231,7 +234,7 @@
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-content">
-                <div class="settings-content"><span class="rp-muted">Loading…</span></div>
+                <div class="settings-content"></div>
             </div>
         </div>
     </div>
@@ -239,6 +242,7 @@
     <!-- ═══ Scripts ════════════════════════════════════════ -->
     <script src="js/nodes.js"></script>
     <script src="js/node-compiler.js"></script>
+    <script src="js/graph-builder.js"></script>
     <script src="js/node-editor.js"></script>
     <script src="js/api.js"></script>
     <script src="js/bot-panel.js"></script>

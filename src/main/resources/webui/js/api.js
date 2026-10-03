@@ -166,14 +166,14 @@ const API = (() => {
     const deleteProgram = (id) => _fetch('/api/programs/' + encodeURIComponent(id), { method: 'DELETE' });
     const getBots = () => _fetch('/api/bots');
     const spawnBot = (name) => _fetch('/api/bots/spawn', { method: 'POST', body: { name } });
-    const killBot = (name) => _fetch('/api/bots/kill', { method: 'POST', body: { name } });
+    const removeBot = (name) => _fetch('/api/bots/remove', { method: 'POST', body: { name } });
     const runProgram = (botName, name, actions) => _fetch('/api/execute', { method: 'POST', body: { botName, name, actions } });
     const stopProgram = (botName) => _fetch('/api/stop', { method: 'POST', body: { botName } });
 
     return {
         connect, disconnect, isConnected, hasToken, on, off,
         getStatus, getSettings, getSchema, getPrograms, getPresets, saveProgram, deleteProgram,
-        getBots, spawnBot, killBot, runProgram, stopProgram
+        getBots, spawnBot, removeBot, runProgram, stopProgram
     };
 
 })();
