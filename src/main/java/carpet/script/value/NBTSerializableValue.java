@@ -211,6 +211,7 @@ public class NBTSerializableValue extends Value implements ContainerValueInterfa
             );
             if (!list.isEmpty())
             {
+//~ if >=26.1 'random' -> 'getRandom()'
                 inventory = (Container) list.get(world.getRandom().nextInt(list.size()));
             }
         }
@@ -354,11 +355,27 @@ public class NBTSerializableValue extends Value implements ContainerValueInterfa
             ItemInput res = itemCache.get(itemString);  // [SCARY SHIT] persistent caches over server reloads
             if (res != null)
             {
+//? if >=26.1 {
                 return res.createItemStack(1);
+//?} else {
+/*                return res.createItemStack(1, false);
+*///?}
             }
+//? if >=26.1 {
             // ItemParser was removed in 26.1 - need to use alternative item parsing
             // For now, return empty stack if item not in cache
             return ItemStack.EMPTY;
+//?} else {
+/*            ItemParser.ItemResult parser = (new ItemParser(regs)).parse(new StringReader(itemString));
+            res = new ItemInput(parser.item(), parser.components());
+
+            itemCache.put(itemString, res);
+            if (itemCache.size() > 64000)
+            {
+                itemCache.clear();
+            }
+            return res.createItemStack(1, false);
+*///?}
         }
         catch (CommandSyntaxException e)
         {

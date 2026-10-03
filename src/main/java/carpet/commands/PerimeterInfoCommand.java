@@ -15,7 +15,9 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+//? if >=26.1 {
 import net.minecraft.world.entity.EntitySpawnRequest;
+//?}
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -59,7 +61,12 @@ public class PerimeterInfoCommand
         if (mobId != null)
         {
             nbttagcompound.putString("id", mobId);
-            Entity baseEntity = EntityType.loadEntityRecursive(nbttagcompound, source.getLevel(), new EntitySpawnRequest(EntitySpawnReason.COMMAND, true), (entity_1x) -> {
+//? if <26.1 {
+/*            EntitySpawnReason spawnRequest = EntitySpawnReason.COMMAND;
+*///?} else {
+            EntitySpawnRequest spawnRequest = new EntitySpawnRequest(EntitySpawnReason.COMMAND, true);
+//?}
+            Entity baseEntity = EntityType.loadEntityRecursive(nbttagcompound, source.getLevel(), spawnRequest, (entity_1x) -> {
                 entity_1x.snapTo(new BlockPos(pos.getX(), source.getLevel().getMinY()-10, pos.getZ()), entity_1x.getYRot(), entity_1x. getXRot());
                 return !source.getLevel().addWithUUID(entity_1x) ? null : entity_1x;
             });

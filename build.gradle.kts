@@ -1,49 +1,70 @@
+import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import java.time.Duration
 
 plugins {
-    id("net.fabricmc.fabric-loom")
     id("maven-publish")
 }
 
 val mcVersion = stonecutter.current.version
 
+// 26.1 and up ship unobfuscated, so Loom's no-remap plugin is enough. 1.21.11 is the last
+// obfuscated release: it needs the remapping plugin, Mojang's mappings, modImplementation
+// for the Fabric dependencies and Java 21 bytecode. Both plugin ids are on the buildscript
+// classpath (see stonecutter.gradle.kts). Loom is applied by hand rather than from the
+// plugins block, so its DSL is reached through the extension's public type.
+val unobfuscated = stonecutter.semantics.eval(mcVersion, ">=26.1")
+pluginManager.apply(if (unobfuscated) "net.fabricmc.fabric-loom" else "net.fabricmc.fabric-loom-remap")
+
+// The access widener namespace follows the mappings, so it differs per version.
+val accessWidener = rootProject.file(
+    if (unobfuscated) "src/main/resources/carpet.accesswidener" else "versions/$mcVersion/carpet.accesswidener"
+)
+
 version = property("mod_version") as String
 group = property("maven_group") as String
 base.archivesName = "${property("archives_base_name")}-$mcVersion"
 
-loom {
-    accessWidenerPath = rootProject.file("src/main/resources/carpet.accesswidener")
+val loom = extensions.getByType(LoomGradleExtensionAPI::class.java)
 
-    runConfigs.configureEach {
-        // One world per Minecraft version (an older server cannot open a newer world), and
-        // separate client, server and self-test directories so they can run at once.
-        runDir(if (name == "selfTest") "../../run/selftest-$mcVersion" else "../../run/$mcVersion/$name")
-        // -PmixinAudit: fail at boot if any mixin no longer matches its target.
-        if (providers.gradleProperty("mixinAudit").isPresent) vmArg("-Dcarpet.mixinAudit=true")
-    }
-    runs {
-        // Headless self-test, see carpet.pvp.selftest. -PselfTest=a,b picks scenarios.
-        create("selfTest") {
-            server()
-            jvmArguments.addAll(
-                "-Dcarpet.selftest=${providers.gradleProperty("selfTest").getOrElse("all")}",
-                "-Dcarpet.mixinAudit=true"
-            )
-            generateRunConfig = false
-        }
-    }
+loom.runConfigs.configureEach {
+    // One world per Minecraft version (an older server cannot open a newer world), and
+    // separate client, server and self-test directories so they can run at once.
+    runDir = if (name == "selfTest") "../../run/selftest-$mcVersion" else "../../run/$mcVersion/$name"
+    // -PmixinAudit: fail at boot if any mixin no longer matches its target.
+    if (providers.gradleProperty("mixinAudit").isPresent) jvmArguments.add("-Dcarpet.mixinAudit=true")
+}
+loom.accessWidenerPath.set(accessWidener)
+loom.runConfigs.create("selfTest") {
+    // Headless self-test, see carpet.pvp.selftest. -PselfTest=a,b picks scenarios.
+    server()
+    jvmArguments.addAll(
+        "-Dcarpet.selftest=${providers.gradleProperty("selfTest").getOrElse("all")}",
+        "-Dcarpet.mixinAudit=true"
+    )
+    generateRunConfig.set(false)
 }
 
 dependencies {
     // Per-version dependency versions live in versions/<minecraft>/gradle.properties
-    minecraft("com.mojang:minecraft:$mcVersion")
+    add("minecraft", "com.mojang:minecraft:$mcVersion")
 
-    implementation("net.fabricmc:fabric-loader:${property("loader_version")}")
+    if (!unobfuscated) add("mappings", loom.officialMojangMappings())
 
-    implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_version")}")
+    // The Fabric artifacts are remapped mods on obfuscated versions.
+    val fabricLoader = "net.fabricmc:fabric-loader:${property("loader_version")}"
+    val fabricApi = "net.fabricmc.fabric-api:fabric-api:${property("fabric_version")}"
+    if (unobfuscated) {
+        implementation(fabricLoader)
+        implementation(fabricApi)
+    } else {
+        add("modImplementation", fabricLoader)
+        add("modImplementation", fabricApi)
+    }
 
     // Jakarta annotations (replacement for javax.annotation removed from Java)
     compileOnly("jakarta.annotation:jakarta.annotation-api:2.1.1")
+    // 1.21.11 code still uses the javax annotations from before they left the JDK
+    if (!unobfuscated) compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -106,6 +127,13 @@ tasks.check {
 }
 
 tasks.processResources {
+    if (!unobfuscated) {
+        // The copy in src/main/resources is written for the official namespace, so overwrite it
+        // with the one from versions/<minecraft> that matches these mappings.
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        from(accessWidener)
+    }
+
     val props = mapOf(
         "version" to project.version,
         "minecraft_dependency" to project.property("minecraft_dependency")
@@ -134,7 +162,7 @@ tasks.processResources {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release = 25
+    options.release = if (unobfuscated) 25 else 21
     // javac stops at 100 errors by default, which hides most of a version port's work list.
     options.compilerArgs.addAll(listOf("-Xmaxerrs", "2000"))
 }
@@ -142,8 +170,8 @@ tasks.withType<JavaCompile>().configureEach {
 java {
     withSourcesJar()
 
-    sourceCompatibility = JavaVersion.VERSION_25
-    targetCompatibility = JavaVersion.VERSION_25
+    sourceCompatibility = if (unobfuscated) JavaVersion.VERSION_25 else JavaVersion.VERSION_21
+    targetCompatibility = if (unobfuscated) JavaVersion.VERSION_25 else JavaVersion.VERSION_21
 }
 
 tasks.jar {

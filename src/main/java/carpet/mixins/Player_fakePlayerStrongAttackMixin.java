@@ -16,6 +16,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Player.class)
 public abstract class Player_fakePlayerStrongAttackMixin
 {
+//? if <26.1 {
+/*    private static final String KNOCKBACK_TARGET = "Lnet/minecraft/world/entity/player/Player;causeExtraKnockback(Lnet/minecraft/world/entity/Entity;FLnet/minecraft/world/phys/Vec3;)V";
+*///?} else {
+    private static final String KNOCKBACK_TARGET = "Lnet/minecraft/world/entity/player/Player;causeExtraKnockback(Lnet/minecraft/world/entity/Entity;FLnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/damagesource/DamageSource;FZ)V";
+//?}
+
     private static final float FAKE_PLAYER_STRONG_ATTACK_THRESHOLD = 0.8F;
     private static final float FAKE_PLAYER_ATTACK_TICK_DELTA = 1.5F;
 
@@ -50,7 +56,7 @@ public abstract class Player_fakePlayerStrongAttackMixin
             method = "attack",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/entity/player/Player;causeExtraKnockback(Lnet/minecraft/world/entity/Entity;FLnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/damagesource/DamageSource;FZ)V"
+                    target = KNOCKBACK_TARGET
             ),
             index = 1
     )
@@ -63,7 +69,11 @@ public abstract class Player_fakePlayerStrongAttackMixin
             method = "causeExtraKnockback",
             at = @At("HEAD")
     )
+//? if <26.1 {
+/*    private void carpet$fakePlayerSprintKnockbackSound(Entity target, float strength, Vec3 oldTargetVelocity, CallbackInfo ci)
+*///?} else {
     private void carpet$fakePlayerSprintKnockbackSound(Entity target, float strength, Vec3 oldTargetVelocity, DamageSource damageSource, float damage, boolean comesFromEffect, CallbackInfo ci)
+//?}
     {
         if (!carpet$fakePlayerAddSprintKnockback)
         {

@@ -5,9 +5,20 @@ import carpet.fakes.MinecraftServerInterface;
 import carpet.fakes.ServerPlayerInteractionManagerInterface;
 import carpet.fakes.ServerWorldInterface;
 import carpet.fakes.SpawnHelperInnerInterface;
-import carpet.fakes.TicketsFetcherInterface;
 //? if <26.3
 //import carpet.fakes.RandomStateVisitorAccessor;
+//? if <26.3
+//import net.minecraft.world.level.levelgen.DensityFunction;
+//? if <26.3
+//import net.minecraft.world.level.levelgen.RandomState;
+//? if <26.1 {
+/*import carpet.fakes.BiomeInterface;
+import carpet.fakes.BlockPredicateInterface;
+import carpet.mixins.Objective_scarpetMixin;
+import carpet.mixins.PoiRecord_scarpetMixin;
+import carpet.mixins.Scoreboard_scarpetMixin;
+*///?}
+import carpet.fakes.TicketsFetcherInterface;
 import carpet.fakes.BlockStateArgumentInterface;
 import carpet.fakes.InventoryBearerInterface;
 import carpet.fakes.AbstractContainerMenuInterface;
@@ -183,11 +194,13 @@ public class Vanilla
         return MapValue.wrap(ret);
     }
 
+//? if <26.1 {
+/*    public static LevelStorageSource.LevelStorageAccess MinecraftServer_storageSource(MinecraftServer server)
+    {
+        return ((MinecraftServerInterface) server).getCMSession();
+    }
+*///?}
     // LevelStorageSource methods require actual mixin implementation - comment out for now
-    // public static LevelStorageSource.LevelStorageAccess MinecraftServer_storageSource(MinecraftServer server)
-    // {
-    //     return ((MinecraftServerInterface) server).getCMSession();
-    // }
 
     public static BlockPos ServerPlayerGameMode_getCurrentBlockPosition(ServerPlayerGameMode gameMode)
     {

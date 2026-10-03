@@ -6,6 +6,9 @@ import carpet.CarpetSettings;
 import carpet.api.settings.CarpetRule;
 import carpet.api.settings.RuleHelper;
 import carpet.api.settings.SettingsManager;
+//? if <26.1 {
+/*import carpet.fakes.MinecraftServerInterface;
+*///?}
 import carpet.logging.HUDController;
 import carpet.network.ServerNetworkHandler;
 import carpet.patches.EntityPlayerMPFake;

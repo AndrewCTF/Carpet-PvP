@@ -47,6 +47,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -301,48 +302,75 @@ public class EntityValue extends Value
             List<EntityType<?>> allTypes = BuiltInRegistries.ENTITY_TYPE.stream().toList();
             // nonliving types
             Set<EntityType<?>> projectiles = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.ARROW, EntityTypes.DRAGON_FIREBALL, EntityTypes.FIREWORK_ROCKET,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.FIREBALL, EntityTypes.LLAMA_SPIT, EntityTypes.SMALL_FIREBALL,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.SNOWBALL, EntityTypes.SPECTRAL_ARROW, EntityTypes.EGG,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.ENDER_PEARL, EntityTypes.EXPERIENCE_BOTTLE, EntityTypes.SPLASH_POTION, EntityTypes.LINGERING_POTION,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.TRIDENT, EntityTypes.WITHER_SKULL, EntityTypes.FISHING_BOBBER, EntityTypes.SHULKER_BULLET
             );
             Set<EntityType<?>> deads = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.AREA_EFFECT_CLOUD, EntityTypes.MARKER, EntityTypes.END_CRYSTAL,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.EVOKER_FANGS, EntityTypes.EXPERIENCE_ORB, EntityTypes.EYE_OF_ENDER,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.FALLING_BLOCK, EntityTypes.ITEM, EntityTypes.ITEM_FRAME, EntityTypes.GLOW_ITEM_FRAME,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.LEASH_KNOT, EntityTypes.LIGHTNING_BOLT, EntityTypes.PAINTING,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.TNT, EntityTypes.ARMOR_STAND
 
             );
             Set<EntityType<?>> minecarts = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.MINECART, EntityTypes.CHEST_MINECART, EntityTypes.COMMAND_BLOCK_MINECART,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.FURNACE_MINECART, EntityTypes.HOPPER_MINECART,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.SPAWNER_MINECART, EntityTypes.TNT_MINECART
             );
             // living mob groups - non-defeault
             Set<EntityType<?>> undeads = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.STRAY, EntityTypes.SKELETON, EntityTypes.WITHER_SKELETON,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.ZOMBIE, EntityTypes.DROWNED, EntityTypes.ZOMBIE_VILLAGER,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.ZOMBIE_HORSE, EntityTypes.SKELETON_HORSE, EntityTypes.PHANTOM,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.WITHER, EntityTypes.ZOGLIN, EntityTypes.HUSK, EntityTypes.ZOMBIFIED_PIGLIN
 
             );
             Set<EntityType<?>> arthropods = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.BEE, EntityTypes.ENDERMITE, EntityTypes.SILVERFISH, EntityTypes.SPIDER,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.CAVE_SPIDER
             );
             Set<EntityType<?>> aquatique = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.GUARDIAN, EntityTypes.TURTLE, EntityTypes.COD, EntityTypes.DOLPHIN, EntityTypes.PUFFERFISH,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.SALMON, EntityTypes.SQUID, EntityTypes.TROPICAL_FISH
             );
             Set<EntityType<?>> illagers = Set.of(
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.PILLAGER, EntityTypes.ILLUSIONER, EntityTypes.VINDICATOR, EntityTypes.EVOKER,
+                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                     EntityTypes.RAVAGER, EntityTypes.WITCH
             );
 
             Set<EntityType<?>> living = allTypes.stream().filter(et ->
+//? if >=26.1 {
                     !deads.contains(et) && !projectiles.contains(et) && !minecarts.contains(et)
+//?} else {
+/*                    !deads.contains(et) && !projectiles.contains(et) && !minecarts.contains(et) && !et.is(EntityTypeTags.BOAT)
+*///?}
             ).collect(Collectors.toSet());
 
             Set<EntityType<?>> regular = allTypes.stream().filter(et ->
@@ -366,17 +394,37 @@ public class EntityValue extends Value
 
             // combat groups
 
+//? if >=26.1 {
             put("arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (arthropods.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(arthropods::contains)));
             put("!arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!arthropods.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !arthropods.contains(et) && living.contains(et))));
+//?} else {
+/*            put("arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.ARTHROPOD) && e.isAlive()), allTypes.stream().filter(arthropods::contains)));
+            put("!arthropod", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.ARTHROPOD) && e.isAlive()), allTypes.stream().filter(et -> !arthropods.contains(et) && living.contains(et))));
+*///?}
 
+//? if >=26.1 {
             put("undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (undeads.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(undeads::contains)));
             put("!undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!undeads.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !undeads.contains(et) && living.contains(et))));
+//?} else {
+/*            put("undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.UNDEAD) && e.isAlive()), allTypes.stream().filter(undeads::contains)));
+            put("!undead", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.UNDEAD) && e.isAlive()), allTypes.stream().filter(et -> !undeads.contains(et) && living.contains(et))));
+*///?}
 
+//? if >=26.1 {
             put("aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (aquatique.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(aquatique::contains)));
             put("!aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!aquatique.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !aquatique.contains(et) && living.contains(et))));
+//?} else {
+/*            put("aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.AQUATIC) && e.isAlive()), allTypes.stream().filter(aquatique::contains)));
+            put("!aquatic", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.AQUATIC) && e.isAlive()), allTypes.stream().filter(et -> !aquatique.contains(et) && living.contains(et))));
+*///?}
 
+//? if >=26.1 {
             put("illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (illagers.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(illagers::contains)));
             put("!illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!illagers.contains(e.getType()) && e.isAlive()), allTypes.stream().filter(et -> !illagers.contains(et) && living.contains(et))));
+//?} else {
+/*            put("illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (e.getType().is(EntityTypeTags.ILLAGER) && e.isAlive()), allTypes.stream().filter(illagers::contains)));
+            put("!illager", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> (!e.getType().is(EntityTypeTags.ILLAGER) && e.isAlive()), allTypes.stream().filter(et -> !illagers.contains(et) && living.contains(et))));
+*///?}
 
             put("regular", new EntityClassDescriptor(EntityTypeTest.forClass(LivingEntity.class), e -> {
                 EntityType<?> type = e.getType();
@@ -459,17 +507,33 @@ public class EntityValue extends Value
         put("mount", (e, a) -> (e.getVehicle() != null) ? new EntityValue(e.getVehicle()) : Value.NULL);
         put("unmountable", (e, a) -> BooleanValue.of(Vanilla.Entity_isPermanentVehicle(e)));
         // deprecated
+//? if >=26.1 {
         put("tags", (e, a) -> new ListValue(new ArrayList<Value>()));
+//?} else {
+/*        put("tags", (e, a) -> ListValue.wrap(e.getTags().stream().map(StringValue::new)));
+*///?}
 
+//? if >=26.1 {
         put("scoreboard_tags", (e, a) -> new ListValue(new ArrayList<Value>()));
+//?} else {
+/*        put("scoreboard_tags", (e, a) -> ListValue.wrap(e.getTags().stream().map(StringValue::new)));
+*///?}
         put("entity_tags", (e, a) -> {
             EntityType<?> type = e.getType();
             return ListValue.wrap(e.level().getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).getTags().filter(entry -> entry.stream().anyMatch(h -> h.value() == type)).map(entry -> ValueConversions.of(entry)));
         });
         // deprecated
+//? if >=26.1 {
         put("has_tag", (e, a) -> BooleanValue.of(false));
+//?} else {
+/*        put("has_tag", (e, a) -> BooleanValue.of(e.getTags().contains(a.getString())));
+*///?}
 
+//? if >=26.1 {
         put("has_scoreboard_tag", (e, a) -> BooleanValue.of(false));
+//?} else {
+/*        put("has_scoreboard_tag", (e, a) -> BooleanValue.of(e.getTags().contains(a.getString())));
+*///?}
         put("has_entity_tag", (e, a) -> {
             Optional<HolderSet.Named<EntityType<?>>> tag = e.level().getServer().registryAccess().lookupOrThrow(Registries.ENTITY_TYPE).get(TagKey.create(Registries.ENTITY_TYPE, InputValidator.identifierOf(a.getString())));
             if (tag.isEmpty())
@@ -607,9 +671,22 @@ public class EntityValue extends Value
             }
             if (e instanceof LivingEntity livingEntity)
             {
+//? if >=26.1 {
                 // In 26.1, Brain.getMemories() returns a view-only map
                 // and ExpirableValue methods have changed
                 return Value.NULL;
+//?} else {
+/*                Brain<?> brain = livingEntity.getBrain();
+                @SuppressWarnings("deprecation")
+                Map<MemoryModuleType<?>, Optional<? extends ExpirableValue<?>>> memories = brain.getMemories();
+                Optional<? extends ExpirableValue<?>> optmemory = memories.get(moduleType);
+                if (optmemory == null || !optmemory.isPresent())
+                {
+                    return Value.NULL;
+                }
+                ExpirableValue<?> memory = optmemory.get();
+                return ValueConversions.fromTimedMemory(e, memory.getTimeToLive(), memory.getValue());
+*///?}
             }
             return Value.NULL;
         });
