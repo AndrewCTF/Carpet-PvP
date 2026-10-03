@@ -25,5 +25,9 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("autosetup_roundtrip", AutoSetupScenarios::roundtrip);
+        SCENARIOS.put("autosetup_each_mode", AutoSetupScenarios::eachMode);
+        SCENARIOS.put("autosetup_crash_safe", AutoSetupScenarios::crashSafe);
+        SCENARIOS.put("autosetup_rules_restored", AutoSetupScenarios::rulesRestored);
     }
 }

@@ -23,6 +23,7 @@ Two things to know before the list:
 | `/player <target> faction ...` | `commandPlayer` | Creates, joins, leaves, allies and inspects factions. | [FakePlayers.md](FakePlayers.md#factions) |
 | `/spawnplayer <name> [...]` | `commandPlayer` | Alias for `/player <name> spawn`, forwarding any trailing arguments. | [FakePlayers.md](FakePlayers.md#spawning) |
 | `/bot kit ...` | `commandBot` | `list`, `reload`, `give`, `save`, `delete`, `restore`. Hands out, saves and restores PvP loadouts. | [Kits.md](Kits.md) |
+| `/auto-setup [mode] [difficulty]`, `/auto-setup stop` | `commandAutoSetup` | On its own, prints a menu of the modes and difficulties to click. With a mode, builds an arena next to you, hands out the kit, puts a bot in front of you and keeps score between rounds. `stop` takes it all back down. | below |
 | `/carpetlogic ...` | `commandCarpetLogic` | `status`, `open`, `programs`, `programs run`, `programs stop`, `bots`. Runs bot programs and opens the web editor. | [CarpetLogic.md](CarpetLogic.md) |
 | `/schedule ...` | `commandPlayer` | `command <ticks> <command>`, `list`, `clear`. Runs a command after a delay in ticks. | below |
 
@@ -171,6 +172,34 @@ last.
 
 `/profile` and `/profile health [ticks]` report on the server tick itself; `/profile entities
 [ticks]` on the entity count. The report is printed to whoever asked for it when the ticks are up.
+
+### `/auto-setup`
+
+`/auto-setup` on its own prints two lines of buttons: the modes, then the difficulties. Every button
+runs the same command as if it had been typed, so one click is enough.
+
+`/auto-setup <mode> [difficulty]` does the whole thing:
+
+- turns on the rules the bot needs, remembering which ones it changed;
+- builds an arena twenty blocks east of you: a flat fenced floor for `sword` and `smp`, open sky over
+  four pillars for `mace`, an obsidian floor with a few holes in it for `crystal`;
+- saves your inventory, your place and your game mode to disk, then gives you the kit of the mode
+  and moves you into the arena in survival;
+- spawns a bot with the same kit at the difficulty you asked for, facing you, and starts the fight
+  after three seconds.
+
+A round ends when one of the two is down, or when a totem goes off in crystal. The score is kept,
+and the menu after each round is `[Rematch] [Easier] [Harder] [Change mode] [Stop]`, which run
+`/auto-setup <mode>`, `/auto-setup <mode> <difficulty>`, the menu, and `/auto-setup stop`.
+
+Asking for the mode you are already fighting is a rematch; asking for another one ends the session
+you had and starts a new one. A mode whose combat style is not written yet falls back to the sword
+and is still playable.
+
+`/auto-setup stop` takes the bot away, puts every block the arena wrote back, and gives you your
+inventory, your place and your game mode. The same happens if you log out or the server stops. If
+the server dies instead, the inventory stays on disk until you log back in, and then it is handed
+back along with the arena coming down.
 
 ## Related pages
 

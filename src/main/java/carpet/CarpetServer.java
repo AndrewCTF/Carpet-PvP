@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 
 import carpet.commands.BotCombatCommand;
 import carpet.commands.CounterCommand;
+import carpet.commands.AutoSetupCommand;
 import carpet.commands.BotCommand;
 import carpet.commands.DistanceCommand;
 import carpet.commands.DrawCommand;
@@ -139,6 +140,7 @@ public class CarpetServer
         PlayerCommand.register(dispatcher, commandBuildContext);
         BotCommand.register(dispatcher, commandBuildContext);
         BotCombatCommand.register(dispatcher, commandBuildContext);
+        AutoSetupCommand.register(dispatcher, commandBuildContext);
         SpawnPlayerCommand.register(dispatcher, commandBuildContext);
         InfoCommand.register(dispatcher, commandBuildContext);
         DistanceCommand.register(dispatcher, commandBuildContext);
