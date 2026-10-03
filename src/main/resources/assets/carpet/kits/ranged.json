@@ -1,0 +1,16 @@
+{
+  "name": "ranged",
+  "items": [
+    { "item": "minecraft:bow", "slot": 0, "enchantments": [ { "id": "minecraft:power", "level": 5 } ] },
+    { "item": "minecraft:crossbow", "slot": 1, "enchantments": [ { "id": "minecraft:quick_charge", "level": 3 } ] },
+    { "item": "minecraft:arrow", "count": 64, "slot": 2 },
+    { "item": "minecraft:diamond_sword", "slot": 3, "enchantments": [ { "id": "minecraft:sharpness", "level": 3 } ] },
+    { "item": "minecraft:golden_apple", "count": 4, "slot": 4 },
+    { "item": "minecraft:cooked_beef", "count": 16, "slot": 5 },
+    { "item": "minecraft:diamond_helmet", "slot": "head", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:diamond_chestplate", "slot": "chest", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:diamond_leggings", "slot": "legs", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:diamond_boots", "slot": "feet", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:shield", "slot": "offhand" }
+  ]
+}

@@ -36,6 +36,16 @@ public final class StyleIndex
         KITS.put(CombatStyle.MACE, "mace");
         KITS.put(CombatStyle.CRYSTAL, "crystal");
         KITS.put(CombatStyle.ANCHOR, "crystal");
+
+        STYLES.put(CombatStyle.RANGED, RangedStyle::new);
+        KITS.put(CombatStyle.RANGED, "ranged");
+        OPTIONS.put("ranged.bow", "true");
+        OPTIONS.put("ranged.crossbow", "true");
+        OPTIONS.put("ranged.trident", "true");
+        OPTIONS.put("ranged.spear", "true");
+        OPTIONS.put("ranged.tntcart", "true");
+        OPTIONS.put("ranged.keep", "9.0");
+        OPTIONS.put("ranged.draw", "-1");
     }
 
     public static boolean has(CombatStyle style)

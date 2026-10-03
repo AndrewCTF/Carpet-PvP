@@ -25,5 +25,14 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("ranged_kit", RangedScenarios::rangedKit);
+        SCENARIOS.put("bow_hits_static", RangedScenarios::bowHitsStatic);
+        SCENARIOS.put("bow_hits_moving", RangedScenarios::bowHitsMoving);
+        SCENARIOS.put("crossbow_cycle", RangedScenarios::crossbowCycle);
+        SCENARIOS.put("trident_throw", RangedScenarios::tridentThrow);
+        SCENARIOS.put("spear_reach", RangedScenarios::spearReach);
+        SCENARIOS.put("tnt_cart_safe", RangedScenarios::tntCartSafe);
+        SCENARIOS.put("ranged_keeps_distance", RangedScenarios::rangedKeepsDistance);
+        SCENARIOS.put("ranged_duel", RangedScenarios::rangedDuel);
     }
 }
