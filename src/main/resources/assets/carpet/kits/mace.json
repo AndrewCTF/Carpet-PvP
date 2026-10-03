@@ -1,0 +1,19 @@
+{
+  "name": "mace",
+  "items": [
+    { "item": "minecraft:mace", "slot": 0, "enchantments": [ { "id": "minecraft:density", "level": 5 } ] },
+    { "item": "minecraft:mace", "slot": 1, "enchantments": [ { "id": "minecraft:breach", "level": 4 } ] },
+    { "item": "minecraft:wind_charge", "count": 16, "slot": 2 },
+    { "item": "minecraft:golden_apple", "count": 4, "slot": 3 },
+    { "item": "minecraft:ender_pearl", "count": 3, "slot": 4 },
+    { "item": "minecraft:netherite_axe", "slot": 5, "enchantments": [ { "id": "minecraft:sharpness", "level": 2 } ] },
+    { "item": "minecraft:totem_of_undying", "count": 1, "slot": 6 },
+    { "item": "minecraft:totem_of_undying", "count": 1, "slot": 7 },
+    { "item": "minecraft:elytra", "slot": 8 },
+    { "item": "minecraft:netherite_helmet", "slot": "head", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_chestplate", "slot": "chest", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_leggings", "slot": "legs", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_boots", "slot": "feet", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:shield", "slot": "offhand" }
+  ]
+}
