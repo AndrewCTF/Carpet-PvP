@@ -1229,7 +1229,7 @@ public final class SelfTest
 
     /** Joins command lists into the mutable list the scenario machinery wants. */
     @SafeVarargs
-    private static List<String> joined(List<String>... parts)
+    static List<String> joined(List<String>... parts)
     {
         List<String> all = new ArrayList<>();
         for (List<String> part : parts)
@@ -1240,13 +1240,13 @@ public final class SelfTest
     }
 
     /** Kit of a sword bot: a diamond sword and a full set of diamond armour. */
-    private static List<String> swordKit(String name)
+    static List<String> swordKit(String name)
     {
         return swordKit(name, false);
     }
 
     /** Kit of a sword bot that also has to break shields. */
-    private static List<String> swordKit(String name, boolean withAxe)
+    static List<String> swordKit(String name, boolean withAxe)
     {
         List<String> kit = new ArrayList<>();
         kit.add("player " + name + " equip mainhand minecraft:diamond_sword");
@@ -1261,14 +1261,14 @@ public final class SelfTest
         return kit;
     }
 
-    private static List<String> shieldKit(String name)
+    static List<String> shieldKit(String name)
     {
         return List.of("give " + name + " minecraft:shield",
                 "player " + name + " equip offhand minecraft:shield");
     }
 
     /** Turns a bot into a sword fighter of the given difficulty. */
-    private static List<String> swordCombat(String name, String difficulty)
+    static List<String> swordCombat(String name, String difficulty)
     {
         return List.of("bot option " + name + " difficulty " + difficulty,
                 "bot option " + name + " shieldbreak true",
@@ -1280,7 +1280,7 @@ public final class SelfTest
      * immune to damage: a fake player has no real client, so it only counts as loaded after the
      * client-load timeout of the server runs out.
      */
-    private static boolean warmingUp(MinecraftServer server, String... names)
+    static boolean warmingUp(MinecraftServer server, String... names)
     {
         for (String name : names)
         {
@@ -1294,19 +1294,19 @@ public final class SelfTest
     }
 
     /** The body of the combat bot of that name, or null while it has not started fighting yet. */
-    private static BotBody body(MinecraftServer server, String name)
+    static BotBody body(MinecraftServer server, String name)
     {
         return player(server, name) instanceof EntityPlayerMPFake bot ? bot.getBotBrain().body() : null;
     }
 
-    private static BotStats stats(ServerPlayer bot)
+    static BotStats stats(ServerPlayer bot)
     {
         BotBody body = bot instanceof EntityPlayerMPFake fake ? fake.getBotBrain().body() : null;
         return body == null ? new BotStats() : body.stats();
     }
 
     /** Tells the bot to get its body built, for the scenarios that check on its counters. */
-    private static boolean waiting(MinecraftServer server, String... names)
+    static boolean waiting(MinecraftServer server, String... names)
     {
         for (String name : names)
         {
@@ -1319,7 +1319,7 @@ public final class SelfTest
     }
 
     /** Angle in degrees between where a bot looks and where its target is, in the horizontal plane. */
-    private static double angleTo(ServerPlayer bot, ServerPlayer target)
+    static double angleTo(ServerPlayer bot, ServerPlayer target)
     {
         double wanted = Math.toDegrees(Math.atan2(target.getZ() - bot.getZ(), target.getX() - bot.getX())) - 90.0D;
         double difference = wanted - bot.getYRot();
@@ -1327,7 +1327,7 @@ public final class SelfTest
     }
 
     /** Spawns all the pairs of the difficulty scenario at once. */
-    private static void spawnDuels(MinecraftServer server, Vec3 origin)
+    static void spawnDuels(MinecraftServer server, Vec3 origin)
     {
         for (int duel = 0; duel < DUELS; duel++)
         {
@@ -1337,23 +1337,23 @@ public final class SelfTest
         }
     }
 
-    private static String name(int duel, String side)
+    static String name(int duel, String side)
     {
         return "SelfX" + duel + side;
     }
 
-    private static String fighterName(int pair, String side)
+    static String fighterName(int pair, String side)
     {
         return "SelfB" + pair + side;
     }
 
-    private static void spawn(MinecraftServer server, String bot, Vec3 pos)
+    static void spawn(MinecraftServer server, String bot, Vec3 pos)
     {
         run(server, "player " + bot + " spawn at " + coords(pos) + " facing 0 0 in minecraft:overworld in survival");
     }
 
     /** One duel of the difficulty scenario: the expert takes a different side every other duel. */
-    private static void startDuel(MinecraftServer server)
+    static void startDuel(MinecraftServer server)
     {
         String first = name(duelIndex, "a");
         String second = name(duelIndex, "b");
@@ -1366,7 +1366,7 @@ public final class SelfTest
     }
 
     /** Counts the expert bot winning the current duel of the difficulty scenario. */
-    private static Probe duelProbe(MinecraftServer server)
+    static Probe duelProbe(MinecraftServer server)
     {
         if (duelIndex < 0)
         {
@@ -1421,7 +1421,7 @@ public final class SelfTest
      * Watches the shared simulation budget with eight bots fighting in four pairs: first with the rule
      * as it is, then cut down so the bots get nothing to plan with, and once more after restoring it.
      */
-    private static Probe budgetProbe(MinecraftServer server)
+    static Probe budgetProbe(MinecraftServer server)
     {
         if (!budgetArmed)
         {
@@ -1544,7 +1544,7 @@ public final class SelfTest
     }
 
     /** The hand the player's current swing is with, or null while it is not swinging. */
-    private static InteractionHand swingHand(ServerPlayer player)
+    static InteractionHand swingHand(ServerPlayer player)
     {
         //? if >=26.3 {
         LivingEntity.SwingDescription swing = player.getCurrentSwing();
@@ -1554,13 +1554,13 @@ public final class SelfTest
         *///?}
     }
 
-    private static String handName(InteractionHand hand)
+    static String handName(InteractionHand hand)
     {
         return hand == InteractionHand.OFF_HAND ? "off" : "main";
     }
 
     /** Puts the two shapes of kit file into the world's kit folder, the way a server admin would. */
-    private static String writeKitFiles(MinecraftServer server)
+    static String writeKitFiles(MinecraftServer server)
     {
         Path folder = server.getWorldPath(LevelResource.ROOT).resolve("carpet-kits");
         try
@@ -1577,7 +1577,7 @@ public final class SelfTest
     }
 
     /** What a kit from the world's folder has to have put on the player it was given to. */
-    private static String checkKit(ServerPlayer bot, String kit, RegistryAccess registries)
+    static String checkKit(ServerPlayer bot, String kit, RegistryAccess registries)
     {
         String mainHand = kit.equals(HAND_WRITTEN_KIT) ? "netherite_sword" : "diamond_pickaxe";
         if (!holds(bot.getMainHandItem(), mainHand))
@@ -2363,7 +2363,7 @@ public final class SelfTest
     }
 
     /** Average wall-clock time between two self-test ticks of the budget scenario, milliseconds. */
-    private static double tickMillis()
+    static double tickMillis()
     {
         return budgetTickNanosTotal / 1000000.0D / (budgetWatch - 1);
     }
