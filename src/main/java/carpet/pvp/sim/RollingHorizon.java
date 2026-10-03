@@ -8,12 +8,13 @@ import java.util.Random;
  */
 public final class RollingHorizon
 {
-    private static final double DISTANCE_WEIGHT = 0.05;
-    private static final double PREFERRED_DISTANCE = 2.6;
-    private static final double MUTATION_RATE = 0.15;
-
     private final int horizon;
     private final int population;
+    private final double mutationRate;
+    private final double dealtWeight;
+    private final double takenWeight;
+    private final double distanceWeight;
+    private final double preferredDistance;
     private final Random random;
     private final int[][] sequences;
     private final double[] fitness;
@@ -24,8 +25,18 @@ public final class RollingHorizon
 
     public RollingHorizon(int horizon, int population, Random random)
     {
-        this.horizon = horizon;
-        this.population = population;
+        this(PlannerParams.search(horizon, population), random);
+    }
+
+    public RollingHorizon(PlannerParams params, Random random)
+    {
+        this.horizon = params.horizon();
+        this.population = params.population();
+        this.mutationRate = params.mutationRate();
+        this.dealtWeight = params.dealtWeight();
+        this.takenWeight = params.takenWeight();
+        this.distanceWeight = params.distanceWeight();
+        this.preferredDistance = params.preferredDistance();
         this.random = random;
         this.sequences = new int[population][horizon];
         this.fitness = new double[population];
@@ -136,7 +147,7 @@ public final class RollingHorizon
         boolean changed = false;
         for (int t = 0; t < horizon; t++)
         {
-            if (random.nextDouble() < MUTATION_RATE)
+            if (random.nextDouble() < mutationRate)
             {
                 child[t] = randomAction();
                 changed = true;
@@ -188,6 +199,7 @@ public final class RollingHorizon
         }
         double dealt = theirs0 - Math.max(0.0f, sim.fighter(other).health);
         double taken = mine0 - Math.max(0.0f, sim.fighter(self).health);
-        return dealt - taken - DISTANCE_WEIGHT * Math.abs(sim.horizontalDistance() - PREFERRED_DISTANCE);
+        return dealtWeight * dealt - takenWeight * taken
+                - distanceWeight * Math.abs(sim.horizontalDistance() - preferredDistance);
     }
 }

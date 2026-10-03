@@ -35,6 +35,8 @@ public final class DuelSim
     public static final double EYE_HEIGHT = 1.62;
     public static final double HALF_WIDTH = 0.3;
     public static final double HEIGHT = 1.8;
+    /** Attributes.MAX_HEALTH of a player. */
+    public static final float MAX_HEALTH = 20.0f;
     private static final double FRONT_COS = 0.5;
 
     public static final class Fighter
@@ -51,7 +53,7 @@ public final class DuelSim
         public boolean sprinting;
         /** True after a sprint hit until the fighter releases sprint. */
         public boolean sprintLocked;
-        public float health = 20.0f;
+        public float health = MAX_HEALTH;
         public int ticksSinceSwing = 100;
         public int invulTime;
         public float lastHurt;
@@ -166,6 +168,18 @@ public final class DuelSim
         b.x = 0.0;
         b.y = 0.0;
         b.z = distance;
+        face(a, b);
+        face(b, a);
+    }
+
+    /**
+     * The same, but with B offset sideways by side blocks. Without it two fighters that play alike meet in a
+     * perfect mirror and trade lethal hits on the same tick, which hides every difference between them.
+     */
+    public void placeFacing(double distance, double side)
+    {
+        placeFacing(distance);
+        b.x += side;
         face(a, b);
         face(b, a);
     }
