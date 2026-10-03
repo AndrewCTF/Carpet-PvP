@@ -40,7 +40,11 @@ public abstract class Player_swordBlockStateMixin extends LivingEntity implement
             float reduced = (float) Math.max(0.0, amount * CarpetSettings.swordBlockDamageMultiplier);
             this.carpet$pendingKbMultiplier = (float) CarpetSettings.swordBlockKnockbackMultiplier;
             boolean result = super.hurtServer(serverLevel, source, reduced);
-            this.invulnerableTime = Math.max(this.invulnerableTime, 5);
+            //? if >=26.3 {
+            this.setInvulnerableTime(Math.max(this.getInvulnerableTime(), 5));
+            //?} else {
+            /*this.invulnerableTime = Math.max(this.invulnerableTime, 5);
+            *///?}
             cir.setReturnValue(result);
         }
     }

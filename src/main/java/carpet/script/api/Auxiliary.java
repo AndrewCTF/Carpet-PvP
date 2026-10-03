@@ -65,11 +65,10 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.StatType;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.CommandStorage;
@@ -381,7 +380,7 @@ public class Auxiliary
                 throw new InternalExpressionException("'create_marker' requires a name and three coordinates, with optional direction, and optional block on its head");
             }
             Level level = cc.level();
-            ArmorStand armorstand = new ArmorStand(EntityType.ARMOR_STAND, level);
+            ArmorStand armorstand = new ArmorStand(EntityTypes.ARMOR_STAND, level);
             double yoffset;
             if (targetBlock == null && name == null)
             {
@@ -424,7 +423,8 @@ public class Auxiliary
             armorstand.setHeadPose(new Rotations((int) pointLocator.pitch, 0, 0));
             armorstand.setNoGravity(true);
             armorstand.setInvisible(true);
-            armorstand.setInvulnerable(true);
+            //~ if >=26.3 'setInvulnerable' -> 'setPermanentlyInvulnerable'
+            armorstand.setPermanentlyInvulnerable(true);
             armorstand.getEntityData().set(ArmorStand.DATA_CLIENT_FLAGS, (byte) (interactable ? 8 : 16 | 8));
             level.addFreshEntity(armorstand);
             return new EntityValue(armorstand);
@@ -434,8 +434,11 @@ public class Auxiliary
             CarpetContext cc = (CarpetContext) c;
             int total = 0;
             String markerName = MARKER_STRING + "_" + ((cc.host.getName() == null) ? "" : cc.host.getName());
-            // In 26.1, need to use a different entity filtering approach
-            // For now, return 0 - markers can be removed manually
+            for (Entity e : cc.level().getEntities(EntityTypes.ARMOR_STAND, as -> as.entityTags().contains(markerName)))
+            {
+                total++;
+                e.discard();
+            }
             return new NumericValue(total);
         });
 
@@ -853,12 +856,21 @@ public class Auxiliary
                 plopData.put(StringValue.of("scarpet_custom"),
                         ListValue.wrap(FeatureGenerator.featureMap.keySet().stream().sorted().map(StringValue::of))
                 );
+                //? if >=26.3 {
+                plopData.put(StringValue.of("feature_types"),
+                        ListValue.wrap(cc.registry(Registries.FEATURE_TYPE).keySet().stream().sorted().map(ValueConversions::of))
+                );
                 plopData.put(StringValue.of("features"),
+                        ListValue.wrap(cc.registry(Registries.FEATURE).keySet().stream().sorted().map(ValueConversions::of))
+                );
+                //?} else {
+                /*plopData.put(StringValue.of("features"),
                         ListValue.wrap(cc.registry(Registries.FEATURE).keySet().stream().sorted().map(ValueConversions::of))
                 );
                 plopData.put(StringValue.of("configured_features"),
                         ListValue.wrap(cc.registry(Registries.CONFIGURED_FEATURE).keySet().stream().sorted().map(ValueConversions::of))
                 );
+                *///?}
                 plopData.put(StringValue.of("structure_types"),
                         ListValue.wrap(cc.registry(Registries.STRUCTURE_TYPE).keySet().stream().sorted().map(ValueConversions::of))
                 );

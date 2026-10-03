@@ -7,7 +7,7 @@ import carpet.script.external.Vanilla;
 import carpet.script.utils.Colors;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import net.minecraft.advancements.criterion.MinMaxBounds;
+import net.minecraft.advancements.predicates.MinMaxBounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderSet;
@@ -536,7 +536,7 @@ public class ValueConversions
         }
         if (o instanceof final Vec3i vec3i)
         {
-            return of(new BlockPos(vec3i));
+            return of(new BlockPos(vec3i.getX(), vec3i.getY(), vec3i.getZ()));
         }
         if (o instanceof final AABB aabb)
         {

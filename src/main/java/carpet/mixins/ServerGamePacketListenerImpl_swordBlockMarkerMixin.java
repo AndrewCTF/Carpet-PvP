@@ -24,7 +24,8 @@ public abstract class ServerGamePacketListenerImpl_swordBlockMarkerMixin {
     @Inject(method = "handleUseItem", at = @At("HEAD"))
     private void markSwordBlock(ServerboundUseItemPacket packet, CallbackInfo ci) {
         if (!CarpetSettings.swordBlockHitting) return;
-        InteractionHand hand = packet.getHand();
+        //~ if >=26.3 '.getHand()' -> '.hand()'
+        InteractionHand hand = packet.hand();
         ItemStack stack = player.getItemInHand(hand);
         if (!stack.isEmpty() && stack.is(ItemTags.SWORDS)) {
             int ticks = CarpetSettings.swordBlockWindowTicks;
@@ -48,7 +49,8 @@ public abstract class ServerGamePacketListenerImpl_swordBlockMarkerMixin {
     @Inject(method = "handleUseItemOn", at = @At("HEAD"))
     private void markSwordBlockOn(ServerboundUseItemOnPacket packet, CallbackInfo ci) {
         if (!CarpetSettings.swordBlockHitting) return;
-        InteractionHand hand = packet.getHand();
+        //~ if >=26.3 '.getHand()' -> '.hand()'
+        InteractionHand hand = packet.hand();
         ItemStack stack = player.getItemInHand(hand);
         if (!stack.isEmpty() && stack.is(ItemTags.SWORDS)) {
             int ticks = CarpetSettings.swordBlockWindowTicks;

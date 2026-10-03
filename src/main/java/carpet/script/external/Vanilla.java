@@ -6,7 +6,8 @@ import carpet.fakes.ServerPlayerInteractionManagerInterface;
 import carpet.fakes.ServerWorldInterface;
 import carpet.fakes.SpawnHelperInnerInterface;
 import carpet.fakes.TicketsFetcherInterface;
-import carpet.fakes.RandomStateVisitorAccessor;
+//? if <26.3
+//import carpet.fakes.RandomStateVisitorAccessor;
 import carpet.fakes.BlockStateArgumentInterface;
 import carpet.fakes.InventoryBearerInterface;
 import carpet.fakes.AbstractContainerMenuInterface;
@@ -61,7 +62,8 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.pattern.BlockInWorld;
-import net.minecraft.world.level.levelgen.DensityFunction;
+//? if <26.3
+//import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.ServerLevelData;
@@ -123,10 +125,12 @@ public class Vanilla
         return ((TicketsFetcherInterface) ticketManager).getTicketsByPosition();
     }
 
-    public static DensityFunction.Visitor RandomState_getVisitor(RandomState randomState)
+    //? if <26.3 {
+    /*public static DensityFunction.Visitor RandomState_getVisitor(RandomState randomState)
     {
         return ((RandomStateVisitorAccessor) (Object) randomState).getVisitor();
     }
+    *///?}
 
     public static CompoundTag BlockInput_getTag(BlockInput blockInput)
     {

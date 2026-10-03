@@ -3,6 +3,8 @@ package carpet.mixins;
 import carpet.CarpetSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -24,7 +26,8 @@ public class BuddingAmethystBlock_movableAmethystMixin extends Block {
     }
 
     @Override
-    public void playerDestroy(Level world, Player player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack stack) {
+    //~ if >=26.3 'Level world, Player player' -> 'ServerLevel world, ServerPlayer player'
+    public void playerDestroy(ServerLevel world, ServerPlayer player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack stack) {
         super.playerDestroy(world, player, pos, state, blockEntity, stack);
         // doing it here rather than though loottables since loottables are loaded on reload
         // drawback - not controlled via loottables, but hey

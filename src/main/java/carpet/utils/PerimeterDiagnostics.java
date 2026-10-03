@@ -9,6 +9,7 @@ import net.minecraft.util.random.Weighted;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.SpawnPlacements;
@@ -86,7 +87,7 @@ public class PerimeterDiagnostics
             }
         }
         PerimeterDiagnostics diagnostic = new PerimeterDiagnostics(worldserver,ctype,el);
-        EntityType<?> type = EntityType.ZOMBIE;
+        EntityType<?> type = EntityTypes.ZOMBIE;
         if (el != null) type = el.getType();
         int minY = worldserver.getMinY();
         int maxY = worldserver.getMaxY();
@@ -160,10 +161,11 @@ public class PerimeterDiagnostics
 
     private boolean check_entity_spawn(BlockPos pos)
     {
-        if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer.getBiome(pos), worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
+        //~ if >=26.3 'getMobsAt(worldServer.getBiome(pos),' -> 'getMobsAt(worldServer,' {
+        if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer, worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
         {
             sle = null;
-            for (Weighted<MobSpawnSettings.SpawnerData> wsle: worldServer.getChunkSource().getGenerator().getMobsAt(worldServer.getBiome(pos), worldServer.structureManager(), ctype, pos).unwrap())
+            for (Weighted<MobSpawnSettings.SpawnerData> wsle: worldServer.getChunkSource().getGenerator().getMobsAt(worldServer, worldServer.structureManager(), ctype, pos).unwrap())
             {
                 MobSpawnSettings.SpawnerData sle = wsle.value();
                 if (el.getType() == sle.type())
@@ -172,11 +174,12 @@ public class PerimeterDiagnostics
                     break;
                 }
             }
-            if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer.getBiome(pos), worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
+            if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer, worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
             {
                 return false;
             }
         }
+        //~}
 
         if (SpawnPlacements.isSpawnPositionOk(sle.type(), worldServer, pos))
         {

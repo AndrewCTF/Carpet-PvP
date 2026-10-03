@@ -19,7 +19,8 @@ public class ShulkerBoxBlockEntity_creativeNoClipMixin
     private PushReaction getPistonBehaviourOfNoClipPlayers(Entity entity)
     {
         if (CarpetSettings.creativeNoClip && entity instanceof Player && (((Player) entity).isCreative()) && ((Player) entity).getAbilities().flying)
-            return PushReaction.IGNORE;
+            //~ if >=26.3 'PushReaction.IGNORE' -> 'PushReaction.IGNORE_ENTITY'
+            return PushReaction.IGNORE_ENTITY;
         return entity.getPistonPushReaction();
     }
 }

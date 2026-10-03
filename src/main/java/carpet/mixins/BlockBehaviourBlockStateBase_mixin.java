@@ -21,7 +21,8 @@ public abstract class BlockBehaviourBlockStateBase_mixin
     {
         if (CarpetSettings.movableAmethyst && getBlock() instanceof BuddingAmethystBlock)
         {
-            cir.setReturnValue(PushReaction.NORMAL);
+            //~ if >=26.3 'PushReaction.NORMAL' -> 'PushReaction.PUSH_PULL'
+            cir.setReturnValue(PushReaction.PUSH_PULL);
         }
     }
 }

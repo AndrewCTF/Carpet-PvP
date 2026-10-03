@@ -1,17 +1,15 @@
 package carpet.script.value;
 
+import carpet.script.exception.InternalExpressionException;
+import com.mojang.serialization.DynamicOps;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.MutableComponent;
 
-/**
- * Temporary compatibility shim for 1.21.8: avoid ComponentSerialization.codec(regs)
- * Use plain-string serialization to clear compile errors. This preserves runtime
- * behavior for concatenation and boolean/string conversions, and stores JSON using
- * Component's vanilla toString()/literal where needed.
- */
 public class FormattedTextValue extends StringValue
 {
     Component text;
@@ -92,8 +90,7 @@ public class FormattedTextValue extends StringValue
         {
             throw new NBTSerializableValue.IncompatibleTypeException(this);
         }
-        // Store raw string form; removes dependency on ComponentSerialization.codec(regs)
-        return StringTag.valueOf(getString());
+        return serialize(regs);
     }
 
     @Override
@@ -102,20 +99,19 @@ public class FormattedTextValue extends StringValue
         return combine(this, o);
     }
 
-    public String serialize(RegistryAccess regs)
+    public Tag serialize(RegistryAccess regs)
     {
-        // Plain string serialization for now
-        return getString();
+        return ComponentSerialization.CODEC.encodeStart(regs.createSerializationContext(NbtOps.INSTANCE), text).getOrThrow(InternalExpressionException::new);// text.getContents() Component.Serializer.toJson(text, regs);
     }
 
-    public static FormattedTextValue deserialize(String serialized, RegistryAccess regs)
+    public static FormattedTextValue deserialize(Tag tag, RegistryAccess regs)
     {
-        // Interpret stored string as a literal component
-        return new FormattedTextValue(Component.literal(serialized));
+        return new FormattedTextValue(ComponentSerialization.CODEC.decode(regs.createSerializationContext(NbtOps.INSTANCE), tag).getOrThrow(InternalExpressionException::new).getFirst());
     }
 
     public static Component getTextByValue(Value value)
     {
         return (value instanceof FormattedTextValue ftv) ? ftv.getText() : Component.literal(value.getString());
     }
+
 }

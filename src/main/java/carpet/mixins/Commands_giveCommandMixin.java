@@ -11,6 +11,8 @@ import net.minecraft.commands.arguments.item.ItemArgument;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+//? if >=26.3
+import net.minecraft.util.Prediction;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -92,7 +94,7 @@ public class Commands_giveCommandMixin {
             equipmentAction = "upgraded";
             
             // Drop the old armor
-            fakePlayer.drop(currentArmor, false);
+            fakePlayer.drop(currentArmor, false/*? if >=26.3 {*/, Prediction.SERVER_ONLY/*?}*/);
         }
         
         if (shouldEquip) {

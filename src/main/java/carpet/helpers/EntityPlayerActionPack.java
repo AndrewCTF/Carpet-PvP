@@ -27,10 +27,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+//? if >=26.3
+import net.minecraft.util.Prediction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.SkeletonHorse;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.vehicle.boat.Boat;
@@ -40,6 +43,7 @@ import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -1388,7 +1392,8 @@ public class EntityPlayerActionPack
             player.level().destroyBlockProgress(-1, pos, (int) (curBlockDamageMP * 10));
         }
         player.resetLastActionTime();
-        player.swing(InteractionHand.MAIN_HAND);
+        //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+        player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
         return false;
     }
 
@@ -1428,7 +1433,8 @@ public class EntityPlayerActionPack
         InteractionResult result = player.gameMode.useItemOn(player, (ServerLevel) player.level(), player.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
         if (result.consumesAction())
         {
-            player.swing(InteractionHand.MAIN_HAND);
+            //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+            player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
             itemUseCooldown = 3;
             return true;
         }
@@ -2653,7 +2659,7 @@ public class EntityPlayerActionPack
         if (!inv.getItem(slot).isEmpty())
             player.drop(inv.removeItem(slot,
                     dropAll ? inv.getItem(slot).getCount() : 1
-            ), false, true); // scatter, keep owner
+            ), /*? if >=26.3 {*/true, Prediction.SERVER_ONLY/*?} else {*//*false, true*//*?}*/); // scatter, keep owner
     }
 
     public void drop(int selectedSlot, boolean dropAll)
@@ -2710,7 +2716,8 @@ public class EntityPlayerActionPack
                             if (pos.getY() < player.level().getMaxY() - (side == Direction.UP ? 1 : 0) && world.mayInteract(player, pos))
                             {
                                 InteractionResult result = player.gameMode.useItemOn(player, world, player.getItemInHand(hand), hand, blockHit);
-                                player.swing(hand);
+                                //~ if >=26.3 'swing(hand)' -> 'swingAndResetAttackStrength(hand, SwingAnimation.DEFAULT, false)'
+                                player.swingAndResetAttackStrength(hand, SwingAnimation.DEFAULT, false);
                                 if (result instanceof InteractionResult.Success success)
                                 {
                                     ap.itemUseCooldown = 3;
@@ -2726,9 +2733,16 @@ public class EntityPlayerActionPack
                             Entity entity = entityHit.getEntity();
                             boolean handWasEmpty = player.getItemInHand(hand).isEmpty();
                             boolean itemFrameEmpty = (entity instanceof ItemFrame) && ((ItemFrame) entity).getItem().isEmpty();
+                            //? if >=26.3 {
+                            // client always consumes action with food on a horse, unless it's a skeleton horse.
+                            boolean isFeedingHorse = entity instanceof AbstractHorse horse
+                                    && horse.isAlive()
+                                    && horse.isFood(player.getItemInHand(hand))
+                                    && !(horse instanceof SkeletonHorse);
+                            //?}
                             Vec3 relativeHitPos = entityHit.getLocation().subtract(entity.getX(), entity.getY(), entity.getZ());
                             // interactAt signature changed in 26.1 - use interact instead
-                            if (entity.interact(player, hand, relativeHitPos).consumesAction())
+                            if (entity.interact(player, hand, relativeHitPos).consumesAction()/*? if >=26.3 {*/ || isFeedingHorse/*?}*/)
                             {
                                 ap.itemUseCooldown = 3;
                                 return true;
@@ -2843,7 +2857,8 @@ public class EntityPlayerActionPack
 
                     // Direct attack — bypass ray trace for 100% accuracy.
                     player.attack(chaseTarget);
-                    player.swing(InteractionHand.MAIN_HAND);
+                    //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+                    player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                     player.resetAttackStrengthTicker();
                     player.resetLastActionTime();
                     ap.navChaseAttackCooldown = ap.navChaseAttackInterval;
@@ -2926,6 +2941,14 @@ public class EntityPlayerActionPack
                     case ENTITY: {
                         EntityHitResult entityHit = (EntityHitResult) hit;
 
+                        // PvP combat-AI realism: deliberately miss a fraction of swings
+                        // (also covers the ray-trace attack path, not just the chase path).
+                        if (ap.botMissChancePercent > 0
+                                && player.getRandom().nextInt(100) < ap.botMissChancePercent)
+                        {
+                            return false;
+                        }
+
                         if (!CarpetSettings.spamClickCombat)
                         {
                             // Prevent constant weak hits when spamming attacks in modern combat
@@ -2936,7 +2959,8 @@ public class EntityPlayerActionPack
                         }
 
                         player.attack(entityHit.getEntity());
-                        player.swing(InteractionHand.MAIN_HAND);
+                        //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+                        player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                         player.resetAttackStrengthTicker();
                         player.resetLastActionTime();
 
@@ -3008,7 +3032,8 @@ public class EntityPlayerActionPack
 
                         }
                         player.resetLastActionTime();
-                        player.swing(InteractionHand.MAIN_HAND);
+                        //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+                        player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                         return blockBroken;
                     }
                 }
@@ -3023,7 +3048,8 @@ public class EntityPlayerActionPack
                 {
                     return false;
                 }
-                player.swing(InteractionHand.MAIN_HAND);
+                //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+                player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                 player.resetLastActionTime();
                 return false;
             }
@@ -3098,7 +3124,8 @@ public class EntityPlayerActionPack
             boolean execute(ServerPlayer player, Action action)
             {
                 // Plays the arm swing animation without performing any interaction.
-                player.swing(InteractionHand.MAIN_HAND);
+                //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+                player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                 player.resetLastActionTime();
                 return false;
             }

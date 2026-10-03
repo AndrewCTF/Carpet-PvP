@@ -1,56 +1,113 @@
 package carpet.network;
 
+import carpet.CarpetServer;
 import carpet.CarpetSettings;
+import carpet.script.utils.ShapesRenderer;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
 public class CarpetClient
 {
-    public static final String HI = "69";
-    public static final String HELLO = "420";
-    public static String serverCarpetVersion;
-
-    public static final Identifier CARPET_CHANNEL = Identifier.fromNamespaceAndPath("carpet", "hello");
-
-    // Stub implementations for server-side compilation
-    public static void setCarpet()
+    public record CarpetPayload(CompoundTag data) implements CustomPacketPayload
     {
-        // Client-only functionality - no-op on server
-    }
+        public static final StreamCodec<FriendlyByteBuf, CarpetPayload> STREAM_CODEC = CustomPacketPayload.codec(CarpetPayload::write, CarpetPayload::new);
 
-    public static void onClientCommand(Tag data)
-    {
-        // Client-only functionality
-    }
+        public static final Type<CarpetPayload> TYPE = new CustomPacketPayload.Type<>(CARPET_CHANNEL);
 
-    public static class CarpetPayload implements CustomPacketPayload
-    {
-        private final CompoundTag data;
-
-        public CarpetPayload(CompoundTag data)
+        public CarpetPayload(FriendlyByteBuf input)
         {
-            this.data = data;
+            this(input.readNbt());
         }
 
-        public void write(FriendlyByteBuf buf)
+        public void write(FriendlyByteBuf output)
         {
-            buf.writeNbt(data);
+            output.writeNbt(data);
         }
 
-        public static CarpetPayload read(FriendlyByteBuf buf)
-        {
-            return new CarpetPayload(buf.readNbt());
-        }
-
-        @Override
-        public Type type()
+        @Override public Type<CarpetPayload> type()
         {
             return TYPE;
         }
+    }
 
-        public static final Type TYPE = new Type(Identifier.fromNamespaceAndPath("carpet", "hello"));
+    public static final String HI = "69";
+    public static final String HELLO = "420";
+
+    public static ShapesRenderer shapes = null;
+
+    private static LocalPlayer clientPlayer = null;
+    private static boolean isServerCarpet = false;
+    public static String serverCarpetVersion;
+    public static final Identifier CARPET_CHANNEL = Identifier.fromNamespaceAndPath("carpet", "hello");
+
+    public static void gameJoined(LocalPlayer player)
+    {
+        clientPlayer = player;
+    }
+
+    public static void disconnect()
+    {
+        if (isServerCarpet) // multiplayer connection
+        {
+            isServerCarpet = false;
+            clientPlayer = null;
+            CarpetServer.onServerClosed(null);
+            CarpetServer.onServerDoneClosing(null);
+        }
+        else // singleplayer disconnect
+        {
+            CarpetServer.clientPreClosing();
+        }
+    }
+
+    public static void setCarpet()
+    {
+        isServerCarpet = true;
+    }
+
+    public static LocalPlayer getPlayer()
+    {
+        return clientPlayer;
+    }
+
+    public static boolean isCarpet()
+    {
+        return isServerCarpet;
+    }
+
+    public static boolean sendClientCommand(String command)
+    {
+        if (!isServerCarpet && CarpetServer.minecraft_server == null)
+        {
+            return false;
+        }
+        ClientNetworkHandler.clientCommand(command);
+        return true;
+    }
+
+    public static void onClientCommand(Tag t)
+    {
+        CarpetSettings.LOG.info("Server Response:");
+        CompoundTag tag = (CompoundTag) t;
+        CarpetSettings.LOG.info(" - id: " + tag.getString("id"));
+        if (tag.contains("error"))
+        {
+            CarpetSettings.LOG.warn(" - error: " + tag.getString("error"));
+        }
+        if (tag.contains("output"))
+        {
+            ListTag outputTag = (ListTag) tag.get("output");
+            for (int i = 0; i < outputTag.size(); i++)
+            {
+                CarpetSettings.LOG.info(" - response: " + outputTag.getString(i).orElseThrow());
+            }
+        }
     }
 }

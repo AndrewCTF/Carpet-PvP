@@ -103,9 +103,12 @@ public abstract class PistonMovingBlockEntity_movableBEMixin extends BlockEntity
     }
     
     @Redirect(method = "finalTick", at = @At(value = "INVOKE",
-              target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean movableTEsetBlockState1(Level world, BlockPos blockPos_1, BlockState blockState_2, int int_1)
+              //~ if >=26.3 'Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z' -> 'Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z'
+              target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean movableTEsetBlockState1(Level world, BlockPos blockPos_1, BlockState blockState_2/*? if <26.3 {*//*, int int_1*//*?}*/)
     {
+        //? if >=26.3
+        int int_1 = Block.UPDATE_ALL;
         if (!CarpetSettings.movableBlockEntities)
             return world.setBlock(blockPos_1, blockState_2, int_1);
         else

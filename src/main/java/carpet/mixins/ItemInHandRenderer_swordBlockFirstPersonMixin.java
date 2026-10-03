@@ -3,8 +3,13 @@ package carpet.mixins;
 import carpet.client.SwordBlockVisuals;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.ItemInHandRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
+//~ if >=26.3 'ItemInHandRenderer' -> 'FirstPersonHandsAndItemsRenderer'
+import net.minecraft.client.renderer.FirstPersonHandsAndItemsRenderer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+//? if >=26.3 {
+import net.minecraft.client.renderer.state.level.FirstPersonHandsAndItemsRenderState;
+import net.minecraft.client.renderer.state.level.PlayerRenderState;
+//?}
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
@@ -17,13 +22,19 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ItemInHandRenderer.class)
+//~ if >=26.3 'ItemInHandRenderer' -> 'FirstPersonHandsAndItemsRenderer'
+@Mixin(FirstPersonHandsAndItemsRenderer.class)
 public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
     @Unique private boolean carpet$pushed;
 
-    @Inject(method = "renderArmWithItem", at = @At("HEAD"))
+    @Inject(method = "submitArmWithItem", at = @At("HEAD"))
     private void carpet$blockHitStart(
-            AbstractClientPlayer player,
+            //? if >=26.3 {
+            PlayerRenderState playerRenderState,
+            FirstPersonHandsAndItemsRenderState handsRenderState,
+            //?} else {
+            /*AbstractClientPlayer player,
+            *///?}
             float partialTick,
             float pitch,
             InteractionHand hand,
@@ -31,11 +42,13 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
             ItemStack stack,
             float equipProgress,
             PoseStack poseStack,
-            MultiBufferSource buffer,
+            SubmitNodeCollector buffer,
             int packedLight,
             CallbackInfo ci
     ) {
         this.carpet$pushed = false;
+        //? if >=26.3
+        AbstractClientPlayer player = Minecraft.getInstance().player;
         if (player == null) return;
         if (hand != InteractionHand.MAIN_HAND) return; // main-hand only
         if (stack.isEmpty() || !stack.is(ItemTags.SWORDS)) return;
@@ -59,12 +72,18 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
         float baseAngle = 60.0f;
         float dir = (player.getMainArm() == HumanoidArm.RIGHT) ? 1.0f : -1.0f;
         float roll = dir * baseAngle * ease;
-        poseStack.mulPose(new Quaternionf().rotationXYZ(0f, 0f, (float) Math.toRadians(roll)));
+        //~ if >=26.3 'poseStack.mulPose(' -> 'poseStack.rotate('
+        poseStack.rotate(new Quaternionf().rotationXYZ(0f, 0f, (float) Math.toRadians(roll)));
     }
 
-    @Inject(method = "renderArmWithItem", at = @At("RETURN"))
+    @Inject(method = "submitArmWithItem", at = @At("RETURN"))
     private void carpet$blockHitEnd(
-            AbstractClientPlayer player,
+            //? if >=26.3 {
+            PlayerRenderState playerRenderState,
+            FirstPersonHandsAndItemsRenderState handsRenderState,
+            //?} else {
+            /*AbstractClientPlayer player,
+            *///?}
             float partialTick,
             float pitch,
             InteractionHand hand,
@@ -72,7 +91,7 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
             ItemStack stack,
             float equipProgress,
             PoseStack poseStack,
-            MultiBufferSource buffer,
+            SubmitNodeCollector buffer,
             int packedLight,
             CallbackInfo ci
     ) {

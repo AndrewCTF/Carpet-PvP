@@ -2,6 +2,7 @@ package carpet.mixins;
 
 import carpet.patches.EntityPlayerMPFake;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
@@ -49,7 +50,7 @@ public abstract class Player_fakePlayerStrongAttackMixin
             method = "attack",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/entity/player/Player;causeExtraKnockback(Lnet/minecraft/world/entity/Entity;FLnet/minecraft/world/phys/Vec3;)V"
+                    target = "Lnet/minecraft/world/entity/player/Player;causeExtraKnockback(Lnet/minecraft/world/entity/Entity;FLnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/damagesource/DamageSource;FZ)V"
             ),
             index = 1
     )
@@ -62,7 +63,7 @@ public abstract class Player_fakePlayerStrongAttackMixin
             method = "causeExtraKnockback",
             at = @At("HEAD")
     )
-    private void carpet$fakePlayerSprintKnockbackSound(Entity target, float strength, Vec3 oldTargetVelocity, CallbackInfo ci)
+    private void carpet$fakePlayerSprintKnockbackSound(Entity target, float strength, Vec3 oldTargetVelocity, DamageSource damageSource, float damage, boolean comesFromEffect, CallbackInfo ci)
     {
         if (!carpet$fakePlayerAddSprintKnockback)
         {

@@ -12,7 +12,7 @@ Support this project: [Buy Me a Coffee](https://buymeacoffee.com/andrewyong)
 
 ## Supported versions:
 
-26.1.2
+26.3 and 26.2. For 26.1.2 use release 17.
 
 ## Installation
 
@@ -25,7 +25,7 @@ Support this project: [Buy Me a Coffee](https://buymeacoffee.com/andrewyong)
 1. Download the latest release from the [Releases](https://github.com/AndrewCTF/Carpet-PvP/releases) page
 2. Place the `.jar` file in your `mods` folder
 3. Ensure you have Fabric Loader and Fabric API installed
-4. Supported: Minecraft 26.1.2
+4. Supported: Minecraft 26.3 and 26.2
 
 ## Contributing
 
@@ -33,14 +33,12 @@ Contribute to Carpet PvP so that we can improve and make this mod better.
   
 ## Build
 
-Requirements: **Java 25.0.1**, Gradle wrapper. Manual test steps:
-- Build: ./gradlew build -x test
-- Run client: ./gradlew runClient
-- Run server: ./gradlew runServer
-- Build jar: ./gradlew build -x test
-- Run client (dev): ./gradlew runClient
-- Run server (dev): ./gradlew runServer
-- Publish to local maven: ./gradlew publishToMavenLocal
+Requirements: **Java 25**, Gradle wrapper. Every supported Minecraft version is built from the same source tree; the version-specific parts are marked with [Stonecutter](https://stonecutter.kikugie.dev/) comments.
+- Build every version: ./gradlew build -x test (jars land in versions/<minecraft>/build/libs)
+- Build one version: ./gradlew :26.3:build -x test
+- Run client (dev): ./gradlew :26.3:runClient
+- Run server (dev): ./gradlew :26.3:runServer
+- Check that every mixin still matches its target: ./gradlew :26.3:runServer -PmixinAudit
 
 ## Features
 

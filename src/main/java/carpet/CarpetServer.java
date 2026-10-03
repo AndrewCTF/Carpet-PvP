@@ -81,6 +81,11 @@ public class CarpetServer
 
     public static void onServerLoaded(MinecraftServer server)
     {
+        // Dev check: apply every mixin now, so a broken target fails at boot instead of on first use.
+        if (Boolean.getBoolean("carpet.mixinAudit"))
+        {
+            org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
+        }
         CarpetServer.minecraft_server = server;
         SpawnReporter.resetSpawnStats(server, true);
 

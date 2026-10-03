@@ -1,5 +1,6 @@
 package carpet.script.external;
 
+import carpet.fakes.MinecraftServerInterface;
 import carpet.CarpetServer;
 import carpet.CarpetSettings;
 import carpet.api.settings.CarpetRule;
@@ -86,8 +87,7 @@ public class Carpet
 
     public static void MinecraftServer_addScriptServer(MinecraftServer server, CarpetScriptServer scriptServer)
     {
-        // Store in CarpetServer static field directly
-        CarpetServer.scriptServer = scriptServer;
+        ((MinecraftServerInterface) server).addScriptServer(scriptServer);
     }
 
     public static boolean isValidCarpetPlayer(ServerPlayer player)
