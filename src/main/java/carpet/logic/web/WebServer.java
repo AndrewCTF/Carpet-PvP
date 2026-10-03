@@ -85,6 +85,7 @@ public class WebServer
     private final String url;
     private final List<EventStream> streams = new CopyOnWriteArrayList<>();
     private int ticksSinceUpdate;
+    private int matchRevision = -1;
 
     public WebServer(MinecraftServer server, AuthManager auth, Api api, String bindAddress, int port) throws IOException
     {
@@ -120,6 +121,12 @@ public class WebServer
      */
     public void tick()
     {
+        // Nothing is gathered while no editor is watching: the tick loop does not pay for a panel nobody has open.
+        if (streams.isEmpty())
+        {
+            ticksSinceUpdate = 0;
+            return;
+        }
         if (++ticksSinceUpdate >= CarpetSettings.carpetLogicUpdateInterval)
         {
             broadcastBotUpdate();
@@ -145,6 +152,13 @@ public class WebServer
         }
         streams.removeIf(stream -> stream.closed);
         broadcast(api.botUpdate());
+        // The match list only travels when it changed: the panel fetches it when it opens.
+        int revision = api.matchRevision();
+        if (revision != matchRevision)
+        {
+            matchRevision = revision;
+            broadcast(api.matchUpdate());
+        }
     }
 
     public void log(String level, String message)
@@ -165,7 +179,10 @@ public class WebServer
         {
             if (!stream.queue.offer(json))
             {
-                stream.closed = true;
+                // A client that cannot keep up loses its backlog rather than holding up the server thread: it gets
+                // the newest state instead and stays connected.
+                stream.queue.poll();
+                stream.queue.offer(json);
             }
         }
     }

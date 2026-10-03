@@ -4,6 +4,8 @@ import carpet.logic.CarpetLogic;
 import carpet.logic.program.BotAction;
 import carpet.logic.program.BotProgram;
 import carpet.logic.program.ProgramExecutor.ProgramInfo;
+import carpet.logic.web.Api;
+import carpet.logic.web.AuthManager;
 import carpet.pvp.selftest.SelfTestReport.Result;
 import carpet.CarpetSettings;
 import carpet.pvp.kit.Kit;
@@ -11,6 +13,7 @@ import carpet.pvp.kit.KitEntry;
 import carpet.pvp.kit.KitInventory;
 import carpet.pvp.kit.KitStore;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -39,6 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -52,7 +56,8 @@ public final class SelfTest
     private static final List<String> SCENARIOS = List.of(
             "spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow",
             "chase_attack", "chase_crit", "script_run", "fill_updates", "logic_program", "logic_forever_budget",
-            "spawn_exact_name", "spawn_gamemode", "shield_disable", "kit_give", "kit_roundtrip", "sword_block");
+            "logic_bot_snapshot", "spawn_exact_name", "spawn_gamemode", "shield_disable", "kit_give", "kit_roundtrip",
+            "sword_block");
 
     /** What every built-in kit has to put on the player it is given to. */
     private record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
@@ -94,6 +99,8 @@ public final class SelfTest
 
     private static final List<Result> results = new ArrayList<>();
     private static final ItemStack SHIELD = new ItemStack(Items.SHIELD);
+    /** A session that was never issued to a player, as /carpetlogic from the console makes. */
+    private static final AuthManager.Session CONSOLE_SESSION = new AuthManager.Session(null, "Server", Long.MAX_VALUE);
     private static List<String> names;
     private static Scenario current;
     private static boolean acting;
@@ -328,6 +335,53 @@ public final class SelfTest
                     String status = status(a);
                     return new Probe(ticks >= 40 && status.equals("RUNNING"),
                             fmt("after %d ticks the program is %s", ticks, status));
+                });
+            case "logic_bot_snapshot":
+                // What the web panel reads: two bots on the server, one of them hurt, through the route itself.
+                boolean[] hit = {false};
+                return new Scenario(300, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, 2.0D))),
+                        List.of(), server ->
+                {
+                    if (!hit[0])
+                    {
+                        // A fake player cannot be hurt while its connection is still counted as loading.
+                        if (!player(server, b).connection.hasClientLoaded()) return pending(b + " is still loading");
+                        damage(server, player(server, b));
+                        hit[0] = true;
+                        return pending(fmt("hit %s for %.1f health", b, SWORD_BLOCK_HIT));
+                    }
+                    Api.Response response = new Api(server, CarpetLogic.INSTANCE)
+                            .handle("GET", "/api/bots", CONSOLE_SESSION, "");
+                    if (response.status() != 200) return new Probe(false, "GET /api/bots answered " + response.status());
+                    JsonObject snapshot = response.body().getAsJsonObject().getAsJsonObject("bots");
+                    if (!snapshot.has(a) || !snapshot.has(b))
+                    {
+                        return new Probe(false, fmt("the snapshot holds %s, both %s and %s were on the server",
+                                snapshot.keySet(), a, b));
+                    }
+                    JsonObject untouched = snapshot.getAsJsonObject(a);
+                    JsonObject hurt = snapshot.getAsJsonObject(b);
+                    Set<String> expected = Set.of("name", "dimension", "x", "y", "z", "yaw", "pitch", "health", "maxHealth",
+                            "absorption", "foodLevel", "armor", "alive", "gamemode", "sprinting", "sneaking", "equipment",
+                            "pvp", "target", "program");
+                    for (JsonObject bot : List.of(untouched, hurt))
+                    {
+                        if (!bot.keySet().equals(expected))
+                        {
+                            return new Probe(false, fmt("the snapshot of %s has %s, expected %s", bot.get("name"),
+                                    bot.keySet(), new TreeSet<>(expected)));
+                        }
+                    }
+                    float whole = player(server, a).getHealth();
+                    float wounded = player(server, b).getHealth();
+                    boolean healthy = untouched.get("health").getAsFloat() == whole && hurt.get("health").getAsFloat() == wounded;
+                    boolean tookTheHit = wounded < whole && hurt.get("health").getAsFloat() == player(server, b).getHealth();
+                    boolean styled = "MELEE".equals(hurt.getAsJsonObject("pvp").get("style").getAsString());
+                    boolean idle = hurt.get("program").isJsonNull() && hurt.get("target").isJsonNull();
+                    return new Probe(healthy && tookTheHit && styled && idle, fmt(
+                            "the snapshot has %s with %.1f health and %s with %.1f, style %s",
+                            a, untouched.get("health").getAsFloat(), b, hurt.get("health").getAsFloat(),
+                            hurt.getAsJsonObject("pvp").get("style")));
                 });
             case "shield_disable":
                 // The attacker stands in front of the blocker, as everyone spawns looking along +z.

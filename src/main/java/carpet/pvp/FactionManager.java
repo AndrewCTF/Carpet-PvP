@@ -55,6 +55,23 @@ public final class FactionManager
         membership.remove(member);
     }
 
+    /**
+     * Makes the registry agree with a member's configured faction, which may be none at all: a member with a
+     * faction is put in it, and one without is taken out of whatever it was in.
+     */
+    public static void sync(UUID member, String faction)
+    {
+        if (faction == null)
+        {
+            leave(member);
+        }
+        else
+        {
+            create(faction);
+            join(faction, member);
+        }
+    }
+
     public static String factionOf(UUID member)
     {
         return membership.get(member);

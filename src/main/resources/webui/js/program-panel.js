@@ -178,5 +178,5 @@ const ProgramPanel = (() => {
         }
     }
 
-    return { init, saveProgram };
+    return { init, saveProgram, runProgram, stopProgram };
 })();

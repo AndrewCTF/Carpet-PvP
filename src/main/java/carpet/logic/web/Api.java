@@ -2,10 +2,15 @@ package carpet.logic.web;
 
 import carpet.CarpetSettings;
 import carpet.logic.CarpetLogic;
-import carpet.logic.bot.BotManager;
+import carpet.logic.bot.BotSnapshot;
 import carpet.logic.program.BotAction;
+import carpet.logic.program.ProgramExecutor.ProgramInfo;
 import carpet.logic.program.BotProgram;
 import carpet.logic.program.ProgramStorage;
+import carpet.patches.EntityPlayerMPFake;
+import carpet.pvp.BotPvpConfig;
+import carpet.pvp.FactionManager;
+import carpet.pvp.MatchHistory;
 import carpet.utils.CommandHelper;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -21,6 +26,8 @@ import net.minecraft.world.phys.Vec3;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The web editor's API. Everything here runs on the server thread, on behalf of the session a request's
@@ -34,6 +41,7 @@ public class Api
 
     private static final Gson GSON = new Gson();
     private static final int MAX_NAME_LENGTH = 64;
+    private static final int MAX_SETTING_LENGTH = 64;
 
     private final MinecraftServer server;
     private final CarpetLogic logic;
@@ -87,9 +95,12 @@ public class Api
                 case "GET /api/programs" -> ok(GSON.toJsonTree(logic.getProgramStorage().getAllPrograms()));
                 case "GET /api/presets" -> ok(GSON.toJsonTree(logic.getProgramStorage().getPresets()));
                 case "POST /api/programs" -> saveProgram(parse(body));
-                case "GET /api/bots" -> ok(bots());
+                case "GET /api/bots" -> ok(panelState());
+                case "GET /api/matches" -> ok(GSON.toJsonTree(MatchHistory.matches()));
                 case "POST /api/bots/spawn" -> spawnBot(parse(body), session);
                 case "POST /api/bots/remove" -> removeBot(parse(body));
+                case "POST /api/bots/config" -> botConfig(parse(body));
+                case "POST /api/bots/tp" -> teleportBot(parse(body), session);
                 case "POST /api/execute" -> execute(parse(body), session);
                 case "POST /api/stop" -> stop(parse(body));
                 default ->
@@ -112,13 +123,42 @@ public class Api
         }
     }
 
+    /**
+     * What the panel draws: every fake player there is, what their programs are doing, and the combat settings
+     * a client may change.
+     */
+    public JsonObject panelState()
+    {
+        Map<String, ProgramInfo> programs = logic.getProgramExecutor().getPrograms();
+        JsonObject state = new JsonObject();
+        state.add("bots", BotSnapshot.of(logic.getBotManager(), programs));
+        state.add("programs", GSON.toJsonTree(programs));
+        state.add("combatSettings", GSON.toJsonTree(List.of(BotPvpConfig.KEYS)));
+        state.addProperty("viewerMode", CarpetSettings.carpetLogicViewerMode);
+        return state;
+    }
+
     public JsonObject botUpdate()
     {
-        JsonObject update = new JsonObject();
+        JsonObject update = panelState();
         update.addProperty("type", "botUpdate");
-        update.add("bots", bots());
-        update.add("programs", GSON.toJsonTree(logic.getProgramExecutor().getPrograms()));
         return update;
+    }
+
+    public JsonObject matchUpdate()
+    {
+        JsonObject update = new JsonObject();
+        update.addProperty("type", "matchUpdate");
+        update.add("matches", GSON.toJsonTree(MatchHistory.matches()));
+        return update;
+    }
+
+    /**
+     * @return how often a match has been recorded, so a broadcaster knows whether to send the list again
+     */
+    public int matchRevision()
+    {
+        return MatchHistory.revision();
     }
 
     private JsonObject status(AuthManager.Session session)
@@ -148,16 +188,6 @@ public class Api
         settings.addProperty("fakePlayerElytraGlide", CarpetSettings.fakePlayerElytraGlide);
         settings.addProperty("swordBlockHitting", CarpetSettings.swordBlockHitting);
         return settings;
-    }
-
-    private JsonObject bots()
-    {
-        JsonObject bots = new JsonObject();
-        for (ServerPlayer bot : logic.getBotManager().getBots())
-        {
-            bots.add(bot.getGameProfile().name(), BotManager.describe(bot));
-        }
-        return bots;
     }
 
     private Response saveProgram(JsonObject request)
@@ -229,6 +259,50 @@ public class Api
         return success(logic.getBotManager().remove(name));
     }
 
+    // One combat setting, changed through the same apply() /player <name> ai uses, so both refuse the same things.
+    private Response botConfig(JsonObject request)
+    {
+        String name = string(request, "name");
+        EntityPlayerMPFake bot = logic.getBotManager().getBot(name);
+        if (bot == null)
+        {
+            return error(404, "There is no bot named '" + name + "'");
+        }
+        String key = cleanSetting(string(request, "key"));
+        String value = cleanSetting(string(request, "value"));
+        if (key == null || value == null)
+        {
+            return error(400, "'key' and 'value' must both be given, and neither may be empty");
+        }
+        String refused = bot.getPvpConfig().apply(key, value);
+        if (refused != null)
+        {
+            return error(400, refused);
+        }
+        FactionManager.sync(bot.getUUID(), bot.getPvpConfig().faction);
+        JsonObject result = new JsonObject();
+        result.addProperty("success", true);
+        result.add("pvp", BotSnapshot.combat(bot.getPvpConfig().combat, bot.getPvpConfig().combatStyle));
+        return ok(result);
+    }
+
+    private Response teleportBot(JsonObject request, AuthManager.Session session)
+    {
+        ServerPlayer owner = session.owner() == null ? null : server.getPlayerList().getPlayer(session.owner());
+        if (owner == null)
+        {
+            return error(400, "Only a link opened in game can bring a bot to its owner");
+        }
+        String name = string(request, "name");
+        EntityPlayerMPFake bot = logic.getBotManager().getBot(name);
+        if (bot == null)
+        {
+            return error(404, "There is no bot named '" + name + "'");
+        }
+        bot.teleportTo(owner.level(), owner.getX(), owner.getY(), owner.getZ(), Set.of(), owner.getYRot(), owner.getXRot(), true);
+        return success(true);
+    }
+
     // Programs are run from the action tree the editor sends, never by id: commands in a program run as the
     // token's player, so that player must be the one who had the program in front of them.
     private Response execute(JsonObject request, AuthManager.Session session)
@@ -258,6 +332,13 @@ public class Api
             return "Untitled";
         }
         return clean.length() > MAX_NAME_LENGTH ? clean.substring(0, MAX_NAME_LENGTH) : clean;
+    }
+
+    // A setting key names one of the bot rules and a value is what one of them takes: neither may be a paragraph.
+    private static String cleanSetting(String setting)
+    {
+        String clean = setting == null ? "" : setting.replaceAll("\\p{Cntrl}", " ").strip();
+        return clean.isEmpty() || clean.length() > MAX_SETTING_LENGTH ? null : clean;
     }
 
     private static JsonObject parse(String body)

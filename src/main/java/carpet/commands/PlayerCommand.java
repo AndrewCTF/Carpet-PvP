@@ -1208,27 +1208,12 @@ public class PlayerCommand
             if (!(p instanceof EntityPlayerMPFake bot)) continue;
             String err = bot.getPvpConfig().apply(setting, value);
             if (err != null) { Messenger.m(context.getSource(), "r " + err); return 0; }
-            syncBotFaction(bot);
+            FactionManager.sync(bot.getUUID(), bot.getPvpConfig().faction);
             count++;
         }
         if (count == 0) { Messenger.m(context.getSource(), "r No fake players selected"); return 0; }
         Messenger.m(context.getSource(), "w Set " + setting + " = " + value + " on " + count + " bot(s)");
         return count;
-    }
-
-    /** Keeps the faction registry in sync with a bot's config faction field. */
-    private static void syncBotFaction(EntityPlayerMPFake bot)
-    {
-        String faction = bot.getPvpConfig().faction;
-        if (faction == null)
-        {
-            FactionManager.leave(bot.getUUID());
-        }
-        else
-        {
-            FactionManager.create(faction);
-            FactionManager.join(faction, bot.getUUID());
-        }
     }
 
     // ===== Factions (`/player <name> faction ...`) =====
