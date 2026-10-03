@@ -97,7 +97,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-Twenty-two scenarios, run in this order. Every one spawns its bots 256 blocks further along X than the
+Thirty-five scenarios, run in this order. Every one spawns its bots 256 blocks further along X than the
 last, so a bot left over from an earlier scenario cannot disturb a later one.
 
 | Scenario | Ticks allowed | What it proves |
@@ -121,9 +121,24 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `shield_disable` | 600 | A shield raised with `use continuous` is broken by an axe and goes on cooldown. |
 | `kit_give` | 200 | Every built-in kit loads, every entry builds, and each kit gives its bot the expected weapon, chestplate, enchantment and stack. |
 | `kit_roundtrip` | 200 | Saving a player's inventory, giving a kit over it and restoring puts every slot back, including the selected hotbar slot — through memory and through the kit file. |
-| `kit_folder` | 300 | A hand-written kit file and a saved one, dropped into `<world>/carpet-kits/`, both load after `bot kit reload` and hand out what they say. |
-| `sword_block` | 600 | With `swordBlockHitting` on a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit and is pushed by about half of what an idle player is pushed by. An idle player loses 4 either way. |
-| `kill` | 300 | `/player <name> kill` takes the bot off the server: it is gone from the player list. |
+| `sword_block` | 300 | With `swordBlockHitting` on a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit; with the rule off they lose all of it. An idle player loses 4 either way. |
+| `explosion_rules` | 600 | With `optimizedTNT` on, a primed tnt leaves the stone next to it standing while `explosionNoBlockDamage` is on and blows it away while it is off. |
+| `xp_explosions` | 600 | An ore blown up drops experience with `xpFromExplosions` on and none with it off. |
+| `scarpet_events` | 400 | `__on_player_takes_damage` reaches a script only once an app with a handler is loaded, and `damageTickOther` swallows the hits inside its window. |
+| `scarpet_explosion` | 600 | `__on_explosion_outcome` fires for a plain tnt explosion. |
+| `update_suppression_block` | 100 | A barrier over an unpowered activator rail schedules a tick with `updateSuppressionBlock 0` and does not with the rule at -1. |
+| `stackable_shulker_boxes` | 100 | An empty shulker box stacks `stackableShulkerBoxes` times, and any other item is left alone. |
+| `structure_block_ignored` | 100 | `structureBlockIgnored` drops the named block from the palette of a saved structure. |
+| `persistent_parrots` | 200 | A parrot on the shoulder survives damage with `persistentParrots` on and is dropped with it off. |
+| `lag_free_spawning` | 400 | The natural spawner keeps running while `lagFreeSpawning` is on, which needs `carpet.fakes.LevelInterface` to have an implementation. |
+| `interaction_updates` | 200 | A redstone block placed by a real use-item-on packet lights the lamp next to it with `interactionUpdates` on and leaves it dark with the rule off. |
+| `punish_wrong_tool_hits` | 300 | Hitting a block that needs a tool with bare hands costs a heart with `punishWrongToolHits` on and nothing with it off. |
+| `scarpet_item_use_events` | 300 | `__on_player_uses_item` is called for a real use-item packet with `scarpetItemUseEvents` on and never with it off. |
+| `sculk_sensor_range` | 300 | A step 12 blocks from a sculk sensor is out of reach at the default range of 8 and inside the 16 `sculkSensorRange` sets, while one 24 blocks further stays out of reach either way. |
+| `summon_natural_lightning` | 400 | `/summon lightning` rolls for the skeleton horse trap only with `summonNaturalLightning` on; see the note below for the numbers. |
+| `explosion_state_leak` | 600 | An explosion that computes no block positions leaves nothing queued for the next block-damaging one — see the note below. |
+| `scarpet_world_data` | 100 | A Scarpet app saves the world data with `save()` and reads the result back. |
+| `tick_synced_world_borders` | 900 | A five second border lerp is finished after 160 game ticks at 40 ticks a second with `tickSyncedWorldBorders` on and has barely started with it off. |
 
 `kit_give` checks these values, one per built-in kit:
 
@@ -135,12 +150,21 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `mace` | `mace` | `netherite_chestplate` | Protection 4 | 16 `wind_charge` |
 | `crystal` | `netherite_sword` | `netherite_chestplate` | Blast Protection 4 | 8 `end_crystal` |
 
-`sword_block` uses four bots. `SelfA` holds its sword up and `SelfB` stands idle beside it, each with
-its own attacker (`SelfC` and `SelfD`) one hit away, so that the knockback of a melee hit can be
-compared between a blocking and an idle player without either of them being pushed out of reach.
+`summon_natural_lightning` is the one scenario that leans on a random number. The skeleton horse roll is one
+chance in fifty to twenty on a fresh world on hard, so the scenario sums up 600 bolts at one spot and counts
+the horses there, then turns the rule off and sums up 20 at a spot 32 blocks away and counts those. The chance
+of missing every one of 600 rolls is below one in a million; the count of zero with the rule off is not random
+at all, because vanilla only ever rolls that dice in `ServerLevel.tickThunder`, for a storm.
 
-`kill` spawns its victim from the command list rather than through the scenario's bot list, because
-the check has to see the player gone from there.
+`explosion_state_leak` reaches into `carpet.helpers.OptimizedExplosion` by reflection to leave a block in its
+static position set, which is what an explosion that skips the walk would do. Nothing in the game can do it
+today, because the branch that fills the set also empties it — see the note in the report.
+
+The `nav_stop` scenario is worth reading. It pins current behaviour, not the behaviour most people
+expect: `stopNavigation()` clears the navigation state but leaves the movement inputs alone, so a
+bot that was already walking keeps coasting at its last speed. The scenario's own comment says it
+should be tightened to "the bot stops moving" once `stopNavigation()` also stops movement. It is
+listed here as it stands.
 
 ## How a scenario runs
 
@@ -205,6 +229,12 @@ though it came from a given `Vec3`.
      profile to resolve itself.
    - State the scenario needs before the first command (a carpet rule, a forceload, `give`) belongs
      in the command list or the `start` hook.
+   - A fake player cannot use anything until the 60-tick client-load timer of its connection runs
+     down, and its listener drops block use packets until something answers the spawn teleport, so a
+     scenario that drives a packet path waits for `hasClientLoaded()` and calls `confirmTeleport`.
+   - Entities in a forceloaded chunk only become countable once the chunk map has picked the ticket
+     up, which takes some ticks. A scenario that counts entities in a chunk nobody is in waits for
+     one to be countable first, as `summon_natural_lightning` does.
 
 4. Run it on its own while you work:
 

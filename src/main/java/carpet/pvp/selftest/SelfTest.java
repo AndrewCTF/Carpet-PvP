@@ -4,6 +4,7 @@ import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.logic.CarpetLogic;
+import carpet.helpers.OptimizedExplosion;
 import carpet.logic.program.BotAction;
 import carpet.logic.program.BotProgram;
 import carpet.logic.program.ProgramExecutor.ProgramInfo;
@@ -35,16 +36,21 @@ import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import carpet.utils.SpawnReporter;
+import net.minecraft.util.Util;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.animal.equine.SkeletonHorse;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -55,8 +61,11 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedstoneLampBlock;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.entity.SculkSensorBlockEntity;
 import net.minecraft.world.level.block.entity.StructureBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -64,9 +73,11 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -90,7 +101,8 @@ public final class SelfTest
             "nav_maze", "nav_parkour", "nav_ladder", "nav_partial_blocks", "nav_moving_target", "nav_crowd",
             "nav_tick_budget", "nav_smooth",
             "sword_hits_require_aim", "sword_duel_damage", "sword_shield_break", "sword_difficulty_order", "bot_budget",
-            "animate_use", "item_cd", "kit_folder", "kill");
+            "animate_use", "item_cd", "kit_folder", "kill",
+            "interaction_updates", "punish_wrong_tool_hits", "scarpet_item_use_events", "sculk_sensor_range", "summon_natural_lightning", "explosion_state_leak", "scarpet_world_data", "tick_synced_world_borders");
 
     /** What every built-in kit has to put on the player it is given to. */
     record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
@@ -110,6 +122,13 @@ public final class SelfTest
     private static final long EXIT_WAIT_MILLIS = 120_000L;
     private static volatile MinecraftServer stoppingServer;
     private static final float SWORD_BLOCK_HIT = 4.0F;
+    /** How many bolts the lightning scenario sums up, enough that missing every skeleton horse roll is not a thing. */
+    private static final int LIGHTNING_BOLTS = 600;
+    private static final double BORDER_FROM = 1000.0D;
+    private static final double BORDER_TO = 20.0D;
+    private static final long BORDER_DURATION_MILLIS = 5_000L;
+    /** Six seconds of game time, which is what the ticked border needs to finish, and longer in wall clock at 40 tps. */
+    private static final int BORDER_WAIT = 160;
 
     record Bot(String name, Vec3 pos, String gamemode, double yaw)
     {
@@ -1173,6 +1192,22 @@ public final class SelfTest
                     budgetStarvedFrom = 0;
                     starvedWhileFull = 0;
                 }, SelfTest::budgetProbe);
+            case "interaction_updates":
+                return interactionUpdates(a, origin);
+            case "punish_wrong_tool_hits":
+                return punishWrongToolHits(a, origin);
+            case "scarpet_item_use_events":
+                return scarpetItemUseEvents(a, origin);
+            case "sculk_sensor_range":
+                return sculkSensorRange(a, origin);
+            case "summon_natural_lightning":
+                return summonNaturalLightning(origin);
+            case "explosion_state_leak":
+                return explosionStateLeak(a, origin);
+            case "scarpet_world_data":
+                return scarpetWorldData();
+            case "tick_synced_world_borders":
+                return tickSyncedWorldBorders();
             default:
                 ScenarioIndex.Factory factory = ScenarioIndex.SCENARIOS.get(name);
                 return factory == null ? null : factory.create(a, b, c, origin);
@@ -1716,10 +1751,11 @@ public final class SelfTest
 
     /**
      * rules explosionNoBlockDamage and optimizedTNT (mixin Explosion_optimizedTntMixin, which hands the explosion to
-     * carpet.helpers.OptimizedExplosion and that casts it to ExplosionAccessor): a primed tnt leaves the dirt next
+     * carpet.helpers.OptimizedExplosion and that casts it to ExplosionAccessor): a primed tnt leaves the stone next
      * to it standing while explosionNoBlockDamage is on and blows it away while it is off. optimizedTNT is on
      * throughout, so both blasts go through the optimized path, and each scenario waits for the primed tnt to be
-     * gone before it looks at the blocks.
+     * gone before it looks at the blocks. The block is stone and not dirt because a floating dirt block one above the
+     * grass of the flat world is now and then rewritten by a grass random tick, which says nothing about explosions.
      */
     static Scenario explosionRules(String a, Vec3 origin)
     {
@@ -1730,7 +1766,7 @@ public final class SelfTest
                 forceload(spared),
                 "carpet optimizedTNT true",
                 "carpet explosionNoBlockDamage true",
-                setBlock(spared, "minecraft:dirt"),
+                setBlock(spared, "minecraft:stone"),
                 summonTnt(spared.east(2))), server ->
         {
             if (primed(server, spared) > 0) explosionRulesPhase[2] = 1;
@@ -1741,7 +1777,7 @@ public final class SelfTest
                 explosionRulesPhase[0] = 1;
                 explosionRulesPhase[1] = ticks + 2;
                 run(server, "carpet explosionNoBlockDamage false");
-                run(server, setBlock(doomed, "minecraft:dirt"));
+                run(server, setBlock(doomed, "minecraft:stone"));
                 run(server, summonTnt(doomed.east(2)));
                 return new Probe(false, "second tnt primed with the rule off");
             }
@@ -1749,8 +1785,8 @@ public final class SelfTest
             if (primed(server, spared) > 0) return new Probe(false, "waiting for the second explosion");
             BlockState sparedState = server.overworld().getBlockState(spared);
             BlockState doomedState = server.overworld().getBlockState(doomed);
-            return new Probe(sparedState.is(Blocks.DIRT) && doomedState.isAir(), fmt(
-                    "the dirt next to a tnt primed with explosionNoBlockDamage on is %s and the one with it off is %s",
+            return new Probe(sparedState.is(Blocks.STONE) && doomedState.isAir(), fmt(
+                    "the stone next to a tnt primed with explosionNoBlockDamage on is %s and the one with it off is %s",
                     sparedState, doomedState));
         });
     }
@@ -1974,7 +2010,10 @@ public final class SelfTest
     static Scenario persistentParrots(String a, String b, String c, Vec3 origin)
     {
         int[] phase = {0};
-        return new Scenario(200, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, 3.0D)), new Bot(c, origin.add(0.0D, 0.0D, 6.0D))), List.of(), server ->
+        // the tick the last step happened on: a fake player cannot be hurt until it counts as loaded, so the hits
+        // wait for that instead of for a fixed tick
+        int[] since = {0};
+        return new Scenario(400, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, 3.0D)), new Bot(c, origin.add(0.0D, 0.0D, 6.0D))), List.of(), server ->
         {
             switch (phase[0])
             {
@@ -1985,24 +2024,27 @@ public final class SelfTest
                     return new Probe(false, "shoulder slots filled");
                 case 1:
                     // removeEntitiesOnShoulder only clears a slot the parrot has sat in for a moment
-                    if (ticks < 25) return new Probe(false, "waiting for the shoulder timer");
+                    if (ticks < 25 || !hittable(player(server, a))) return new Probe(false, "waiting for the shoulder timer");
                     run(server, "carpet persistentParrots false");
-                    run(server, "damage " + a + " 0.2 minecraft:generic");
+                    if (result(server, "damage " + a + " 0.2 minecraft:generic") < 1) return new Probe(false, a + " cannot be hurt yet");
                     phase[0] = 2;
+                    since[0] = ticks;
                     return new Probe(false, "hit with the rule off");
                 case 2:
-                    if (ticks < 30) return new Probe(false, "waiting for the hit to land");
+                    if (ticks < since[0] + 5) return new Probe(false, "waiting for the hit to land");
                     shoulder(server, c);
                     phase[0] = 3;
+                    since[0] = ticks;
                     return new Probe(false, "third shoulder slot filled");
                 case 3:
-                    if (ticks < 60) return new Probe(false, "waiting for the shoulder timer again");
+                    if (ticks < since[0] + 30 || !hittable(player(server, c))) return new Probe(false, "waiting for the shoulder timer again");
                     run(server, "carpet persistentParrots true");
-                    run(server, "damage " + c + " 0.2 minecraft:generic");
+                    if (result(server, "damage " + c + " 0.2 minecraft:generic") < 1) return new Probe(false, c + " cannot be hurt yet");
                     phase[0] = 4;
+                    since[0] = ticks;
                     return new Probe(false, "hit with the rule on");
                 case 4:
-                    if (ticks < 65) return new Probe(false, "waiting for the second hit to land");
+                    if (ticks < since[0] + 5) return new Probe(false, "waiting for the second hit to land");
                     boolean dropped = player(server, a).getShoulderEntityLeft().isEmpty();
                     boolean kept = !player(server, c).getShoulderEntityLeft().isEmpty();
                     run(server, "carpet persistentParrots false");
@@ -2041,6 +2083,401 @@ public final class SelfTest
                 return new Probe(attempts[0] > 0, fmt("the spawner made %d attempts with lagFreeSpawning on", attempts[0]));
             }
             return new Probe(false, "measuring");
+        });
+    }
+
+    /**
+     * rules interactionUpdates (mixin ServerGamePacketListenerImpl_interactionUpdatesMixin) and, on the same class,
+     * scarpetItemUseEvents. A redstone block placed by a use-item-on packet lights the lamp next to it while
+     * interactionUpdates is on and leaves it dark while it is off, because the rule holds
+     * CarpetSettings.impendingFillSkipUpdates over the game mode call and the level then skips the neighbour update
+     * and onPlace. The packet is handed to the bot's own connection so the listener, the game mode and the rule all
+     * run for real; a fake player may not use anything until the client-load timer of its connection (60 ticks) has
+     * run down, and that is what the first wait is for.
+     */
+    private static Scenario interactionUpdates(String a, Vec3 origin)
+    {
+        BlockPos quietLamp = BlockPos.containing(origin).south();
+        BlockPos liveLamp = quietLamp.east(4);
+        int[] phase = {0};
+        int[] placed = {0};
+        boolean[] quiet = {true, true};
+        return new Scenario(200, List.of(new Bot(a, origin)), List.of(
+                forceload(quietLamp),
+                setBlock(quietLamp, "minecraft:redstone_lamp"),
+                setBlock(liveLamp, "minecraft:redstone_lamp"),
+                "player " + a + " equip mainhand minecraft:redstone_block",
+                "carpet interactionUpdates false"), server ->
+        {
+            switch (phase[0])
+            {
+                case 0:
+                    ServerPlayer bot = player(server, a);
+                    if (!bot.connection.hasClientLoaded())
+                        return pending(a + " may not use anything for another " + Math.max(0, 60 - ticks) + " ticks");
+                    // a real client answers the spawn with a teleport confirmation, which is what clears the
+                    // flag the listener drops block use packets for; no fake player ever gets one
+                    confirmTeleport(bot);
+                    placeByPacket(server, a, quietLamp, Direction.EAST);
+                    placed[0] = ticks;
+                    phase[0] = 1;
+                    return new Probe(false, "placed a redstone block with interactionUpdates off");
+                case 1:
+                    if (ticks < placed[0] + 3) return pending("waiting for the lamp placed with the rule off");
+                    quiet[0] = lit(server, quietLamp);
+                    run(server, "player " + a + " equip mainhand minecraft:redstone_block");
+                    run(server, "carpet interactionUpdates true");
+                    placeByPacket(server, a, liveLamp, Direction.EAST);
+                    placed[0] = ticks;
+                    phase[0] = 2;
+                    return new Probe(false, "placed a redstone block with interactionUpdates on");
+                case 2:
+                    if (ticks < placed[0] + 3) return pending("waiting for the lamp placed with the rule on");
+                    quiet[1] = lit(server, liveLamp);
+                    run(server, "carpet interactionUpdates true");
+                    return new Probe(!quiet[0] && quiet[1], fmt(
+                            "the lamp next to a block placed with interactionUpdates off is %s and the one placed with it on is %s",
+                            quiet[0] ? "lit" : "dark", quiet[1] ? "lit" : "dark"));
+                default:
+                    return new Probe(false, "done");
+            }
+        });
+    }
+
+    /**
+     * rule punishWrongToolHits, registered on Fabric's AttackBlockCallback. That callback fires at the head of
+     * ServerPlayerGameMode.handleBlockBreakAction, which only a mob gets that far in vanilla, so the packet a client
+     * sends when it starts breaking a block is the way in. Hitting stone with bare hands costs a heart while the
+     * rule is on and nothing at all while it is off. A fake player cannot be hurt for the 60 ticks its client-load
+     * timer runs, and hurtTime has to be back to zero before the second hit is counted.
+     */
+    private static Scenario punishWrongToolHits(String a, Vec3 origin)
+    {
+        BlockPos spared = BlockPos.containing(origin).south();
+        BlockPos doomed = spared.east(2);
+        int[] phase = {0};
+        float[] lost = {-1.0F, -1.0F};
+        return new Scenario(300, List.of(new Bot(a, origin)), List.of(
+                forceload(spared),
+                setBlock(spared, "minecraft:stone"),
+                setBlock(doomed, "minecraft:stone"),
+                "carpet punishWrongToolHits true"), server ->
+        {
+            ServerPlayer bot = player(server, a);
+            switch (phase[0])
+            {
+                case 0:
+                    if (!hittable(bot)) return pending(hitWaitReason(bot));
+                    float before = bot.getHealth();
+                    hitBlock(server, a, spared);
+                    lost[0] = before - bot.getHealth();
+                    phase[0] = 1;
+                    return new Probe(false, fmt("hit %s with bare hands with the rule on, lost %.1f health", spared, lost[0]));
+                case 1:
+                    if (bot.hurtTime > 0) return pending(a + " is still on the damage cooldown of the first hit");
+                    run(server, "carpet punishWrongToolHits false");
+                    before = bot.getHealth();
+                    hitBlock(server, a, doomed);
+                    lost[1] = before - bot.getHealth();
+                    phase[0] = 2;
+                    return new Probe(false, fmt("hit %s with bare hands with the rule off, lost %.1f health", doomed, lost[1]));
+                case 2:
+                    run(server, "carpet punishWrongToolHits false");
+                    return new Probe(same(lost[0], 1.0F) && same(lost[1], 0.0F), fmt(
+                            "hitting a block that needs a tool with bare hands cost %s %.1f health with punishWrongToolHits on and %.1f with it off",
+                            a, lost[0], lost[1]));
+                default:
+                    return new Probe(false, "done");
+            }
+        });
+    }
+
+    /**
+     * rule scarpetItemUseEvents (mixin ServerGamePacketListenerImpl_scarpetEventsMixin, which reads the rule before
+     * handing an item use to a script). The action pack never sends packets, so the use has to arrive the way a client
+     * sends it to reach the handler that reads the rule at all. With the rule on the app is asked and counts the use,
+     * with it off the item goes on being used and the app is never called. The handle is a bow, so what the counts say
+     * is the rule's doing and nothing else.
+     */
+    private static Scenario scarpetItemUseEvents(String a, Vec3 origin)
+    {
+        long[] on = {-1L};
+        long[] off = {-1L};
+        return new Scenario(300, List.of(new Bot(a, origin)), List.of(
+                "carpet scarpetItemUseEvents true",
+                "script run global_selftest_uses = 0",
+                "script run __on_player_uses_item(player, hand, item) -> global_selftest_uses = global_selftest_uses + 1",
+                "player " + a + " equip mainhand minecraft:bow"), server ->
+        {
+            ServerPlayer bot = player(server, a);
+            if (on[0] < 0)
+            {
+                if (!bot.connection.hasClientLoaded())
+                    return pending(a + " may not use anything for another " + Math.max(0, 60 - ticks) + " ticks");
+                confirmTeleport(bot);
+                useItemByPacket(server, a);
+                on[0] = result(server, "script run global_selftest_uses");
+                run(server, "carpet scarpetItemUseEvents false");
+                bot.releaseUsingItem();
+                useItemByPacket(server, a);
+                off[0] = result(server, "script run global_selftest_uses");
+                run(server, "carpet scarpetItemUseEvents true");
+                return new Probe(on[0] > 0 && off[0] == on[0], fmt(
+                        "__on_player_uses_item counted %d uses with scarpetItemUseEvents on and stayed at %d with it off", on[0], off[0]));
+            }
+            return new Probe(false, "done");
+        });
+    }
+
+    /**
+     * rule sculkSensorRange (mixin SculkSensorBlockEntityVibrationConfig_sculkSensorRangeMixin, which answers
+     * VibrationUser.getListenerRadius). The dispatcher only hands a game event to a listener whose radius covers it,
+     * so a step twelve blocks away is out of reach at the default eight and inside the sixteen the rule sets, while
+     * one twenty four blocks away stays out of reach either way. What is read is whether the sensor took the vibration
+     * into its queue, which is the decision the radius makes: whether it goes on to arrive and make the sensor fire
+     * also depends on the chunk ticking, which a forceloaded chunk with nobody in it does not always do. The sensors
+     * are put back in place once their chunks are there, because a sensor that lands in a chunk the chunk map has not
+     * got to yet gets no game event listener at all.
+     */
+    private static Scenario sculkSensorRange(String a, Vec3 origin)
+    {
+        int[] phase = {0};
+        int[] stepped = {0};
+        boolean[] quiet = {false, false};
+        boolean[] live = {false, false};
+        BlockPos sensor = BlockPos.containing(origin);
+        BlockPos step = sensor.east(12);
+        BlockPos beyond = sensor.east(36);
+        return new Scenario(300, List.of(), List.of(
+                forceload(sensor),
+                forceload(beyond),
+                setBlock(sensor, "minecraft:sculk_sensor"),
+                setBlock(beyond, "minecraft:sculk_sensor")), server ->
+        {
+            ServerLevel level = server.overworld();
+            switch (phase[0])
+            {
+                case 0:
+                    if (ticks < 40) return pending(fmt("waiting for the forceloaded chunks, %d ticks to go", 40 - ticks));
+                    for (BlockPos at : List.of(sensor, beyond))
+                    {
+                        run(server, setBlock(at, "minecraft:air"));
+                        run(server, setBlock(at, "minecraft:sculk_sensor"));
+                    }
+                    step(level, step, a);
+                    stepped[0] = ticks;
+                    phase[0] = 1;
+                    return new Probe(false, "a step 12 blocks from the sensor, sent at the default range");
+                case 1:
+                    if (ticks < stepped[0] + 5) return pending("waiting for the sensors to turn the vibration down");
+                    quiet[0] = heard(level, sensor);
+                    quiet[1] = heard(level, beyond);
+                    run(server, "carpet sculkSensorRange 16");
+                    step(level, step, a);
+                    stepped[0] = ticks;
+                    phase[0] = 2;
+                    return new Probe(false, fmt("at the default range of 8 the sensor 12 blocks away took the vibration: %s, the one 36 blocks away: %s",
+                            quiet[0], quiet[1]));
+                case 2:
+                    if (ticks < stepped[0] + 5) return pending("waiting for the sensors to turn the second vibration down");
+                    live[0] = heard(level, sensor);
+                    live[1] = heard(level, beyond);
+                    run(server, "carpet sculkSensorRange 8");
+                    return new Probe(!quiet[0] && !quiet[1] && live[0] && !live[1], fmt(
+                            "a step 12 blocks from a sensor was taken over: %s and the one 36 blocks away %s at the default range of 8, and %s and %s at the range of 16 the rule sets",
+                            quiet[0], quiet[1], live[0], live[1]));
+                default:
+                    return new Probe(false, "done");
+            }
+        });
+    }
+
+    /** Whether a sensor took a vibration into its queue, which is what the listener radius decides. */
+    private static boolean heard(ServerLevel level, BlockPos sensor)
+    {
+        return level.getBlockEntity(sensor) instanceof SculkSensorBlockEntity sculk
+                && sculk.getVibrationData().getSelectionStrategy().chosenCandidate(level.getGameTime()).isPresent();
+    }
+
+    /**
+     * rule summonNaturalLightning (mixin SummonCommand_lightningMixin, which gives a summoned bolt the skeleton horse
+     * roll that ServerLevel.tickThunder only runs for a storm). That horse is the whole of the difference, so the
+     * scenario counts them, at two spots far enough apart that the counts cannot mix. The roll is one chance in
+     * fifty to twenty, so the first spot sums up LIGHTNING_BOLTS of them: on hard in a fresh world the effective
+     * difficulty is around 2.25 to 3, which puts the chance of missing every one of 600 rolls below one in a million,
+     * and the second spot has to come up empty because vanilla never rolls at all. Both spots wait for the
+     * forceloaded chunk to be there before a single bolt is summed, because entities only become countable once the
+     * chunk map has picked the ticket up.
+     */
+    private static Scenario summonNaturalLightning(Vec3 origin)
+    {
+        BlockPos live = BlockPos.containing(origin);
+        BlockPos quiet = live.east(32);
+        int[] phase = {0};
+        int[] struck = {0};
+        int[] on = {-1};
+        int[] off = {-1};
+        return new Scenario(400, List.of(), List.of(
+                forceload(live),
+                forceload(quiet),
+                "spawn mocking true",
+                "difficulty hard",
+                "carpet summonNaturalLightning true"), server ->
+        {
+            switch (phase[0])
+            {
+                case 0:
+                    // entities in a forceloaded chunk only become countable once the chunk map has picked the
+                    // ticket up, so a marker is summed up and waited for before any bolt is
+                    if (count(server, net.minecraft.world.entity.decoration.ArmorStand.class, live, 8.0D) == 0)
+                    {
+                        if (ticks % 20 == 0) run(server, "summon minecraft:armor_stand " + live.getX() + " " + live.getY() + " " + live.getZ());
+                        return pending("no entity can be counted in the forceloaded chunk yet");
+                    }
+                    strikeLightning(server, live, LIGHTNING_BOLTS);
+                    struck[0] = ticks;
+                    phase[0] = 1;
+                    return new Probe(false, LIGHTNING_BOLTS + " bolts summed with the rule on");
+                case 1:
+                    if (ticks < struck[0] + 10) return pending("letting the horses settle");
+                    on[0] = trapHorses(server, live, 8.0D);
+                    run(server, "carpet summonNaturalLightning false");
+                    strikeLightning(server, quiet, LIGHTNING_BOLTS / 30);
+                    struck[0] = ticks;
+                    phase[0] = 2;
+                    return new Probe(false, fmt("%d of the %d bolts with the rule on made a trap horse, %d summed at the other spot with it off",
+                            on[0], LIGHTNING_BOLTS, LIGHTNING_BOLTS / 30));
+                case 2:
+                    if (ticks < struck[0] + 10) return pending("letting the second lot settle");
+                    off[0] = trapHorses(server, quiet, 8.0D);
+                    run(server, "carpet summonNaturalLightning true");
+                    run(server, "difficulty peaceful");
+                    run(server, "spawn mocking false");
+                    return new Probe(on[0] > 0 && off[0] == 0, fmt(
+                            "%d of the %d bolts summed with summonNaturalLightning on made a skeleton horse trap and %d of the %d with it off did",
+                            on[0], LIGHTNING_BOLTS, off[0], LIGHTNING_BOLTS / 30));
+                default:
+                    return new Probe(false, "done");
+            }
+        });
+    }
+
+    /**
+     * carpet.helpers.OptimizedExplosion, whose caches are static: an explosion that computes no block positions, the
+     * branch explosionNoBlockDamage takes, must not leave anything queued for the next block-damaging one, or that
+     * one blows up the blocks of the previous one as well. Nothing in the game can leave the position set dirty - the
+     * branch that fills it also empties it - so the scenario queues one leftover block the way a leaving explosion
+     * would, and the same two blasts explosion_rules makes check that the block is still standing afterwards.
+     */
+    private static Scenario explosionStateLeak(String a, Vec3 origin)
+    {
+        BlockPos spared = BlockPos.containing(origin);
+        BlockPos doomed = spared.east(16);
+        return new Scenario(600, List.of(new Bot(a, origin.add(0.0D, 0.0D, 6.0D))), List.of(
+                forceload(spared),
+                "carpet optimizedTNT true",
+                "carpet explosionNoBlockDamage true",
+                setBlock(spared, "minecraft:stone"),
+                setBlock(doomed, "minecraft:stone"),
+                summonTnt(spared.east(2))), server ->
+        {
+            if (explosionLeakPhase[2] == 0 && primed(server, spared) > 0) explosionLeakPhase[2] = 1;
+            if (explosionLeakPhase[0] == 0)
+            {
+                if (explosionLeakPhase[2] == 0 || primed(server, spared) > 0) return pending("waiting for the first explosion");
+                explosionLeakPhase[0] = 1;
+                explosionLeakPhase[1] = ticks + 3;
+                queueLeftoverPositions(spared);
+                run(server, "carpet explosionNoBlockDamage false");
+                run(server, summonTnt(doomed.east(2)));
+                return new Probe(false, "second tnt primed with the rule off, a leftover position queued");
+            }
+            if (ticks < explosionLeakPhase[1] || primed(server, spared) > 0) return pending("waiting for the second explosion");
+            BlockState sparedState = server.overworld().getBlockState(spared);
+            BlockState doomedState = server.overworld().getBlockState(doomed);
+            run(server, "carpet explosionNoBlockDamage false");
+            return new Probe(sparedState.is(Blocks.STONE) && doomedState.isAir(), fmt(
+                    "the stone an earlier explosion left queued is %s and the stone the second explosion stands on is %s",
+                    sparedState, doomedState));
+        });
+    }
+
+    /** phase, earliest tick of the check, and whether the primed tnt has been seen at all */
+    private static int[] explosionLeakPhase = new int[3];
+
+    /**
+     * A Scarpet app that saves the world data and reads it back. The helpers behind that used to cast to
+     * carpet.fakes.ServerWorldInterface, which nothing implements, so anything that touched them threw a
+     * ClassCastException instead of doing its work; ServerWorldInterfaceTest pins that the cast is gone, and this
+     * scenario goes through /script run to show that saving world data works on both versions.
+     */
+    private static Scenario scarpetWorldData()
+    {
+        int[] saved = {-1};
+        int[] readBack = {-1};
+        return new Scenario(100, List.of(), List.of("script run global_selftest_save = 0"), server ->
+        {
+            if (saved[0] < 0)
+            {
+                saved[0] = result(server, "script run global_selftest_save = save()");
+                readBack[0] = result(server, "script run global_selftest_save");
+                return new Probe(false, fmt("save() returned %d", saved[0]));
+            }
+            return new Probe(saved[0] == 1 && readBack[0] == 1, fmt(
+                    "an app that saves the world data got %d out of save() and read %d back", saved[0], readBack[0]));
+        });
+    }
+
+    /**
+     * rule tickSyncedWorldBorders (mixin WorldBorder_syncedWorldBorderMixin, which swaps in
+     * carpet.patches.TickSyncedBorderExtent): the vanilla moving border measures its lerp against the wall clock, the
+     * ticked one against game ticks. The run is at 40 ticks a second here, so BORDER_WAIT game ticks are longer than
+     * BORDER_DURATION game ticks of game time: the ticked border has finished its lerp by then and the vanilla one
+     * has barely started. The border is put back and left to grow back before the check answers.
+     */
+    private static Scenario tickSyncedWorldBorders()
+    {
+        int[] phase = {0};
+        int[] started = {0};
+        double[] size = {-1.0D, -1.0D};
+        return new Scenario(900, List.of(), List.of(
+                "carpet tickSyncedWorldBorders true",
+                "tick rate 40"), server ->
+        {
+            WorldBorder border = server.overworld().getWorldBorder();
+            switch (phase[0])
+            {
+                case 0:
+                    border.lerpSizeBetween(BORDER_FROM, BORDER_TO, BORDER_DURATION_MILLIS, Util.getMillis());
+                    started[0] = ticks;
+                    phase[0] = 1;
+                    return new Probe(false, fmt("started a %.0f second border lerp from %.0f to %.0f at 40 ticks a second",
+                            BORDER_DURATION_MILLIS / 1000.0D, BORDER_FROM, BORDER_TO));
+                case 1:
+                    if (ticks < started[0] + BORDER_WAIT)
+                        return pending(fmt("%d of the %d ticks to wait are left", started[0] + BORDER_WAIT - ticks, BORDER_WAIT));
+                    size[0] = border.getSize();
+                    run(server, "carpet tickSyncedWorldBorders false");
+                    border.lerpSizeBetween(BORDER_FROM, BORDER_TO, BORDER_DURATION_MILLIS, Util.getMillis());
+                    started[0] = ticks;
+                    phase[0] = 2;
+                    return new Probe(false, fmt("with the rule on the border is %.1f after %d game ticks", size[0], BORDER_WAIT));
+                case 2:
+                    if (ticks < started[0] + BORDER_WAIT)
+                        return pending(fmt("%d of the %d ticks to wait are left", started[0] + BORDER_WAIT - ticks, BORDER_WAIT));
+                    size[1] = border.getSize();
+                    border.setSize(WorldBorder.MAX_SIZE);
+                    phase[0] = 3;
+                    return new Probe(false, fmt("with the rule off the border is %.1f after %d game ticks, putting it back", size[1], BORDER_WAIT));
+                case 3:
+                    if (border.getSize() < BORDER_FROM * 1000.0D) return pending("letting the border grow back");
+                    run(server, "tick sprint 1d");
+                    return new Probe(Math.abs(size[0] - BORDER_TO) < 0.5D && size[1] > BORDER_FROM / 2.0D, fmt(
+                            "after %d game ticks at 40 ticks a second a %.0f second lerp from %.0f to %.0f read %.1f with tickSyncedWorldBorders on and %.1f with it off",
+                            BORDER_WAIT, BORDER_DURATION_MILLIS / 1000.0D, BORDER_FROM, BORDER_TO, size[0], size[1]));
+                default:
+                    return new Probe(false, "done");
+            }
         });
     }
 
@@ -2355,6 +2792,98 @@ public final class SelfTest
         Vec3 hit = Vec3.atCenterOf(against).add(face.getStepX() * 0.5D, 0.0D, face.getStepZ() * 0.5D);
         bot.connection.handleUseItemOn(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND,
                 new BlockHitResult(hit, face, against, false), 0));
+    }
+
+    /**
+     * Answers the teleport the server sent when it spawned the player, which is what clears the flag the listener
+     * drops block use packets for. A fake player has no client to send that answer, so the scenario sends it; the
+     * teleport id is read by reflection, as nothing else hands it out.
+     */
+    private static void confirmTeleport(ServerPlayer bot)
+    {
+        try
+        {
+            Field id = bot.connection.getClass().getSuperclass().getDeclaredField("awaitingTeleport");
+            id.setAccessible(true);
+            //? if >=26.3 {
+            bot.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id.getInt(bot.connection),
+                    bot.getX(), bot.getY(), bot.getZ(), bot.getYRot(), bot.getXRot()));
+            //?} else {
+            /*bot.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id.getInt(bot.connection)));
+            *///?}
+        }
+        catch (ReflectiveOperationException e)
+        {
+            throw new IllegalStateException("could not answer the pending teleport of " + bot.getName().getString(), e);
+        }
+    }
+
+    /** A use-item packet the way a client sends it. */
+    private static void useItemByPacket(MinecraftServer server, String name)
+    {
+        ServerPlayer bot = player(server, name);
+        bot.connection.handleUseItem(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 0, bot.getYRot(), bot.getXRot()));
+    }
+
+    /** The start of a block break, the way a client sends it. */
+    private static void hitBlock(MinecraftServer server, String name, BlockPos pos)
+    {
+        player(server, name).connection.handlePlayerAction(
+                new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, Direction.UP, 0));
+    }
+
+    /** Posts a step game event where a footstep of the named fake player would. */
+    private static void step(ServerLevel level, BlockPos at, String source)
+    {
+        level.gameEvent(GameEvent.STEP, Vec3.atCenterOf(at), GameEvent.Context.of(player(level.getServer(), source)));
+    }
+
+    /** The frequency of the last vibration a sensor heard, kept until it is reloaded. */
+    private static int frequency(ServerLevel level, BlockPos sensor)
+    {
+        return level.getBlockEntity(sensor) instanceof SculkSensorBlockEntity sculk ? sculk.getLastVibrationFrequency() : -1;
+    }
+
+    /** Sums up the given number of lightning bolts, the way an operator does with /summon. */
+    private static void strikeLightning(MinecraftServer server, BlockPos at, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            run(server, "summon minecraft:lightning_bolt " + at.getX() + " " + at.getY() + " " + at.getZ());
+        }
+    }
+
+    /** The skeleton horses with the trap flag near a spot, which only natural lightning spawns. */
+    private static int trapHorses(MinecraftServer server, BlockPos near, double radius)
+    {
+        int traps = 0;
+        for (SkeletonHorse horse : server.overworld().getEntitiesOfClass(SkeletonHorse.class, new AABB(near).inflate(radius)))
+        {
+            if (horse.isTrap()) traps++;
+        }
+        return traps;
+    }
+
+    /**
+     * Puts a block into the position set carpet.helpers.OptimizedExplosion carries from one explosion to the next, the
+     * way an explosion that skipped the walk would. Read and written by reflection, the way the watchdog reads the
+     * player tracker: nothing outside the helper has any business there.
+     */
+    private static void queueLeftoverPositions(BlockPos leftover)
+    {
+        try
+        {
+            Field field = OptimizedExplosion.class.getDeclaredField("affectedBlockPositionsSet");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Collection<BlockPos> positions = (Collection<BlockPos>) field.get(null);
+            positions.clear();
+            positions.add(leftover.immutable());
+        }
+        catch (ReflectiveOperationException e)
+        {
+            throw new IllegalStateException("could not reach the explosion position cache", e);
+        }
     }
 
     static void log(MinecraftServer server, String message)

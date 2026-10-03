@@ -1,30 +1,36 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.commands.SummonCommand;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.animal.equine.SkeletonHorse;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(SummonCommand.class)
 public class SummonCommand_lightningMixin
 {
-    @Redirect(method = "createEntity", at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/Entity;blockPosition()Lnet/minecraft/core/BlockPos;"
-    ))
-    private static BlockPos addRiders(Entity entity)
+    // [CM] SummonNaturalLightning - if statement around. This runs after every summon, not from the
+    // blockPosition() call the rest of the branch makes, which vanilla only reaches for a mob.
+    @Inject(method = "createEntity", at = @At("RETURN"))
+    private static void addRiders(CommandSourceStack source, Holder.Reference<EntityType<?>> type, Vec3 pos,
+                                  CompoundTag tag, boolean load, CallbackInfoReturnable<Entity> cir)
     {
-        // [CM] SummonNaturalLightning - if statement around
+        Entity entity = cir.getReturnValue();
         if (CarpetSettings.summonNaturalLightning && entity instanceof LightningBolt && !entity.level().isClientSide())
         {
             ServerLevel world = (ServerLevel) entity.level();
@@ -39,7 +45,5 @@ public class SummonCommand_lightningMixin
                 world.addFreshEntity(skeletonHorseEntity_1);
             }
         }
-        return entity.blockPosition();
     }
-
 }

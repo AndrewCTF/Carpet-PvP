@@ -138,14 +138,29 @@ public class Messenger
         if (limit >= 0)
         {
             desc = message.substring(0, limit);
-            str = message.substring(limit+1);
+            str = message.substring(limit + 1);
+        }
+        else if (!hasClickPrefix(message))
+        {
+            // There is no space, so nothing can follow a style token: without a click or hover prefix
+            // the whole field is the value itself, and an empty desc marks that. Taking the field for a
+            // style description instead would leave an empty component and drop the value.
+            desc = "";
+            str = message;
         }
         if (previousMessage == null) {
             MutableComponent text = Component.literal(str);
-            text.setStyle(parseStyle(desc));
+            text.setStyle(parseStyle(desc)); // an empty desc is plain white
             return text;
         }
         Style previousStyle = previousMessage.getStyle();
+        if (desc.isEmpty())
+        {
+            // a bare value, styled like whatever was said before it
+            MutableComponent value = Component.literal(str);
+            value.setStyle(previousStyle);
+            return value;
+        }
         MutableComponent ret = previousMessage;
         previousMessage.setStyle(switch (desc.charAt(0)) {
             case '?' -> previousStyle.withClickEvent(new ClickEvent.SuggestCommand(message.substring(1)));
@@ -160,6 +175,13 @@ public class Messenger
             }
         });
         return ret;
+    }
+
+    /** True for the fields that ask for a click or hover event instead of describing a style. */
+    private static boolean hasClickPrefix(String message)
+    {
+        char first = message.charAt(0);
+        return first == '?' || first == '!' || first == '^' || first == '@' || first == '&';
     }
     public static Component tp(String desc, Vec3 pos) { return tp(desc, pos.x, pos.y, pos.z); }
     public static Component tp(String desc, BlockPos pos) { return tp(desc, pos.getX(), pos.getY(), pos.getZ()); }
