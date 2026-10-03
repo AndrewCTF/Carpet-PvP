@@ -25,5 +25,12 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("match_ffa", MatchScenarios::ffa);
+        SCENARIOS.put("match_teams", MatchScenarios::teams);
+        SCENARIOS.put("faction_persistence", MatchScenarios::factionPersistence);
+        SCENARIOS.put("spectate_roundtrip", MatchScenarios::spectateRoundtrip);
+        SCENARIOS.put("trace_records_fight", MatchScenarios::traceRecordsFight);
+        SCENARIOS.put("drill_aim_scores", DrillScenarios::aimScores);
+        SCENARIOS.put("drill_skips_without_needs", DrillScenarios::skipsWithoutWhatItNeeds);
     }
 }

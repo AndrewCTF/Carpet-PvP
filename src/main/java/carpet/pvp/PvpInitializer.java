@@ -6,6 +6,8 @@ import carpet.fakes.PlayerSwordBlockInterface;
 import carpet.logic.CarpetLogic;
 import carpet.network.ServerNetworkHandler;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -26,6 +28,10 @@ public final class PvpInitializer implements ModInitializer
     {
         CarpetServer.manageExtension(CarpetLogic.INSTANCE);
         AttackBlockCallback.EVENT.register(PvpInitializer::punishWrongToolHits);
+        // The practices of the server tick, load their world folder and put it away again.
+        ServerLifecycleEvents.SERVER_STARTED.register(PvpSystems::onServerStarted);
+        ServerLifecycleEvents.SERVER_STOPPED.register(PvpSystems::onServerStopped);
+        ServerTickEvents.END_SERVER_TICK.register(PvpSystems::tick);
     }
 
     /** Breaking a block that needs a tool with the wrong one in hand costs a heart, like hitting a player does. */
