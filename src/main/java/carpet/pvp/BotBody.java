@@ -315,6 +315,7 @@ public final class BotBody
         {
             pack.start(EntityPlayerActionPack.ActionType.USE, EntityPlayerActionPack.Action.continuous());
             shieldRaised = true;
+            CombatTraces.used(bot, bot.getItemBlockingWith());
         }
         stats.blockTicks++;
     }
@@ -430,6 +431,7 @@ public final class BotBody
         if (!canHit(target))
         {
             stats.misses++;
+            CombatTraces.miss(bot, target);
             pack.swing();
             return;
         }
@@ -446,7 +448,9 @@ public final class BotBody
                 false, false, true, bot.isSprinting(), gate);
         float before = target.getHealth() + target.getAbsorptionAmount();
         pack.attackEntity(target);
-        stats.damageDealt += Math.max(0.0F, before - (target.getHealth() + target.getAbsorptionAmount()));
+        double dealt = Math.max(0.0F, before - (target.getHealth() + target.getAbsorptionAmount()));
+        stats.damageDealt += dealt;
+        CombatTraces.hit(bot, target, dealt, crit);
         if (crit)
         {
             stats.crits++;
@@ -491,6 +495,7 @@ public final class BotBody
         if (previousHealth > health)
         {
             stats.damageTaken += previousHealth - health;
+            CombatTraces.took(bot, previousHealth - health);
         }
         previousHealth = health;
         if (target != null && (targetId == null || !targetId.equals(target.getUUID())))
