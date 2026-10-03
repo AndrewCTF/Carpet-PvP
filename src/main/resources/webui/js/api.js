@@ -165,15 +165,19 @@ const API = (() => {
     const saveProgram = (program) => _fetch('/api/programs', { method: 'POST', body: program });
     const deleteProgram = (id) => _fetch('/api/programs/' + encodeURIComponent(id), { method: 'DELETE' });
     const getBots = () => _fetch('/api/bots');
+    const getMatches = () => _fetch('/api/matches');
     const spawnBot = (name) => _fetch('/api/bots/spawn', { method: 'POST', body: { name } });
     const removeBot = (name) => _fetch('/api/bots/remove', { method: 'POST', body: { name } });
+    // One combat setting of one bot, by the name /player <name> ai takes.
+    const setBotConfig = (name, key, value) => _fetch('/api/bots/config', { method: 'POST', body: { name, key, value } });
+    const tpBot = (name) => _fetch('/api/bots/tp', { method: 'POST', body: { name } });
     const runProgram = (botName, name, actions) => _fetch('/api/execute', { method: 'POST', body: { botName, name, actions } });
     const stopProgram = (botName) => _fetch('/api/stop', { method: 'POST', body: { botName } });
 
     return {
         connect, disconnect, isConnected, hasToken, on, off,
         getStatus, getSettings, getSchema, getPrograms, getPresets, saveProgram, deleteProgram,
-        getBots, spawnBot, removeBot, runProgram, stopProgram
+        getBots, getMatches, spawnBot, removeBot, setBotConfig, tpBot, runProgram, stopProgram
     };
 
 })();

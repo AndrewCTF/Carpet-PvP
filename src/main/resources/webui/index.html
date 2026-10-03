@@ -109,7 +109,7 @@
 
             <!-- Top-right controls -->
             <div id="toolbar-tr">
-                <button class="tl-btn text" id="btn-bots" title="Bots: spawn, pick and watch (B)">Bots</button>
+                <button class="tl-btn text" id="btn-bots" title="Bots: live stats, and what you may do to them (B)">Bots</button>
                 <button class="tl-btn text" id="btn-settings" title="Settings">Settings</button>
             </div>
 
@@ -136,6 +136,11 @@
     <aside id="right-panel" class="panel-closed">
         <button id="rp-close" class="rp-close-btn">&times;</button>
 
+        <div class="rp-tabs">
+            <button class="rp-tab active" data-tab="bots">Bots</button>
+            <button class="rp-tab" data-tab="matches">Matches</button>
+        </div>
+
         <section class="rp-section">
             <div class="rp-header"><span>Spawn a bot where you stand</span></div>
             <div class="rp-body">
@@ -150,41 +155,39 @@
             </div>
         </section>
 
-        <section class="rp-section">
-            <div class="rp-header"><span>Bots</span></div>
-            <div class="rp-body">
-                <div id="bot-list" class="item-list">
-                    <div class="empty-hint">No active bots</div>
+        <div class="rp-tab-panel active" data-panel="bots">
+            <section class="rp-section">
+                <div class="rp-header"><span>Live</span></div>
+                <div class="rp-body">
+                    <div id="panel-stale" class="rp-stale hidden">Not connected — these numbers may be out of date</div>
+                    <div id="bot-list" class="bot-cards"></div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section class="rp-section">
-            <div class="rp-header"><span>Run on</span></div>
-            <div class="rp-body">
-                <div class="rp-field">
-                    <label for="target-bot-select">Target Bot</label>
-                    <select id="target-bot-select">
-                        <option value="">Select a bot…</option>
-                    </select>
+            <section class="rp-section">
+                <div class="rp-header"><span>Run on</span></div>
+                <div class="rp-body">
+                    <div class="rp-field">
+                        <label for="target-bot-select">Target Bot</label>
+                        <select id="target-bot-select">
+                            <option value="">Select a bot…</option>
+                        </select>
+                    </div>
+                    <div class="rp-row">
+                        <button id="btn-run" class="btn-sm green flex-1">▶ Run</button>
+                        <button id="exec-stop-btn" class="btn-sm red flex-1">■ Stop</button>
+                    </div>
+                    <div class="rp-status">
+                        <span class="rp-status-label">Status</span>
+                        <span id="exec-state" class="rp-status-value">Idle</span>
+                    </div>
                 </div>
-                <div class="rp-row">
-                    <button id="btn-run" class="btn-sm green flex-1">▶ Run</button>
-                    <button id="exec-stop-btn" class="btn-sm red flex-1">■ Stop</button>
-                </div>
-                <div class="rp-status">
-                    <span class="rp-status-label">Status</span>
-                    <span id="exec-state" class="rp-status-value">Idle</span>
-                </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
-        <section class="rp-section hidden" id="bot-status-section">
-            <div class="rp-header"><span>Bot Status</span></div>
-            <div class="rp-body">
-                <div id="bot-status-content" class="status-grid"></div>
-            </div>
-        </section>
+        <div class="rp-tab-panel" data-panel="matches">
+            <div id="match-list" class="match-list"></div>
+        </div>
     </aside>
 
     <!-- ═══ No-access notice ═══════════════════════════════ -->

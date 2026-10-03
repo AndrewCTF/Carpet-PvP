@@ -2,16 +2,12 @@ package carpet.logic.bot;
 
 import carpet.patches.EntityPlayerMPFake;
 import carpet.utils.Messenger;
-import com.google.gson.JsonObject;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.NameAndId;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -68,12 +64,25 @@ public class BotManager
      */
     public boolean remove(String name)
     {
-        if (server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake)
+        EntityPlayerMPFake bot = getBot(name);
+        if (bot == null)
         {
-            fake.fakePlayerDisconnect(Messenger.s(""));
-            return true;
+            return false;
         }
-        return false;
+        bot.fakePlayerDisconnect(Messenger.s(""));
+        return true;
+    }
+
+    /**
+     * @return the fake player with this name, or null when there is none or the name could not be one
+     */
+    public EntityPlayerMPFake getBot(String name)
+    {
+        if (name == null || !BOT_NAME.matcher(name).matches())
+        {
+            return null;
+        }
+        return server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake ? fake : null;
     }
 
     /**
@@ -81,31 +90,8 @@ public class BotManager
      */
     public BotController getController(String name)
     {
-        return server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake fake ? new BotController(fake) : null;
-    }
-
-    public static JsonObject describe(ServerPlayer bot)
-    {
-        JsonObject json = new JsonObject();
-        json.addProperty("name", bot.getGameProfile().name());
-        json.addProperty("x", bot.getX());
-        json.addProperty("y", bot.getY());
-        json.addProperty("z", bot.getZ());
-        json.addProperty("yaw", bot.getYRot());
-        json.addProperty("pitch", bot.getXRot());
-        json.addProperty("health", bot.getHealth());
-        json.addProperty("maxHealth", bot.getMaxHealth());
-        json.addProperty("foodLevel", bot.getFoodData().getFoodLevel());
-        json.addProperty("gamemode", bot.gameMode.getGameModeForPlayer().getName());
-        json.addProperty("dimension", bot.level().dimension().identifier().toString());
-        json.addProperty("sprinting", bot.isSprinting());
-        json.addProperty("sneaking", bot.isCrouching());
-        for (EquipmentSlot slot : EquipmentSlot.values())
-        {
-            ItemStack stack = bot.getItemBySlot(slot);
-            json.addProperty(slot.getName(), stack.isEmpty() ? "empty" : stack.getItem().toString());
-        }
-        return json;
+        EntityPlayerMPFake fake = getBot(name);
+        return fake == null ? null : new BotController(fake);
     }
 
     public List<ServerPlayer> getBots()

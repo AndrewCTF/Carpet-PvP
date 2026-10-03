@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,7 +37,11 @@ class WebServerTest
     private static final String LOOPBACK = "127.0.0.1";
 
     private static final List<String> ROUTES = List.of("/api/status", "/api/settings", "/api/schema", "/api/programs",
-            "/api/presets", "/api/bots", "/api/events", "/api/execute", "/api/stop", "/api/anything-else");
+            "/api/presets", "/api/bots", "/api/matches", "/api/events", "/api/execute", "/api/stop", "/api/anything-else");
+
+    /** The routes that change something, and therefore have to be a POST with a token. */
+    private static final List<String> WRITE_ROUTES = List.of("/api/bots/spawn", "/api/bots/remove", "/api/bots/config",
+            "/api/bots/tp", "/api/execute", "/api/stop", "/api/programs");
 
     private final AuthManager auth = new AuthManager();
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
@@ -61,6 +66,16 @@ class WebServerTest
 
     private HttpResponse<String> request(String address, String path, String token) throws IOException, InterruptedException
     {
+        return request(address, path, token, "GET");
+    }
+
+    private HttpResponse<String> post(String path, String token) throws IOException, InterruptedException
+    {
+        return request(LOOPBACK, path, token, "POST");
+    }
+
+    private HttpResponse<String> request(String address, String path, String token, String method) throws IOException, InterruptedException
+    {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://" + address + ":" + port + path))
                 .timeout(Duration.ofSeconds(5))
                 // What a page on another origin would send.
@@ -70,9 +85,9 @@ class WebServerTest
         {
             request.header("Authorization", "Bearer " + token);
         }
-        boolean posts = path.equals("/api/execute") || path.equals("/api/stop");
-        return client.send(request.method(posts ? "POST" : "GET", HttpRequest.BodyPublishers.noBody()).build(),
-                HttpResponse.BodyHandlers.ofString());
+        HttpRequest.BodyPublisher body = "POST".equals(method) ? HttpRequest.BodyPublishers.ofString("{}")
+                : HttpRequest.BodyPublishers.noBody();
+        return client.send(request.method(method, body).build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test
@@ -89,6 +104,19 @@ class WebServerTest
     }
 
     @Test
+    void everyWriteRouteNeedsATokenToo() throws IOException, InterruptedException
+    {
+        listen(LOOPBACK);
+        for (String route : WRITE_ROUTES)
+        {
+            HttpResponse<String> response = post(route, null);
+            assertEquals(401, response.statusCode(), route);
+            assertEquals("Bearer", response.headers().firstValue("WWW-Authenticate").orElse(null), route);
+            assertTrue(response.body().contains("Missing or expired token"), route);
+        }
+    }
+
+    @Test
     void aTokenTheServerDidNotIssueIsRefused() throws IOException, InterruptedException
     {
         listen(LOOPBACK);
@@ -97,6 +125,15 @@ class WebServerTest
         assertEquals(401, request(LOOPBACK, "/api/status",
                 new AuthManager().issue(UUID.randomUUID(), "Steve", Duration.ofHours(1).toMillis())).statusCode());
         assertEquals(401, request(LOOPBACK, "/api/status", "not-a-token").statusCode());
+    }
+
+    @Test
+    void aSessionThatBelongsToAPlayerIsCheckedAgainstTheGame()
+    {
+        // A link from the console stands for the server itself, which may use everything. Whether the player a
+        // link was issued to is still online and may still use /carpetlogic is decided by the running game, so
+        // that half of the check needs a server this test does not have.
+        assertNull(new Api(null, null).denied(new AuthManager.Session(null, "Server", Long.MAX_VALUE)));
     }
 
     @Test
