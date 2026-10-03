@@ -11,8 +11,11 @@ import java.util.Random;
  * @param fittsA           Fitts intercept, seconds
  * @param fittsB           Fitts slope, seconds per bit
  * @param noiseCoeff       endpoint standard deviation as a fraction of the movement distance
- * @param maxDegPerTick    per-axis rotation limit per tick, degrees
- * @param trackRangeDegrees distance within which target changes are followed without a reaction delay
+ * @param maxDegPerTick    Euclidean rotation limit per tick, degrees
+ * @param trackRangeDegrees distance within which a moving target is pursued without a reaction delay
+ * @param pursuitLagMs     lag of the target-velocity estimate used while pursuing, milliseconds
+ * @param pursuitGain      fraction of the remaining position error corrected per tick while pursuing
+ * @param pursuitNoise     pursuit noise standard deviation as a fraction of the tracked angular speed
  */
 public record LookProfile(
         float sensitivity,
@@ -22,14 +25,25 @@ public record LookProfile(
         double fittsB,
         double noiseCoeff,
         double maxDegPerTick,
-        double trackRangeDegrees)
+        double trackRangeDegrees,
+        double pursuitLagMs,
+        double pursuitGain,
+        double pursuitNoise)
 {
+    /** Profile with typical-skill pursuit parameters. */
+    public LookProfile(float sensitivity, double reactionMinMs, double reactionMaxMs, double fittsA,
+            double fittsB, double noiseCoeff, double maxDegPerTick, double trackRangeDegrees)
+    {
+        this(sensitivity, reactionMinMs, reactionMaxMs, fittsA, fittsB, noiseCoeff, maxDegPerTick,
+                trackRangeDegrees, 100.0, 0.35, 0.12);
+    }
+
     /** Milliseconds per game tick. */
     public static final double MS_PER_TICK = 50.0;
 
     /**
      * Profile for a given skill: 0 is a beginner, 0.5 a typical human, 1 an expert.
-     * Reaction time, Fitts constants, noise and speed limit are interpolated linearly.
+     * Reaction time, Fitts constants, noise, speed limit and pursuit parameters are interpolated linearly.
      */
     public static LookProfile ofSkill(double skill, float sensitivity)
     {
@@ -42,7 +56,10 @@ public record LookProfile(
                 lerp(0.22, 0.08, s),
                 lerp(0.10, 0.03, s),
                 lerp(30.0, 75.0, s),
-                4.0);
+                4.0,
+                lerp(150.0, 50.0, s),
+                lerp(0.20, 0.50, s),
+                lerp(0.20, 0.04, s));
     }
 
     private static double lerp(double a, double b, double t)

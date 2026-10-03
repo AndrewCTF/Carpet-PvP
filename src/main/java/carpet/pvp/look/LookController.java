@@ -7,14 +7,27 @@ import java.util.Random;
  * per game tick, then read {@link #yaw}, {@link #pitch} and {@link #changed}. Allocation-free.
  *
  * <p>Model: reaction delay, Fitts's-law movement time, minimum-jerk trajectory, endpoint noise
- * proportional to distance, one corrective submovement, delay-free tracking of nearby targets,
- * speed limit and mouse-grid quantisation. Distances are Euclidean in (yaw, pitch) degrees.
+ * proportional to distance, one corrective submovement, speed limit and mouse-grid quantisation.
+ * A target that moves smoothly while the view is on or near it is pursued by velocity matching: the
+ * smoothed aim-point velocity, delayed by the profile's pursuit lag, plus a proportional correction
+ * of the position error and noise proportional to the tracked speed. A target that jumps, or is
+ * far away, goes through reaction delay and a ballistic movement instead. Distances are in
+ * (yaw * cos(pitch), pitch) degrees; the speed limit is the Euclidean per-tick rotation.
  */
 public final class LookController
 {
     private static final int IDLE = 0;
     private static final int REACT = 1;
     private static final int MOVE = 2;
+    private static final int PURSUE = 3;
+    /** Smoothing factor of the aim velocity estimate (about two ticks of averaging). */
+    private static final double ALPHA = 0.5;
+    /** Smoothed aim speed, degrees per tick, above which the target counts as moving. */
+    private static final double MOVING_ON = 0.75;
+    /** Smoothed aim speed below which pursuit may end. */
+    private static final double MOVING_OFF = 0.25;
+    private static final int STILL_TICKS = 3;
+    private static final int HIST = 16;
     /** Peak speed of a minimum-jerk movement is this multiple of the mean speed. */
     private static final double PEAK_FACTOR = 1.875;
 
@@ -46,6 +59,20 @@ public final class LookController
     private int elapsed;
     private boolean isCorrection;
     private int corrections;
+
+    private boolean haveAim;
+    private double prevAimYaw;
+    private double prevAimPitch;
+    private double estVy;
+    private double estVp;
+    private double estSpeed;
+    private boolean jump;
+    private final double[] histY = new double[HIST];
+    private final double[] histP = new double[HIST];
+    private int histIdx;
+    private double delVy;
+    private double delVp;
+    private int stillTicks;
 
     public LookController(LookProfile profile, Random rng)
     {
@@ -79,6 +106,7 @@ public final class LookController
     {
         hasTarget = false;
         hasGoal = false;
+        haveAim = false;
         state = IDLE;
     }
 
@@ -118,6 +146,7 @@ public final class LookController
         {
             return;
         }
+        observeAim();
         if (state != REACT)
         {
             detect();
@@ -135,19 +164,137 @@ public final class LookController
         {
             advance();
         }
+        else if (state == PURSUE)
+        {
+            pursue();
+        }
+    }
+
+    /** Updates the smoothed aim velocity estimate and flags a jump of the aim point. */
+    private void observeAim()
+    {
+        if (!haveAim)
+        {
+            haveAim = true;
+            prevAimYaw = aimYaw;
+            prevAimPitch = aimPitch;
+            resetEstimate();
+            return;
+        }
+        double dy = wrap(aimYaw - prevAimYaw);
+        double dp = aimPitch - prevAimPitch;
+        double step = angular(dy, dp, aimPitch, aimPitch);
+        prevAimYaw = aimYaw;
+        prevAimPitch = aimPitch;
+        jump = step > 2.0 * (profile.trackRangeDegrees() + estSpeed);
+        if (jump)
+        {
+            resetEstimate();
+            return;
+        }
+        estVy += ALPHA * (dy - estVy);
+        estVp += ALPHA * (dp - estVp);
+        estSpeed = angular(estVy, estVp, aimPitch, aimPitch);
+        histIdx = (histIdx + 1) & (HIST - 1);
+        histY[histIdx] = estVy;
+        histP[histIdx] = estVp;
+        double lag = Math.min(profile.pursuitLagMs() / LookProfile.MS_PER_TICK, HIST - 2);
+        int lo = (int) lag;
+        double f = lag - lo;
+        int i0 = (histIdx - lo) & (HIST - 1);
+        int i1 = (histIdx - lo - 1) & (HIST - 1);
+        delVy = histY[i0] * (1.0 - f) + histY[i1] * f;
+        delVp = histP[i0] * (1.0 - f) + histP[i1] * f;
+    }
+
+    private void resetEstimate()
+    {
+        estVy = 0.0;
+        estVp = 0.0;
+        estSpeed = 0.0;
+        delVy = 0.0;
+        delVp = 0.0;
+        for (int i = 0; i < HIST; i++)
+        {
+            histY[i] = 0.0;
+            histP[i] = 0.0;
+        }
+    }
+
+    /** One tick of velocity-matching pursuit: delayed velocity estimate, position correction, noise. */
+    private void pursue()
+    {
+        double ex = wrap(aimYaw - viewYaw);
+        double ep = aimPitch - viewPitch;
+        double sigma = profile.pursuitNoise() * estSpeed;
+        // The aim point has already moved this tick, so the velocity step is subtracted from the error.
+        double cy = delVy + profile.pursuitGain() * (ex - delVy) + noise() * sigma;
+        double cp = delVp + profile.pursuitGain() * (ep - delVp) + noise() * sigma;
+        applyStep(cy, cp);
     }
 
     private void detect()
     {
+        double vy = viewYaw + wrap(aimYaw - viewYaw);
+        double fromView = angular(vy - viewYaw, aimPitch - viewPitch, viewPitch, aimPitch);
         if (!hasGoal)
         {
-            startReaction();
+            if (fromView > radius)
+            {
+                startReaction();
+                return;
+            }
+            hasGoal = true;
+            goalYaw = vy;
+            goalPitch = aimPitch;
+        }
+        if (jump)
+        {
+            if (fromView <= profile.trackRangeDegrees())
+            {
+                plan(false);
+            }
+            else
+            {
+                startReaction();
+            }
+            return;
+        }
+        if (state == PURSUE)
+        {
+            if (fromView > 3.0 * profile.trackRangeDegrees() + radius)
+            {
+                startReaction();
+            }
+            else if (estSpeed >= MOVING_OFF)
+            {
+                stillTicks = 0;
+            }
+            else if (++stillTicks >= STILL_TICKS)
+            {
+                state = IDLE;
+                goalYaw = vy;
+                goalPitch = aimPitch;
+            }
+            return;
+        }
+        if (estSpeed >= MOVING_ON)
+        {
+            if (fromView <= profile.trackRangeDegrees() + radius)
+            {
+                state = PURSUE;
+                stillTicks = 0;
+                goalYaw = vy;
+                goalPitch = aimPitch;
+            }
+            else if (state == IDLE)
+            {
+                plan(false);
+            }
             return;
         }
         double gy = goalYaw + wrap(aimYaw - goalYaw);
-        boolean jumped = Math.hypot(gy - goalYaw, aimPitch - goalPitch) > radius;
-        double vy = viewYaw + wrap(aimYaw - viewYaw);
-        double fromView = Math.hypot(vy - viewYaw, aimPitch - viewPitch);
+        boolean jumped = angular(gy - goalYaw, aimPitch - goalPitch, goalPitch, aimPitch) > radius;
         if (jumped)
         {
             if (fromView <= profile.trackRangeDegrees())
@@ -179,7 +326,7 @@ public final class LookController
     {
         double ay = viewYaw + wrap(aimYaw - viewYaw);
         double ap = aimPitch;
-        double dist = Math.hypot(ay - viewYaw, ap - viewPitch);
+        double dist = angular(ay - viewYaw, ap - viewPitch, viewPitch, ap);
         double sigma = profile.noiseCoeff() * dist;
         double ey = ay + noise() * sigma;
         double ep = clampPitch(ap + noise() * sigma);
@@ -219,26 +366,54 @@ public final class LookController
         double wantYaw = startYaw + f * deltaYaw;
         double wantPitch = startPitch + f * deltaPitch;
 
-        int ny = clamp((int) Math.rint((wantYaw - viewYaw) / grid), -maxSteps, maxSteps);
-        int np = (int) Math.rint((wantPitch - viewPitch) / grid);
+        applyStep(wantYaw - viewYaw, wantPitch - viewPitch);
+        if (elapsed >= duration)
+        {
+            state = IDLE;
+            if (estSpeed >= MOVING_ON)
+            {
+                goalYaw = viewYaw + wrap(aimYaw - viewYaw);
+                goalPitch = aimPitch;
+            }
+            else if (!isCorrection
+                    && angular(goalYaw - viewYaw, goalPitch - viewPitch, viewPitch, goalPitch) > radius)
+            {
+                plan(true);
+            }
+        }
+    }
+
+    /**
+     * Rotates the view by the requested change, rounded to whole mouse-grid steps, with the
+     * Euclidean per-tick speed limit applied and the pitch kept within [-90, 90].
+     */
+    private void applyStep(double wantDy, double wantDp)
+    {
+        int ny = clamp((int) Math.rint(wantDy / grid), -maxSteps, maxSteps);
+        int np = clamp((int) Math.rint(wantDp / grid), -maxSteps, maxSteps);
+        double limit = profile.maxDegPerTick() / grid;
+        double mag = Math.hypot(ny, np);
+        if (mag > limit)
+        {
+            double k = limit / mag;
+            ny = (int) (ny * k);
+            np = (int) (np * k);
+        }
         int lo = Math.max(-maxSteps, (int) Math.ceil((-90.0 - viewPitch) / grid - 1e-9));
         int hi = Math.min(maxSteps, (int) Math.floor((90.0 - viewPitch) / grid + 1e-9));
         np = clamp(np, lo, hi);
-
         if (ny != 0 || np != 0)
         {
             viewYaw += ny * grid;
             viewPitch += np * grid;
             changed = true;
         }
-        if (elapsed >= duration)
-        {
-            state = IDLE;
-            if (!isCorrection && Math.hypot(goalYaw - viewYaw, goalPitch - viewPitch) > radius)
-            {
-                plan(true);
-            }
-        }
+    }
+
+    /** Angular size of a (yaw, pitch) difference, scaling yaw by the cosine of the mean pitch. */
+    private static double angular(double dYaw, double dPitch, double pitchA, double pitchB)
+    {
+        return Math.hypot(dYaw * Math.cos(Math.toRadians(0.5 * (pitchA + pitchB))), dPitch);
     }
 
     private static int clamp(int v, int lo, int hi)

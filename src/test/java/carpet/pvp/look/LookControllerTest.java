@@ -300,4 +300,191 @@ class LookControllerTest
             assertTrue(r.pitch[i] <= 90.0 && r.pitch[i] >= -90.0);
         }
     }
+
+    /** View and aim yaw/pitch per tick for a target moving at a constant velocity, view starting on it. */
+    private static final class Track
+    {
+        final double[] yaw;
+        final double[] pitch;
+        final double[] aimYaw;
+        final double[] aimPitch;
+
+        Track(LookController c, double vy, double vp, int reverseEvery, float r, int ticks)
+        {
+            yaw = new double[ticks + 1];
+            pitch = new double[ticks + 1];
+            aimYaw = new double[ticks + 1];
+            aimPitch = new double[ticks + 1];
+            c.reset(0f, 0f);
+            double ay = 0;
+            double ap = 0;
+            double dir = 1;
+            for (int i = 1; i <= ticks; i++)
+            {
+                if (reverseEvery > 0 && (i - 1) % reverseEvery == 0 && i > 1)
+                {
+                    dir = -dir;
+                }
+                ay += dir * vy;
+                ap += dir * vp;
+                c.aimAt((float) ay, (float) ap, r);
+                c.tick();
+                yaw[i] = c.yaw();
+                pitch[i] = c.pitch();
+                aimYaw[i] = ay;
+                aimPitch[i] = ap;
+            }
+        }
+
+        double err(int i)
+        {
+            return Math.hypot(aimYaw[i] - yaw[i], aimPitch[i] - pitch[i]);
+        }
+
+        double meanErr(int from, int to)
+        {
+            double sum = 0;
+            for (int i = from; i <= to; i++)
+            {
+                sum += err(i);
+            }
+            return sum / (to - from + 1);
+        }
+    }
+
+    private static double meanErrorAtSkill(double skill, long seed)
+    {
+        LookController c = new LookController(LookProfile.ofSkill(skill, 0.5f), new Random(seed));
+        Track t = new Track(c, 4.0, 0.0, 0, 5f, 400);
+        return t.meanErr(60, 400);
+    }
+
+    @Test
+    void constantVelocityTargetIsTrackedWithinRadiusAtMatchingSpeed()
+    {
+        for (long seed = 1; seed <= 5; seed++)
+        {
+            LookController c = new LookController(typical(0.5f), new Random(seed));
+            Track t = new Track(c, 4.0, 0.0, 0, 5f, 400);
+            assertTrue(t.meanErr(60, 400) < 5.0, "seed " + seed + " mean error " + t.meanErr(60, 400));
+            double speed = (t.yaw[400] - t.yaw[60]) / 340.0;
+            assertEquals(4.0, speed, 0.1, "seed " + seed);
+        }
+    }
+
+    @Test
+    void beginnerTracksWorseThanExpert()
+    {
+        for (long seed = 1; seed <= 5; seed++)
+        {
+            double beginner = meanErrorAtSkill(0.0, seed);
+            double expert = meanErrorAtSkill(1.0, seed);
+            System.out.println("tracking error seed " + seed + ": beginner " + beginner + " typical "
+                    + meanErrorAtSkill(0.5, seed) + " expert " + expert);
+            assertTrue(beginner > expert, "seed " + seed + ": " + beginner + " vs " + expert);
+        }
+    }
+
+    @Test
+    void reversingTargetCausesBoundedOvershootAndRecovers()
+    {
+        for (long seed = 1; seed <= 5; seed++)
+        {
+            LookController c = new LookController(typical(0.5f), new Random(seed));
+            Track t = new Track(c, 4.0, 0.0, 10, 5f, 400);
+            double worst = 0;
+            double biggestOvershoot = 0;
+            for (int k = 60; k + 10 <= 400; k += 10)
+            {
+                // Target turns at tick k+1; it was moving in direction d until then.
+                double d = Math.signum(t.aimYaw[k] - t.aimYaw[k - 1]);
+                double overshoot = 0;
+                for (int i = k + 1; i <= k + 10; i++)
+                {
+                    overshoot = Math.max(overshoot, d * (t.yaw[i] - t.aimYaw[k]));
+                    worst = Math.max(worst, t.err(i));
+                }
+                biggestOvershoot = Math.max(biggestOvershoot, overshoot);
+                assertTrue(overshoot < 4.0, "seed " + seed + " overshoot " + overshoot + " after tick " + k);
+                assertTrue(t.err(k + 10) < 5.0, "seed " + seed + " not recovered by tick " + (k + 10));
+            }
+            System.out.println("reversal seed " + seed + ": worst error " + worst + " max overshoot " + biggestOvershoot);
+            assertTrue(biggestOvershoot > 0.5, "no overshoot at all: " + biggestOvershoot);
+            assertTrue(worst < 12.0, "seed " + seed + " fell " + worst + " degrees behind");
+        }
+    }
+
+    @Test
+    void euclideanSpeedLimitHoldsOnDiagonalMovement()
+    {
+        LookProfile base = noiseless(typical(0.5f));
+        LookProfile slow = new LookProfile(0.5f, base.reactionMinMs(), base.reactionMaxMs(), base.fittsA(),
+                base.fittsB(), 0.0, 4.0, base.trackRangeDegrees());
+        // Ballistic diagonal movement.
+        LookController c = new LookController(slow, new Random(1));
+        Run r = new Run(c, 0f, 0f, 100f, 60f, 0.5f, 200);
+        for (int i = 1; i <= 200; i++)
+        {
+            assertTrue(Math.hypot(r.dy(i), r.dp(i)) <= 4.0 + TOL, "ballistic tick " + i);
+        }
+        // Pursuit of a target that outruns the limit on the diagonal (3, 3 is 4.24 per tick).
+        LookController p = new LookController(slow, new Random(1));
+        Track t = new Track(p, 3.0, 3.0, 0, 3f, 100);
+        double peak = 0;
+        for (int i = 2; i <= 100; i++)
+        {
+            double s = Math.hypot(t.yaw[i] - t.yaw[i - 1], t.pitch[i] - t.pitch[i - 1]);
+            assertTrue(s <= 4.0 + TOL, "pursuit tick " + i + " speed " + s);
+            peak = Math.max(peak, s);
+        }
+        assertTrue(peak > 3.0, "view barely moved: " + peak);
+    }
+
+    @Test
+    void quantisationHoldsDuringPursuit()
+    {
+        for (float sens : new float[] {0.5f, 0.2f, 1.0f})
+        {
+            LookProfile prof = typical(sens);
+            double g = prof.grid();
+            LookController c = new LookController(prof, new Random(13));
+            Track t = new Track(c, 2.0, 0.5, 10, 5f, 300);
+            boolean moved = false;
+            for (int i = 2; i <= 300; i++)
+            {
+                double dy = t.yaw[i] - t.yaw[i - 1];
+                double dp = t.pitch[i] - t.pitch[i - 1];
+                assertEquals(0.0, Math.abs(dy / g - Math.rint(dy / g)) * g, TOL, "yaw step " + i);
+                assertEquals(0.0, Math.abs(dp / g - Math.rint(dp / g)) * g, TOL, "pitch step " + i);
+                moved |= dy != 0;
+            }
+            assertTrue(moved);
+        }
+    }
+
+    @Test
+    void yawOffsetThatIsAngularlyInsideTheTargetCountsAsOnTargetAtSteepPitch()
+    {
+        // 4 degrees of yaw at pitch 80 is about 0.7 degrees of arc, inside a 1 degree radius.
+        LookController c = new LookController(typical(0.5f), new Random(3));
+        c.reset(0f, 80f);
+        for (int i = 0; i < 60; i++)
+        {
+            c.aimAt(4f, 80f, 1f);
+            c.tick();
+            assertFalse(c.changed(), "moved at tick " + i);
+            assertFalse(c.busy());
+        }
+        // 20 degrees of yaw is about 3.5 degrees of arc, outside it.
+        LookController far = new LookController(typical(0.5f), new Random(3));
+        far.reset(0f, 80f);
+        boolean moved = false;
+        for (int i = 0; i < 60; i++)
+        {
+            far.aimAt(20f, 80f, 1f);
+            far.tick();
+            moved |= far.changed();
+        }
+        assertTrue(moved);
+    }
 }
