@@ -10,6 +10,7 @@ import carpet.commands.BotCombatCommand;
 import carpet.commands.BotPracticeCommand;
 import carpet.commands.BotGuiCommand;
 import carpet.commands.CounterCommand;
+import carpet.commands.AutoSetupCommand;
 import carpet.commands.BotCommand;
 import carpet.commands.DistanceCommand;
 import carpet.commands.DrawCommand;
@@ -145,6 +146,7 @@ public class CarpetServer
         BotCombatCommand.register(dispatcher, commandBuildContext);
         BotPracticeCommand.register(dispatcher, commandBuildContext);
         BotGuiCommand.register(dispatcher, commandBuildContext);
+        AutoSetupCommand.register(dispatcher, commandBuildContext);
         SpawnPlayerCommand.register(dispatcher, commandBuildContext);
         InfoCommand.register(dispatcher, commandBuildContext);
         DistanceCommand.register(dispatcher, commandBuildContext);

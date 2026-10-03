@@ -671,6 +671,10 @@ public class CarpetSettings
     @Rule(desc = "Enables /bot command to spawn and drive PvP combat bots and manage their kits", category = COMMAND)
     public static String commandBot = "true";
 
+    @Rule(desc = "Enables /auto-setup command, which sets a player up to fight a bot and takes it all back down again", category = COMMAND,
+            options = {"true", "false", "ops"})
+    public static String commandAutoSetup = "true";
+
     @Rule(desc = "Spawn offline players in online mode if online-mode player with specified name does not exist", category = COMMAND)
     public static boolean allowSpawningOfflinePlayers = true;
 

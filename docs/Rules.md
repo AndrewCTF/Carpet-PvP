@@ -132,6 +132,7 @@ it.
 | Rule | Type | Default | What it does |
 |---|---|---|---|
 | `commandBot` | perm | `true` | Whether `/bot kit ...` works, and for whom. See [Kits.md](Kits.md). |
+| `commandAutoSetup` | perm | `true` | Whether `/auto-setup` works, and for whom. A session turns `fakePlayerNavigation` on while it runs and puts it back afterwards, so that the bot can walk to the player. |
 
 ## CarpetLogic
 

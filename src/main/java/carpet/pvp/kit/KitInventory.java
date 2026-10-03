@@ -45,14 +45,22 @@ public final class KitInventory
     /** Clears the inventory and hands out the kit, remembering what was there first. */
     public static void apply(ServerPlayer player, Kit kit, RegistryAccess registries)
     {
+        save(player);
+        overwrite(player, kit, registries);
+    }
+
+    /**
+     * Clears the inventory and hands out the kit without remembering anything: for a caller that
+     * keeps its own record of what the player owned, like an {@code /auto-setup} session, and only
+     * wants the kit given out again.
+     */
+    public static void overwrite(ServerPlayer player, Kit kit, RegistryAccess registries)
+    {
+        // Every stack and slot is worked out before the player is touched: a kit that does not fit
+        // must not cost them their inventory.
         List<ItemStack> stacks = new ArrayList<>(kit.entries().size());
         for (KitEntry entry : kit.entries()) stacks.add(entry.createStack(registries));
-
-        // Every slot is worked out before the player is touched: a kit that does not fit must not
-        // cost them their inventory.
         List<KitSlot> slots = plan(kit);
-
-        save(player);
 
         Inventory inventory = player.getInventory();
         inventory.clearContent();

@@ -43,5 +43,9 @@ final class ScenarioIndex
         SCENARIOS.put("logic_on_kill_event", CombatNodeScenarios::onKillEvent);
         SCENARIOS.put("logic_totem_pop_event", CombatNodeScenarios::totemPopEvent);
         SCENARIOS.put("logic_stop_program_stops_fight", CombatNodeScenarios::stopProgramStopsFight);
+        SCENARIOS.put("autosetup_roundtrip", AutoSetupScenarios::roundtrip);
+        SCENARIOS.put("autosetup_each_mode", AutoSetupScenarios::eachMode);
+        SCENARIOS.put("autosetup_crash_safe", AutoSetupScenarios::crashSafe);
+        SCENARIOS.put("autosetup_rules_restored", AutoSetupScenarios::rulesRestored);
     }
 }

@@ -5,10 +5,12 @@ import carpet.CarpetSettings;
 import carpet.fakes.PlayerSwordBlockInterface;
 import carpet.logic.CarpetLogic;
 import carpet.network.ServerNetworkHandler;
+import carpet.pvp.autosetup.AutoSetupManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -32,6 +34,13 @@ public final class PvpInitializer implements ModInitializer
         ServerLifecycleEvents.SERVER_STARTED.register(PvpSystems::onServerStarted);
         ServerLifecycleEvents.SERVER_STOPPED.register(PvpSystems::onServerStopped);
         ServerTickEvents.END_SERVER_TICK.register(PvpSystems::tick);
+        ServerLifecycleEvents.SERVER_STARTED.register(AutoSetupManager::load);
+        ServerLifecycleEvents.SERVER_STOPPING.register(AutoSetupManager::onServerStopping);
+        ServerTickEvents.END_SERVER_TICK.register(AutoSetupManager::tick);
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+                AutoSetupManager.onPlayerJoined(server, handler.player));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
+                AutoSetupManager.onPlayerLeft(server, handler.player));
     }
 
     /** Breaking a block that needs a tool with the wrong one in hand costs a heart, like hitting a player does. */
