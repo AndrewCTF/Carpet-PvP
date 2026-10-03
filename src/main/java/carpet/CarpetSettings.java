@@ -668,6 +668,9 @@ public class CarpetSettings
     @Rule(desc = "Enables /player command to control/spawn players", category = COMMAND)
     public static String commandPlayer = "true";
 
+    @Rule(desc = "Enables /bot command to spawn and drive PvP combat bots", category = COMMAND)
+    public static String commandBot = "true";
+
     @Rule(desc = "Spawn offline players in online mode if online-mode player with specified name does not exist", category = COMMAND)
     public static boolean allowSpawningOfflinePlayers = true;
 
@@ -1197,6 +1200,38 @@ public class CarpetSettings
             options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE"}, strict = true)
     public static String botCombatStyle = "MELEE";
 
+    @Rule(desc = "Default bot difficulty preset, sets skill, pace and techniques at once", category = PVP,
+            options = {"BEGINNER", "CASUAL", "AVERAGE", "SKILLED", "EXPERT"}, strict = true)
+    public static String botDifficulty = "AVERAGE";
+
+    @Rule(desc = "Default bot skill from 0 (beginner) to 1 (expert), drives the aim and reaction model", category = PVP,
+            validate = Validators.Probablity.class)
+    public static double botSkill = 0.6D;
+
+    @Rule(desc = "Default ticks the bot's view of its target lags behind, as on a slow connection", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botPingTicks = 1;
+
+    @Rule(desc = "Default mouse clicks per second of a bot", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static double botClicksPerSecond = 10.0D;
+
+    @Rule(desc = "Default distance in blocks from the target within which the bot plans its fight", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static double botPlannerRange = 8.0D;
+
+    @Rule(desc = "Default number of ticks the fight planner looks ahead", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botPlannerHorizon = 12;
+
+    @Rule(desc = "Default number of action sequences the fight planner keeps", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botPlannerPopulation = 10;
+
+    @Rule(desc = "Simulated ticks every bot of the server may plan per server tick, split between them", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botSimBudget = 20000;
+
     @Rule(desc = "Bots prefer swords over axes for melee", category = PVP)
     public static boolean botPreferSword = true;
 
@@ -1211,6 +1246,12 @@ public class CarpetSettings
 
     @Rule(desc = "Bots bunny-hop while chasing (planned)", category = PVP)
     public static boolean botBhop = false;
+
+    @Rule(desc = "Bots tap sprint (W-tap) after a sprint hit instead of holding sprint", category = PVP)
+    public static boolean botWTap = true;
+
+    @Rule(desc = "Bots raise their shield to block an incoming hit", category = PVP)
+    public static boolean botShieldPlay = true;
 
     @Rule(desc = "Default melee engagement range in blocks", category = PVP,
             validate = Validators.NonNegativeNumber.class)

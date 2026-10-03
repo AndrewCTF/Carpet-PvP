@@ -1,6 +1,7 @@
 package carpet.pvp.sim;
 
 import java.util.Random;
+import java.util.function.IntPredicate;
 
 /**
  * Rolling-horizon evolution over {@link DuelSim} action sequences against an {@link OpponentModel}.
@@ -19,6 +20,7 @@ public final class RollingHorizon
     private final double[] fitness;
     private final int[] child;
     private final DuelSim scratch = new DuelSim();
+    private IntPredicate actionFilter;
     private boolean seeded;
     private int ticksUsed;
 
@@ -30,6 +32,17 @@ public final class RollingHorizon
         this.sequences = new int[population][horizon];
         this.fitness = new double[population];
         this.child = new int[horizon];
+    }
+
+    /**
+     * Removes actions from what the planner may choose: new and mutated actions are drawn from the
+     * allowed set only, and every rollout is run through the filter, so a technique the bot is not
+     * allowed to use never enters the search.
+     */
+    public RollingHorizon setActionFilter(IntPredicate actionFilter)
+    {
+        this.actionFilter = actionFilter;
+        return this;
     }
 
     /** Simulated ticks spent by the last {@link #plan} call. */
@@ -55,6 +68,10 @@ public final class RollingHorizon
         {
             seedPopulation();
             seeded = true;
+        }
+        if (actionFilter != null)
+        {
+            repair();
         }
         java.util.Arrays.fill(fitness, Double.NEGATIVE_INFINITY);
         for (int i = 0; i < population && budgetTicks - ticksUsed >= horizon; i++)
@@ -106,7 +123,11 @@ public final class RollingHorizon
                 sequences[i][t] = randomAction();
             }
         }
-        java.util.Arrays.fill(sequences[0], DuelSim.action(1, 0, false, true, true));
+        int sprintHit = DuelSim.action(1, 0, false, true, true);
+        if (allowed(sprintHit))
+        {
+            java.util.Arrays.fill(sequences[0], sprintHit);
+        }
         // Critical-hit openers: sprint in, jump after k ticks with sprint released, swing on the way down.
         for (int k = 1; k < population && k <= 8; k++)
         {
@@ -114,9 +135,10 @@ public final class RollingHorizon
             for (int t = 0; t < horizon; t++)
             {
                 int jumpAt = k - 1;
-                seq[t] = t < jumpAt ? DuelSim.action(1, 0, false, true, false)
+                int action = t < jumpAt ? DuelSim.action(1, 0, false, true, false)
                         : t < jumpAt + 7 ? DuelSim.action(1, 0, t == jumpAt, false, false)
                         : DuelSim.action(1, 0, false, false, t == jumpAt + 7);
+                seq[t] = allowed(action) ? action : randomAction();
             }
         }
     }
@@ -158,11 +180,40 @@ public final class RollingHorizon
     /** Biased toward closing in, sprinting and swinging so that random sequences are mostly sensible. */
     private int randomAction()
     {
-        int r = random.nextInt(4);
-        int forward = r < 2 ? 1 : r == 2 ? 0 : -1;
-        int s = random.nextInt(5);
-        int strafe = s < 3 ? 0 : s == 3 ? 1 : -1;
-        return DuelSim.action(forward, strafe, random.nextInt(7) == 0, random.nextInt(5) < 3, random.nextInt(6) == 0);
+        for (int attempt = 0; attempt < 16; attempt++)
+        {
+            int r = random.nextInt(4);
+            int forward = r < 2 ? 1 : r == 2 ? 0 : -1;
+            int s = random.nextInt(5);
+            int strafe = s < 3 ? 0 : s == 3 ? 1 : -1;
+            int action = DuelSim.action(forward, strafe, random.nextInt(7) == 0, random.nextInt(5) < 3,
+                    random.nextInt(6) == 0);
+            if (allowed(action))
+            {
+                return action;
+            }
+        }
+        return DuelSim.NOOP;
+    }
+
+    private boolean allowed(int action)
+    {
+        return actionFilter == null || actionFilter.test(action);
+    }
+
+    /** Replaces every stored action the filter rejects, so no rollout can search through one. */
+    private void repair()
+    {
+        for (int[] sequence : sequences)
+        {
+            for (int t = 0; t < horizon; t++)
+            {
+                if (!allowed(sequence[t]))
+                {
+                    sequence[t] = randomAction();
+                }
+            }
+        }
     }
 
     private double evaluate(int[] sequence, DuelSim state, int self, OpponentModel model)
@@ -174,7 +225,7 @@ public final class RollingHorizon
         float theirs0 = sim.fighter(other).health;
         for (int t = 0; t < horizon && !sim.over(); t++)
         {
-            int mine = sequence[t];
+            int mine = allowed(sequence[t]) ? sequence[t] : randomAction();
             int theirs = model.predict(sim, other);
             if (self == 0)
             {
