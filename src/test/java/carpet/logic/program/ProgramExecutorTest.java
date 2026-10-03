@@ -4,11 +4,14 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProgramExecutorTest
@@ -17,13 +20,27 @@ class ProgramExecutorTest
     private final RecordingBot recorder = new RecordingBot();
     private final ProgramExecutor executor = new ProgramExecutor(schema, name -> "bot".equals(name) ? recorder.bot : null, () -> 4);
 
+    private final List<String> warnings = new ArrayList<>();
+
     // Programs are written in Gson's lenient JSON: no quotes needed around names and plain words.
-    private void run(String json)
+    private List<BotAction> parse(String json)
     {
         List<BotAction> actions = new Gson().fromJson(json, new TypeToken<List<BotAction>>() {}.getType());
         schema.validate(actions);
+        return actions;
+    }
+
+    private void run(String json)
+    {
         BotProgram program = new BotProgram("test", "test", "");
-        program.setActions(actions);
+        program.setActions(parse(json));
+        executor.setLogListener((level, message) ->
+        {
+            if ("WARN".equals(level))
+            {
+                warnings.add(message);
+            }
+        });
         assertNull(executor.startProgram("bot", program, null));
     }
 
@@ -200,6 +217,142 @@ class ProgramExecutorTest
         recorder.answers.put("isNavigating", false);
         tick(1);
         assertEquals(List.of("navGoto[10.0, 64.0, -3.0, land, 2.0]", "jump[]"), recorder.calls);
+    }
+
+    @Test
+    void foreverWithoutAWaitStopsAtTheTickBudget()
+    {
+        run("[{type: FOREVER, children: [{type: SPRINT}]}]");
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> tick(1));
+        long firstTick = recorder.count("setSprinting");
+        assertTrue(firstTick > 0 && firstTick <= ProgramExecutor.MAX_STEPS_PER_TICK, "actions run in the first tick: " + firstTick);
+        assertEquals("RUNNING", status());
+
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> tick(1));
+        long secondTick = recorder.count("setSprinting") - firstTick;
+        assertTrue(secondTick > 0 && secondTick <= ProgramExecutor.MAX_STEPS_PER_TICK, "actions run in the second tick: " + secondTick);
+        assertEquals("RUNNING", status());
+        assertEquals(1, warnings.size(), "the author is told once: " + warnings);
+    }
+
+    @Test
+    void aLoopWithoutAWaitDoesNotStarveOtherPrograms()
+    {
+        RecordingBot other = new RecordingBot();
+        ProgramExecutor two = new ProgramExecutor(schema, name -> "spinner".equals(name) ? recorder.bot : other.bot, () -> 4);
+        BotProgram spin = new BotProgram("spin", "spin", "");
+        spin.setActions(parse("[{type: FOREVER, children: [{type: FOREVER, children: [{type: SNEAK}]}]}]"));
+        BotProgram walk = new BotProgram("walk", "walk", "");
+        walk.setActions(parse("[{type: MOVE, params: {ticks: 2}}, {type: JUMP}]"));
+        assertNull(two.startProgram("spinner", spin, null));
+        assertNull(two.startProgram("walker", walk, null));
+
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () ->
+        {
+            two.tick();
+            two.tick();
+            two.tick();
+        });
+        assertEquals(List.of("move[1.0, 0.0]", "stopMoving[]", "jump[]"), other.calls);
+        assertEquals("RUNNING", two.getPrograms().get("spinner").status());
+    }
+
+    @Test
+    void anEmptyForeverWaitsWithoutSpinning()
+    {
+        run("[{type: FOREVER}, {type: JUMP}]");
+        tick(50);
+        assertEquals(List.of(), recorder.calls);
+        assertEquals("RUNNING", status());
+        assertEquals(List.of(), warnings);
+    }
+
+    @Test
+    void repeatRunsItsBodyCountTimesThenContinues()
+    {
+        run("[{type: LOOP, params: {count: 3}, children: [{type: SPRINT}, {type: JUMP}]}, {type: DISMOUNT}]");
+        tick(4);
+        assertEquals(List.of("setSprinting[true]", "jump[]", "setSprinting[true]", "jump[]", "setSprinting[true]", "jump[]",
+                "dismount[]", "stopAll[]"), recorder.calls);
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void repeatZeroTimesSkipsItsBody()
+    {
+        run("[{type: LOOP, params: {count: 0}, children: [{type: JUMP}]}, {type: DISMOUNT}]");
+        tick(1);
+        assertEquals(List.of("dismount[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void nestedRepeatsMultiply()
+    {
+        run("""
+                [{type: LOOP, params: {count: 2}, children: [
+                    {type: LOOP, params: {count: 3}, children: [{type: SPRINT}]},
+                    {type: SNEAK}]},
+                 {type: DISMOUNT}]""");
+        tick(1);
+        assertEquals(6, recorder.count("setSprinting"));
+        assertEquals(2, recorder.count("setSneaking"));
+        assertEquals("dismount[]", recorder.calls.get(recorder.calls.size() - 2));
+    }
+
+    @Test
+    void ifElseTakesTheThenBranchOnlyThenContinues()
+    {
+        recorder.answers.put("isSprinting", true);
+        run("""
+                [{type: IF_THEN_ELSE, condition: {type: CONDITION_IS_SPRINTING},
+                  children: [{type: JUMP}], elseChildren: [{type: DISMOUNT}]},
+                 {type: SWAP_HANDS}]""");
+        tick(3);
+        assertEquals(List.of("jump[]", "swapHands[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void ifElseTakesTheElseBranchOnlyThenContinues()
+    {
+        run("""
+                [{type: IF_THEN_ELSE, condition: {type: CONDITION_IS_SPRINTING},
+                  children: [{type: JUMP}], elseChildren: [{type: DISMOUNT}]},
+                 {type: SWAP_HANDS}]""");
+        tick(3);
+        assertEquals(List.of("dismount[]", "swapHands[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void ifElseWithAnEmptyBranchJustContinues()
+    {
+        run("[{type: IF_THEN_ELSE, condition: {type: CONDITION_IS_SPRINTING}, children: [{type: JUMP}]}, {type: DISMOUNT}]");
+        tick(1);
+        assertEquals(List.of("dismount[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void ifElseIsTestedAgainOnEveryPassOfALoop()
+    {
+        run("""
+                [{type: LOOP, params: {count: 2}, children: [
+                    {type: IF_THEN_ELSE, condition: {type: CONDITION_IS_SPRINTING},
+                     children: [{type: SNEAK}], elseChildren: [{type: SPRINT}]},
+                    {type: DELAY, params: {ticks: 1}}]}]""");
+        tick(1);
+        recorder.answers.put("isSprinting", true);
+        tick(2);
+        assertEquals(List.of("setSprinting[true]", "setSneaking[true]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void anActionThatCannotBeDoneStopsTheProgramWithItsReason()
+    {
+        recorder.failures.put("executeCommand", new BotActionException("no player to run it as"));
+        run("[{type: SPRINT}, {type: EXECUTE_COMMAND, params: {command: \"say hi\"}}, {type: JUMP}]");
+        tick(3);
+        assertEquals(List.of("setSprinting[true]", "stopAll[]"), recorder.calls);
+        assertEquals("ERROR", status());
+        assertEquals("no player to run it as", executor.getPrograms().get("bot").error());
     }
 
     @Test

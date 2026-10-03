@@ -18,11 +18,16 @@ final class RecordingBot implements InvocationHandler
     final List<String> calls = new ArrayList<>();
     final List<String> questions = new ArrayList<>();
     final Map<String, Object> answers = new HashMap<>();
+    final Map<String, RuntimeException> failures = new HashMap<>();
     final Bot bot = (Bot) Proxy.newProxyInstance(Bot.class.getClassLoader(), new Class<?>[] {Bot.class}, this);
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args)
     {
+        if (failures.containsKey(method.getName()))
+        {
+            throw failures.get(method.getName());
+        }
         Class<?> returns = method.getReturnType();
         if (returns == void.class)
         {

@@ -59,33 +59,39 @@ const NodeCompiler = (() => {
 
     // ── Compile graph to actions array ───────────────────────
 
+    // Which output a node's chain carries on from once the node is done. Every other node carries on from
+    // output 0. Forever never finishes and Sequence's outputs are all part of it, so nothing follows those.
+    const CONTINUES_FROM = {
+        "Control/Repeat": 1,        // body, done
+        "Control/If-Else": 2,       // then, else, done
+        "Control/Forever": null,
+        "Control/Sequence": null,
+    };
+
     function compile(graph) {
         if (!schema) throw new Error("The action schema has not been loaded");
         const start = (graph._nodes || []).find(n => n.type === "Control/Start");
         if (!start) throw new Error("No Start node found. Add a Control/Start node.");
-        return followChain(graph, start, 0, new Set());
+        return chainFrom(graph, start, new Set());
     }
 
-    function followChain(graph, node, outputIndex, visited) {
+    // The actions for a node and everything that follows it. A node already on this path ends the chain,
+    // so a graph that somehow holds a cycle cannot make the compiler loop.
+    function chainFrom(graph, node, visited) {
         const actions = [];
-        let current = node;
-        let outIdx = outputIndex;
-
-        while (current) {
-            if (visited.has(current.id)) break;
-            visited.add(current.id);
-
-            const action = compileNode(graph, current, visited);
-            if (action) {
-                if (Array.isArray(action)) actions.push(...action);
-                else actions.push(action);
-            }
-
-            const nextNode = getConnectedNode(graph, current, outIdx);
-            current = nextNode;
-            outIdx = 0;
+        while (node && !visited.has(node.id)) {
+            visited.add(node.id);
+            const action = compileNode(graph, node, visited);
+            if (action) actions.push(action);
+            const output = node.type in CONTINUES_FROM ? CONTINUES_FROM[node.type] : 0;
+            node = output === null ? null : target(graph, node, output);
         }
         return actions;
+    }
+
+    // The actions wired to one output of a control node: its body, or a branch.
+    function branch(graph, node, output, visited) {
+        return chainFrom(graph, target(graph, node, output), new Set(visited));
     }
 
     function compileNode(graph, node, visited) {
@@ -106,39 +112,23 @@ const NodeCompiler = (() => {
 
         switch (node.type) {
             case "Control/Repeat":
-                action.children = followChain(graph, node, 0, new Set(visited));
-                // body output is index 0, done is index 1
-                const bodyNode = getConnectedNode(graph, node, 0);
-                if (bodyNode) action.children = followChain(graph, bodyNode, 0, new Set(visited));
-                break;
-
             case "Control/Forever":
-                action.children = [];
-                const foreverBody = getConnectedNode(graph, node, 0);
-                if (foreverBody) action.children = followChain(graph, foreverBody, 0, new Set(visited));
+                action.children = branch(graph, node, 0, visited);
                 break;
 
-            case "Control/If-Else":
-                action.children = [];
-                action.elseChildren = [];
-                // then = output 0, else = output 1
-                const thenNode = getConnectedNode(graph, node, 0);
-                if (thenNode) action.children = followChain(graph, thenNode, 0, new Set(visited));
-                const elseNode = getConnectedNode(graph, node, 1);
-                if (elseNode) action.elseChildren = followChain(graph, elseNode, 0, new Set(visited));
-                // condition input (index 1)
-                const condNode = getConnectedInput(graph, node, 1);
-                if (!condNode) throw new Error("An If / Else node has no condition connected");
-                action.condition = compileNode(graph, condNode, new Set(visited));
+            case "Control/If-Else": {
+                const condition = source(graph, node, 1);
+                if (!condition) throw new Error("An If / Else node has no condition connected");
+                action.condition = compileNode(graph, condition, visited);
+                action.children = branch(graph, node, 0, visited);
+                action.elseChildren = branch(graph, node, 1, visited);
                 break;
+            }
 
             case "Control/Sequence":
                 action.children = [];
-                for (let i = 0; i < 4; i++) {
-                    const seqNode = getConnectedNode(graph, node, i);
-                    if (seqNode) {
-                        action.children.push(...followChain(graph, seqNode, 0, new Set(visited)));
-                    }
+                for (let output = 0; output < node.outputs.length; output++) {
+                    action.children.push(...branch(graph, node, output, visited));
                 }
                 break;
         }
@@ -184,22 +174,22 @@ const NodeCompiler = (() => {
 
     // ── Graph helpers ────────────────────────────────────────
 
-    function getConnectedNode(graph, node, outputIndex) {
-        if (!node.outputs || !node.outputs[outputIndex]) return null;
-        const links = node.outputs[outputIndex].links;
-        if (!links || links.length === 0) return null;
-        const link = graph.links[links[0]];
-        if (!link) return null;
-        return graph.getNodeById(link.target_id);
+    // The node an output leads to, or null. Execution cannot fork, so an output may lead to one node only.
+    function target(graph, node, outputIndex) {
+        const output = node.outputs && node.outputs[outputIndex];
+        const links = (output && output.links) || [];
+        if (links.length > 1) {
+            throw new Error("Output '" + output.name + "' of a " + node.title + " node leads to " + links.length + " nodes; it can only lead to one");
+        }
+        const link = links.length === 1 ? graph.links[links[0]] : null;
+        return link ? graph.getNodeById(link.target_id) : null;
     }
 
-    function getConnectedInput(graph, node, inputIndex) {
-        if (!node.inputs || !node.inputs[inputIndex]) return null;
-        const linkId = node.inputs[inputIndex].link;
-        if (linkId == null) return null;
-        const link = graph.links[linkId];
-        if (!link) return null;
-        return graph.getNodeById(link.origin_id);
+    // The node an input is fed from, or null.
+    function source(graph, node, inputIndex) {
+        const input = node.inputs && node.inputs[inputIndex];
+        const link = input && input.link != null ? graph.links[input.link] : null;
+        return link ? graph.getNodeById(link.origin_id) : null;
     }
 
     return { setSchema, compile, make };

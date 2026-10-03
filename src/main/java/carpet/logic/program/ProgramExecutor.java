@@ -20,11 +20,17 @@ import java.util.function.Predicate;
 /**
  * Runs bot programs, advancing each once per server tick. A bot runs at most one program.
  * Every action parameter is read through the {@link ActionSchema}.
+ * <p>
+ * A program is a tree of actions, walked with a stack of frames: one frame per list of actions being run,
+ * the innermost on top. A program runs until it reaches an action that takes time, and picks up there on a
+ * later tick. It never runs more than {@link #MAX_STEPS_PER_TICK} steps in one tick, so a loop with nothing
+ * to wait for cannot hold up the server.
  */
 public class ProgramExecutor
 {
     private static final Logger LOG = LogManager.getLogger("CarpetLogic");
     private static final int FLEE_RETARGET_TICKS = 10;
+    public static final int MAX_STEPS_PER_TICK = 1000;
 
     public enum Status
     {
@@ -47,18 +53,18 @@ public class ProgramExecutor
     private static class Frame
     {
         final List<BotAction> actions;
-        final boolean isLoop;
-        final int maxIterations;
+        // How many more times the list runs, this time included; FOREVER when it never stops.
+        int runsLeft;
         int index;
-        int iteration;
 
-        Frame(List<BotAction> actions, boolean isLoop, int maxIterations)
+        Frame(List<BotAction> actions, int runs)
         {
             this.actions = actions;
-            this.isLoop = isLoop;
-            this.maxIterations = maxIterations;
+            this.runsLeft = runs;
         }
     }
+
+    private static final int FOREVER = -1;
 
     private static class ProgramState
     {
@@ -69,6 +75,7 @@ public class ProgramExecutor
         Wait wait;
         String currentAction;
         String error;
+        boolean warnedAboutBudget;
 
         ProgramState(BotProgram program, UUID owner)
         {
@@ -114,7 +121,7 @@ public class ProgramExecutor
             return getRunningCount() + " programs are already running (carpetLogicMaxPrograms)";
         }
         ProgramState state = new ProgramState(program, owner);
-        pushFrame(state, program.getActions(), false, 1);
+        pushFrame(state, program.getActions(), 1);
         programs.put(botName, state);
         logListener.accept("INFO", "Started '" + program.getName() + "' on " + botName);
         return null;
@@ -166,7 +173,7 @@ public class ProgramExecutor
             }
             try
             {
-                tickProgram(state, bot);
+                tickProgram(state, bot, botName);
             }
             catch (BotActionException e)
             {
@@ -190,7 +197,7 @@ public class ProgramExecutor
         logListener.accept("ERROR", "Program '" + state.program.getName() + "' on " + botName + " stopped: " + message);
     }
 
-    private void tickProgram(ProgramState state, Bot bot)
+    private void tickProgram(ProgramState state, Bot bot, String botName)
     {
         if (state.wait != null)
         {
@@ -211,8 +218,19 @@ public class ProgramExecutor
             }
         }
 
+        int stepsLeft = MAX_STEPS_PER_TICK;
         while (state.wait == null)
         {
+            if (stepsLeft-- == 0)
+            {
+                if (!state.warnedAboutBudget)
+                {
+                    state.warnedAboutBudget = true;
+                    logListener.accept("WARN", "Program '" + state.program.getName() + "' on " + botName + " ran " + MAX_STEPS_PER_TICK
+                            + " steps in one tick and was paused until the next. Put a Delay inside its loop.");
+                }
+                return;
+            }
             if (state.stack.isEmpty())
             {
                 state.status = Status.COMPLETED;
@@ -224,7 +242,7 @@ public class ProgramExecutor
             Frame frame = state.stack.peek();
             if (frame.index >= frame.actions.size())
             {
-                if (frame.isLoop && (frame.maxIterations == -1 || ++frame.iteration < frame.maxIterations))
+                if (frame.runsLeft == FOREVER || --frame.runsLeft > 0)
                 {
                     frame.index = 0;
                 }
@@ -412,10 +430,18 @@ public class ProgramExecutor
 
             case "DELAY" -> hold(state, bot, p.integer("ticks"), null);
             case "EXECUTE_COMMAND" -> bot.executeCommand(p.string("command"), state.owner);
-            case "SEQUENCE" -> pushFrame(state, action.getChildren(), false, 1);
-            case "LOOP" -> pushFrame(state, action.getChildren(), true, p.integer("count"));
-            case "FOREVER" -> pushFrame(state, action.getChildren(), true, -1);
-            case "IF_THEN_ELSE" -> pushFrame(state, test(action.getCondition(), bot) ? action.getChildren() : action.getElseChildren(), false, 1);
+            case "SEQUENCE" -> pushFrame(state, action.getChildren(), 1);
+            case "LOOP" -> pushFrame(state, action.getChildren(), p.integer("count"));
+            case "FOREVER" ->
+            {
+                if (action.getChildren().isEmpty())
+                {
+                    // Nothing to repeat: the program just never moves on.
+                    state.wait = new Wait();
+                }
+                pushFrame(state, action.getChildren(), FOREVER);
+            }
+            case "IF_THEN_ELSE" -> pushFrame(state, test(action.getCondition(), bot) ? action.getChildren() : action.getElseChildren(), 1);
 
             default -> throw new IllegalStateException("No interpreter for action type " + action.getType());
         }
@@ -438,11 +464,12 @@ public class ProgramExecutor
         return wait;
     }
 
-    private static void pushFrame(ProgramState state, List<BotAction> actions, boolean isLoop, int maxIterations)
+    // Runs the actions the given number of times before the frame below continues.
+    private static void pushFrame(ProgramState state, List<BotAction> actions, int runs)
     {
-        if (!actions.isEmpty())
+        if (!actions.isEmpty() && runs != 0)
         {
-            state.stack.push(new Frame(actions, isLoop, maxIterations));
+            state.stack.push(new Frame(actions, runs));
         }
     }
 
