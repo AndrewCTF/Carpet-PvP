@@ -4,6 +4,7 @@ import carpet.logic.program.ActionSchema.Definition;
 import carpet.logic.program.ActionSchema.Param;
 import carpet.logic.program.ActionSchema.Params;
 import carpet.logic.program.ActionSchema.Variables;
+import carpet.utils.ArmorSetDefinition;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -216,6 +217,18 @@ class ActionSchemaTest
             }
         }
         assertTrue(actionsWithARule > 0);
+    }
+
+    @Test
+    void theArmourSetNodeOffersEveryNameTheEquipCommandDoes()
+    {
+        Param param = schema.definitions().stream()
+                .filter(definition -> definition.type().equals("EQUIP_ARMOR"))
+                .findFirst().orElseThrow().params().get("armorSet");
+        for (String name : ArmorSetDefinition.ARMOR_SETS.keySet())
+        {
+            assertTrue(param.options().contains(name), "EquipArmor is missing " + name);
+        }
     }
 
     @Test

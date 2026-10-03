@@ -97,7 +97,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-Eighteen scenarios, run in this order. Every one spawns its bots 256 blocks further along X than the
+Twenty-two scenarios, run in this order. Every one spawns its bots 256 blocks further along X than the
 last, so a bot left over from an earlier scenario cannot disturb a later one.
 
 | Scenario | Ticks allowed | What it proves |
@@ -106,7 +106,7 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `nav_goto` | 600 | `nav goto` walks to a goal 12 blocks away and finishes inside its default 1-block arrival radius. |
 | `nav_come` | 600 | `nav come` navigates to the position of whoever ran the command, not the bot's spawn point. |
 | `nav_patrol` | 600 | `nav patrol` with two waypoints visits both of them. |
-| `nav_stop` | 600 | `nav stop` clears the navigation state — see the note below; it currently asserts the bot keeps coasting, not that it halts. |
+| `nav_stop` | 600 | `nav stop` stops the bot: four ticks after the command it has not moved a hundredth of a block. |
 | `nav_follow` | 600 | A following bot keeps within 4 blocks of a leader that walked more than 20 blocks. |
 | `chase_attack` | 600 | `nav chase attack 2.5 0 <target>` closes and damages the target. |
 | `chase_crit` | 600 | `nav chase crit 2.5 0 <target>` closes and damages the target. |
@@ -116,10 +116,14 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `logic_forever_budget` | 200 | A `FOREVER` loop with nothing to wait for does not stop the server ticking, and is still `RUNNING` after 40 ticks. |
 | `spawn_exact_name` | 200 | A mixed-case name (`sElF0a`) survives the spawn untouched — the player list matches names ignoring case, so only the profile tells the two apart. |
 | `spawn_gamemode` | 200 | `spawn ... in creative` really puts the fake player in creative mode. |
+| `animate_use` | 300 | `animate use` swings the off hand and `animate attack` the main hand, read off the swing each one leaves behind. |
+| `item_cd` | 300 | An ender pearl throw puts the bot on a 20-tick cooldown; the bare `itemCd` reports one cleared and the cooldown is gone on the same tick. |
 | `shield_disable` | 600 | A shield raised with `use continuous` is broken by an axe and goes on cooldown. |
 | `kit_give` | 200 | Every built-in kit loads, every entry builds, and each kit gives its bot the expected weapon, chestplate, enchantment and stack. |
 | `kit_roundtrip` | 200 | Saving a player's inventory, giving a kit over it and restoring puts every slot back, including the selected hotbar slot — through memory and through the kit file. |
-| `sword_block` | 300 | With `swordBlockHitting` on a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit; with the rule off they lose all of it. An idle player loses 4 either way. |
+| `kit_folder` | 300 | A hand-written kit file and a saved one, dropped into `<world>/carpet-kits/`, both load after `bot kit reload` and hand out what they say. |
+| `sword_block` | 600 | With `swordBlockHitting` on a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit and is pushed by about half of what an idle player is pushed by. An idle player loses 4 either way. |
+| `kill` | 300 | `/player <name> kill` takes the bot off the server: it is gone from the player list. |
 
 `kit_give` checks these values, one per built-in kit:
 
@@ -131,11 +135,12 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `mace` | `mace` | `netherite_chestplate` | Protection 4 | 16 `wind_charge` |
 | `crystal` | `netherite_sword` | `netherite_chestplate` | Blast Protection 4 | 8 `end_crystal` |
 
-The `nav_stop` scenario is worth reading. It pins current behaviour, not the behaviour most people
-expect: `stopNavigation()` clears the navigation state but leaves the movement inputs alone, so a
-bot that was already walking keeps coasting at its last speed. The scenario's own comment says it
-should be tightened to "the bot stops moving" once `stopNavigation()` also stops movement. It is
-listed here as it stands.
+`sword_block` uses four bots. `SelfA` holds its sword up and `SelfB` stands idle beside it, each with
+its own attacker (`SelfC` and `SelfD`) one hit away, so that the knockback of a melee hit can be
+compared between a blocking and an idle player without either of them being pushed out of reach.
+
+`kill` spawns its victim from the command list rather than through the scenario's bot list, because
+the check has to see the player gone from there.
 
 ## How a scenario runs
 

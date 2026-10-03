@@ -27,6 +27,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Vec3i;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -45,6 +46,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -58,9 +60,9 @@ import net.minecraft.world.level.block.entity.StructureBlockEntity;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 
-import java.io.IOException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -87,7 +89,8 @@ public final class SelfTest
             "structure_block_ignored", "persistent_parrots", "lag_free_spawning", "logic_bot_snapshot",
             "nav_maze", "nav_parkour", "nav_ladder", "nav_partial_blocks", "nav_moving_target", "nav_crowd",
             "nav_tick_budget", "nav_smooth",
-            "sword_hits_require_aim", "sword_duel_damage", "sword_shield_break", "sword_difficulty_order", "bot_budget");
+            "sword_hits_require_aim", "sword_duel_damage", "sword_shield_break", "sword_difficulty_order", "bot_budget",
+            "animate_use", "item_cd", "kit_folder", "kill");
 
     /** What every built-in kit has to put on the player it is given to. */
     record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
@@ -133,6 +136,32 @@ public final class SelfTest
     private static final ItemStack SHIELD = new ItemStack(Items.SHIELD);
     /** A session that was never issued to a player, as /carpetlogic from the console makes. */
     private static final AuthManager.Session CONSOLE_SESSION = new AuthManager.Session(null, "Server", Long.MAX_VALUE);
+    private static final ItemStack PEARL = new ItemStack(Items.ENDER_PEARL);
+
+    /** Two kits dropped into the world's kit folder, in the two shapes a kit file can be written in. */
+    private static final String HAND_WRITTEN_KIT = "self_handwritten";
+    private static final String SAVED_KIT = "self_saved";
+
+    private static final String HAND_WRITTEN_KIT_JSON = """
+            {
+              "name": "self_handwritten",
+              "items": [
+                { "item": "minecraft:netherite_sword", "slot": 0,
+                  "enchantments": [ { "id": "minecraft:sharpness", "level": 3 } ] },
+                { "item": "minecraft:cooked_beef", "count": 7, "slot": 1 }
+              ]
+            }
+            """;
+
+    private static final String SAVED_KIT_JSON = """
+            {
+              "name": "self_saved",
+              "items": [
+                { "slot": 0, "stack": { "id": "minecraft:diamond_pickaxe", "count": 1 } },
+                { "slot": "offhand", "stack": { "id": "minecraft:shield", "count": 1 } }
+              ]
+            }
+            """;
     private static List<String> names;
     private static Scenario current;
     private static boolean acting;
@@ -205,10 +234,12 @@ public final class SelfTest
 
     static Scenario scenario(String name, int index)
     {
-        // a is the bot under test, b the second player it follows or fights. Everyone spawns looking along +z.
+        // a is the bot under test, b the second player it follows or fights, c and d the ones a scenario
+        // needs attackers of its own. Everyone spawns looking along +z.
         String a = "SelfA" + index;
         String b = "SelfB" + index;
         String c = "SelfC" + index;
+        String d = "SelfD" + index;
         Vec3 origin = new Vec3(SPACING * (index + 1) + 0.5D, SURFACE_Y, 0.5D);
         switch (name)
         {
@@ -267,12 +298,13 @@ public final class SelfTest
                             fmt("%s visited the first waypoint: %s, the second: %s", a, visited[0], visited[1]));
                 });
             case "nav_stop":
-                // nav stop clears the navigation state but never the movement inputs, so the bot keeps
-                // coasting at its last speed instead of halting. This pins that; it should be tightened
-                // to "the bot stops moving" once stopNavigation() also stops movement.
+            {
+                // nav stop has to let go of the movement inputs it was driving, so the bot halts where it
+                // is instead of walking on at its last speed.
                 Vec3 far = origin.add(40.0D, 0.0D, 0.0D);
                 boolean[] stopping = {false};
                 double[] lastX = {origin.x};
+                int[] since = {0};
                 return new Scenario(600, List.of(new Bot(a, origin)),
                         List.of("player " + a + " nav goto " + coords(far)), server ->
                 {
@@ -289,9 +321,14 @@ public final class SelfTest
                         lastX[0] = x;
                         return new Probe(false, fmt("issued nav stop with %s 3 blocks along", a));
                     }
-                    double since = Math.abs(x - lastX[0]);
-                    return new Probe(since >= 0.15D, fmt("%s coasted %.2f blocks past nav stop", a, since));
+                    double moved = Math.abs(x - lastX[0]);
+                    lastX[0] = x;
+                    // a few ticks of slack for the tick nav stop landed on, then the bot has to be still
+                    if (moved <= 0.01D) since[0]++;
+                    return new Probe(since[0] >= 4, fmt(
+                            "%s moved %.3f blocks in the last tick, %d ticks after nav stop", a, moved, since[0]));
                 });
+            }
             case "nav_come":
                 // nav come navigates to the command source's position, so the console is moved there.
                 Vec3 here = origin.add(8.0D, 0.0D, 0.0D);
@@ -419,6 +456,72 @@ public final class SelfTest
                             a, untouched.get("health").getAsFloat(), b, hurt.get("health").getAsFloat(),
                             hurt.getAsJsonObject("pvp").get("style")));
                 });
+            case "animate_use":
+            {
+                // animate attack is the main-hand swing and animate use the off-hand one, so the two are
+                // told apart by which hand the player ends up swinging.
+                int[] phase = {0};
+                InteractionHand[] seen = new InteractionHand[2];
+                return new Scenario(300, List.of(new Bot(a, origin)), List.of(), server ->
+                {
+                    ServerPlayer bot = player(server, a);
+                    InteractionHand hand = swingHand(bot);
+                    switch (phase[0])
+                    {
+                        case 0:
+                            if (hand != null) return pending(a + " is already swinging");
+                            run(server, "player " + a + " animate use");
+                            phase[0] = 1;
+                            return pending("issued animate use");
+                        case 1:
+                            if (hand == null) return pending("waiting for the animate use swing");
+                            seen[0] = hand;
+                            phase[0] = 2;
+                            return pending(fmt("animate use swung the %s hand", handName(hand)));
+                        case 2:
+                            if (hand != null) return pending("waiting for the animate use swing to finish");
+                            run(server, "player " + a + " animate attack");
+                            phase[0] = 3;
+                            return pending("issued animate attack");
+                        case 3:
+                            if (hand == null) return pending("waiting for the animate attack swing");
+                            seen[1] = hand;
+                            phase[0] = 4;
+                            return pending(fmt("animate attack swung the %s hand", handName(hand)));
+                        default:
+                            boolean right = seen[0] == InteractionHand.OFF_HAND
+                                    && seen[1] == InteractionHand.MAIN_HAND;
+                            return new Probe(right, fmt("animate use swung the %s hand and animate attack the %s hand",
+                                    handName(seen[0]), handName(seen[1])));
+                    }
+                });
+            }
+            case "item_cd":
+            {
+                // Throwing an ender pearl puts the item on a 20 tick cooldown, and the bare form of itemCd
+                // has to clear every cooldown the player is carrying rather than only say that it will.
+                int[] phase = {0};
+                int[] cleared = {-1};
+                boolean[] gone = {false};
+                return new Scenario(300, List.of(new Bot(a, origin)), List.of(
+                        "player " + a + " equip mainhand minecraft:ender_pearl",
+                        "player " + a + " look down",
+                        "player " + a + " use once"), server ->
+                {
+                    ServerPlayer bot = player(server, a);
+                    if (phase[0] == 0)
+                    {
+                        if (!bot.getCooldowns().isOnCooldown(PEARL)) return pending(a + " is not on the ender pearl cooldown yet");
+                        cleared[0] = result(server, "player " + a + " itemCd");
+                        gone[0] = !bot.getCooldowns().isOnCooldown(PEARL);
+                        phase[0] = 1;
+                    }
+                    // The cooldown only lasts 20 ticks, so it has to be gone on the tick the command ran.
+                    return new Probe(gone[0] && cleared[0] > 0, fmt(
+                            "itemCd reported %d cleared, the ender pearl is %s", cleared[0],
+                            gone[0] ? "off cooldown" : "still on cooldown"));
+                });
+            }
             case "shield_disable":
                 // The attacker stands in front of the blocker, as everyone spawns looking along +z.
                 Vec3 front = origin.add(0.0D, 0.0D, 2.0D);
@@ -485,41 +588,142 @@ public final class SelfTest
                     if (!store.delete(kitName) || store.get(kitName).isPresent()) return new Probe(false, kitName + " was not deleted");
                     return new Probe(true, fmt("all %d slots of %s survived both round trips", before.size(), a));
                 });
+            case "kit_folder":
+            {
+                // Both shapes of kit file dropped into the world's kit folder have to be picked up by a
+                // reload, without the server being restarted.
+                boolean[] written = {false};
+                boolean[] given = {false};
+                return new Scenario(300, List.of(new Bot(a, origin), new Bot(b, origin.add(2.0D, 0.0D, 0.0D))),
+                        List.of(), server ->
+                {
+                    KitStore store = KitStore.of(server);
+                    if (!written[0])
+                    {
+                        String problem = writeKitFiles(server);
+                        if (problem != null) return new Probe(false, problem);
+                        written[0] = true;
+                        if (result(server, "bot kit reload") == 0)
+                        {
+                            return new Probe(false, "bot kit reload reported a kit that did not load");
+                        }
+                        return pending("wrote both kit files and reloaded them");
+                    }
+                    if (!store.problems().isEmpty()) return new Probe(false, "kits did not load: " + store.problems());
+                    if (!store.customNames().containsAll(List.of(HAND_WRITTEN_KIT, SAVED_KIT)))
+                    {
+                        return new Probe(false, "the folder holds " + store.customNames());
+                    }
+                    if (!given[0])
+                    {
+                        run(server, "bot kit give " + a + " " + HAND_WRITTEN_KIT);
+                        run(server, "bot kit give " + b + " " + SAVED_KIT);
+                        given[0] = true;
+                        return pending("gave both kits");
+                    }
+                    String problem = checkKit(player(server, a), HAND_WRITTEN_KIT, server.registryAccess());
+                    if (problem != null) return new Probe(false, HAND_WRITTEN_KIT + ": " + problem);
+                    problem = checkKit(player(server, b), SAVED_KIT, server.registryAccess());
+                    if (problem != null) return new Probe(false, SAVED_KIT + ": " + problem);
+                    store.delete(HAND_WRITTEN_KIT);
+                    store.delete(SAVED_KIT);
+                    return new Probe(true, fmt("%s and %s both loaded out of the world's kit folder",
+                            HAND_WRITTEN_KIT, SAVED_KIT));
+                });
+            }
             case "sword_block":
             {
                 // One player holds its sword up, the other one stands idle, both take the same fixed hit. With the rule
                 // on the blocking one must lose swordBlockDamageMultiplier of it, with the rule off it must lose all of it.
+                // The knockback half is measured on the same two players: each is hit once by its own attacker, and
+                // the blocking one has to be pushed by swordBlockKnockbackMultiplier of what the idle one is pushed by.
                 int[] phase = {0};
                 float[] guarding = new float[2];
                 float[] open = new float[2];
-                return new Scenario(300, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, -2.0D))),
+                double[] peak = new double[2];
+                return new Scenario(600, List.of(
+                                new Bot(a, origin),
+                                new Bot(b, origin.add(0.0D, 0.0D, 2.0D)),
+                                new Bot(c, origin.add(0.0D, 0.0D, -2.0D)),
+                                new Bot(d, origin.add(0.0D, 0.0D, 4.0D))),
                         List.of("carpet swordBlockHitting true",
                                 "player " + a + " equip mainhand minecraft:diamond_sword",
-                                "player " + a + " use continuous"), server ->
+                                "player " + a + " use continuous",
+                                "player " + c + " equip mainhand minecraft:wooden_sword",
+                                "player " + d + " equip mainhand minecraft:wooden_sword",
+                                "player " + d + " turn back"), server ->
                 {
                     ServerPlayer blocker = player(server, a);
                     ServerPlayer idle = player(server, b);
                     if (!blocker.isUsingItem()) return pending(a + " is not holding the sword up yet");
-                    if (!hittable(blocker, idle)) return pending(hitWaitReason(blocker, idle));
                     if (phase[0] == 0)
                     {
+                        if (!hittable(blocker, idle)) return pending(hitWaitReason(blocker, idle));
                         guarding[0] = damage(server, blocker);
                         open[0] = damage(server, idle);
-                        run(server, "carpet swordBlockHitting false");
                         phase[0] = 1;
                         return pending(fmt("with the rule on %s lost %.1f health while blocking and %s lost %.1f",
                                 a, guarding[0], b, open[0]));
                     }
-                    guarding[1] = damage(server, blocker);
-                    open[1] = damage(server, idle);
+                    if (phase[0] == 1)
+                    {
+                        peak[0] = Math.max(peak[0], blocker.getDeltaMovement().horizontalDistance());
+                        peak[1] = Math.max(peak[1], idle.getDeltaMovement().horizontalDistance());
+                        if (peak[0] < 0.05D || peak[1] < 0.05D)
+                        {
+                            // Asked for again every tick, because a swing below full attack strength is
+                            // dropped, so this is one hit per player as soon as their attacker is ready.
+                            run(server, "player " + c + " attack once");
+                            run(server, "player " + d + " attack once");
+                            return pending(fmt("%s was pushed %.3f and %s %.3f so far, waiting for a hit to land",
+                                    a, peak[0], b, peak[1]));
+                        }
+                        run(server, "player " + c + " stop");
+                        run(server, "player " + d + " stop");
+                        run(server, "carpet swordBlockHitting false");
+                        phase[0] = 2;
+                        return pending(fmt("with the rule on %s was pushed %.3f and the idle %s %.3f",
+                                a, peak[0], b, peak[1]));
+                    }
+                    if (phase[0] == 2)
+                    {
+                        if (!hittable(blocker, idle)) return pending(hitWaitReason(blocker, idle));
+                        guarding[1] = damage(server, blocker);
+                        open[1] = damage(server, idle);
+                        phase[0] = 3;
+                        return pending(fmt("with the rule off %s lost %.1f health while blocking and %s lost %.1f",
+                                a, guarding[1], b, open[1]));
+                    }
                     // both idle players have to take the whole hit, otherwise the numbers below mean nothing
                     boolean hitsLanded = same(open[0], SWORD_BLOCK_HIT) && same(open[1], SWORD_BLOCK_HIT);
                     float factor = (float) CarpetSettings.swordBlockDamageMultiplier;
                     boolean halved = same(guarding[0], SWORD_BLOCK_HIT * factor);
                     boolean wholeAgain = same(guarding[1], SWORD_BLOCK_HIT);
-                    return new Probe(hitsLanded && halved && wholeAgain, fmt(
-                            "with the rule on %s lost %.1f of the %.1f health a hit takes, with the rule off %.1f",
-                            a, guarding[0], SWORD_BLOCK_HIT, guarding[1]));
+                    // roughly half, with room for the ground friction eating a different share of each push
+                    boolean knockedBackLess = peak[0] < peak[1] * 0.75D && peak[0] > peak[1] * 0.25D;
+                    return new Probe(hitsLanded && halved && wholeAgain && knockedBackLess, fmt(
+                            "damage: with the rule on %s lost %.1f of the %.1f a hit takes, with it off %.1f; knockback: %s %.3f and the idle %s %.3f",
+                            a, guarding[0], SWORD_BLOCK_HIT, guarding[1], a, peak[0], b, peak[1]));
+                });
+            }
+            case "kill":
+            {
+                // The victim is spawned by a command rather than through the scenario's bot list, because
+                // the check has to see it gone from there.
+                int[] phase = {0};
+                return new Scenario(300, List.of(), List.of(
+                        "player " + a + " spawn at " + coords(origin) + " facing 0 0 in minecraft:overworld in survival"), server ->
+                {
+                    if (phase[0] == 0)
+                    {
+                        if (player(server, a) == null) return pending(a + " has not joined yet");
+                        run(server, "player " + a + " kill");
+                        phase[0] = 1;
+                        return pending("issued kill on " + a);
+                    }
+                    boolean gone = player(server, a) == null;
+                    return new Probe(gone, gone ? a + " is gone from the player list"
+                            : a + " is still in the player list after kill");
                 });
             }
             case "explosion_rules":
@@ -1337,6 +1541,65 @@ public final class SelfTest
                 fmt("budget of %d simulated ticks per server tick: peak use %d with %d fighters, %d ticks without a share while it was full and %d while it was %d, average server tick %.2f ms over %d ticks",
                         budgetOriginal, budgetMax, budgetFighters, starvedWhileFull, starvedSeen,
                         BUDGET_STARVED_RULE, tickMillis(), budgetTickNanosTotal == 0 ? 0 : budgetWatch));
+    }
+
+    /** The hand the player's current swing is with, or null while it is not swinging. */
+    private static InteractionHand swingHand(ServerPlayer player)
+    {
+        //? if >=26.3 {
+        LivingEntity.SwingDescription swing = player.getCurrentSwing();
+        return swing == null ? null : swing.hand();
+        //?} else {
+        /*return player.swinging ? player.swingingArm : null;
+        *///?}
+    }
+
+    private static String handName(InteractionHand hand)
+    {
+        return hand == InteractionHand.OFF_HAND ? "off" : "main";
+    }
+
+    /** Puts the two shapes of kit file into the world's kit folder, the way a server admin would. */
+    private static String writeKitFiles(MinecraftServer server)
+    {
+        Path folder = server.getWorldPath(LevelResource.ROOT).resolve("carpet-kits");
+        try
+        {
+            Files.createDirectories(folder);
+            Files.writeString(folder.resolve(HAND_WRITTEN_KIT + ".json"), HAND_WRITTEN_KIT_JSON);
+            Files.writeString(folder.resolve(SAVED_KIT + ".json"), SAVED_KIT_JSON);
+            return null;
+        }
+        catch (IOException e)
+        {
+            return "could not write the kit files: " + e;
+        }
+    }
+
+    /** What a kit from the world's folder has to have put on the player it was given to. */
+    private static String checkKit(ServerPlayer bot, String kit, RegistryAccess registries)
+    {
+        String mainHand = kit.equals(HAND_WRITTEN_KIT) ? "netherite_sword" : "diamond_pickaxe";
+        if (!holds(bot.getMainHandItem(), mainHand))
+            return "holds " + describe(bot.getMainHandItem()) + " instead of " + mainHand;
+        if (kit.equals(HAND_WRITTEN_KIT))
+        {
+            Holder<Enchantment> sharpness = registries.lookupOrThrow(Registries.ENCHANTMENT)
+                    .get(Identifier.parse("minecraft:sharpness")).orElseThrow();
+            int level = EnchantmentHelper.getItemEnchantmentLevel(sharpness, bot.getMainHandItem());
+            if (level != 3) return fmt("its sword has sharpness %d, expected 3", level);
+            int beef = 0;
+            for (ItemStack stack : bot.getInventory().getNonEquipmentItems())
+            {
+                if (holds(stack, "cooked_beef")) beef += stack.getCount();
+            }
+            if (beef != 7) return fmt("has %d cooked_beef, expected 7", beef);
+        }
+        else if (!holds(bot.getItemBySlot(EquipmentSlot.OFFHAND), "shield"))
+        {
+            return "holds " + describe(bot.getItemBySlot(EquipmentSlot.OFFHAND)) + " in its off hand instead of a shield";
+        }
+        return null;
     }
 
     // A bot program started through the Java API, the way the web editor's execute endpoint starts one, and

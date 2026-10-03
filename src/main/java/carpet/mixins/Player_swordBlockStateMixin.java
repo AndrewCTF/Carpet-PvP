@@ -20,7 +20,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Player.class)
 public abstract class Player_swordBlockStateMixin extends LivingEntity implements PlayerSwordBlockInterface {
     @Unique private int carpet$swordBlockTicks;
-    @Unique private float carpet$pendingKbMultiplier = 1.0F;
 
     protected Player_swordBlockStateMixin(EntityType<? extends LivingEntity> entityType, Level level) { super(entityType, level); }
 
@@ -32,7 +31,6 @@ public abstract class Player_swordBlockStateMixin extends LivingEntity implement
         if (this.carpet$swordBlockTicks > 0 && --this.carpet$swordBlockTicks == 0) {
             PvpInitializer.stopSwordBlock(this); // window over, the clients stop showing the blocking pose
         }
-        this.carpet$pendingKbMultiplier = 1.0F;
     }
 
     @Inject(method = "hurtServer", at = @At("HEAD"), cancellable = true)
@@ -41,7 +39,6 @@ public abstract class Player_swordBlockStateMixin extends LivingEntity implement
         // Check if using a sword (via ItemTags check instead of consumable)
         if (this.isUsingItem() && this.getUseItem().is(ItemTags.SWORDS) && amount > 0.0f) {
             float reduced = (float) Math.max(0.0, amount * CarpetSettings.swordBlockDamageMultiplier);
-            this.carpet$pendingKbMultiplier = (float) CarpetSettings.swordBlockKnockbackMultiplier;
             boolean result = super.hurtServer(serverLevel, source, reduced);
             //? if >=26.3 {
             this.setInvulnerableTime(Math.max(this.getInvulnerableTime(), 5));

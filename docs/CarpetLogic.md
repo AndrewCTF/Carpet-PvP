@@ -257,7 +257,7 @@ The 63 nodes, in full:
 | Node | Type | Kind | Rule it needs | Parameters |
 |---|---|---|---|---|
 | `Equipment/Hotbar` | `HOTBAR` | action |  | `slot` int = `1`, min `1`, max `9` |
-| `Equipment/EquipArmor` | `EQUIP_ARMOR` | action |  | `armorSet` string = `diamond` (`leather`, `chainmail`, `iron`, `golden`, `diamond`, `netherite`) |
+| `Equipment/EquipArmor` | `EQUIP_ARMOR` | action |  | `armorSet` string = `diamond` (`leather`, `chainmail`, `iron`, `golden`, `gold`, `diamond`, `netherite`) |
 | `Equipment/EquipSlot` | `EQUIP_SLOT` | action |  | `slot` string = `mainhand` (`mainhand`, `offhand`, `head`, `chest`, `legs`, `feet`); `item` string = `diamond_sword` |
 | `Equipment/Unequip` | `UNEQUIP` | action |  | `slot` string = `all` (`all`, `mainhand`, `offhand`, `head`, `chest`, `legs`, `feet`) |
 | `Equipment/Drop` | `DROP` | action |  | `ticks` int = `1`, min `1`, max `200` |
@@ -627,8 +627,8 @@ not exist on an online-mode server.
 
 Take a bot out. Request body: `{"name": "Bot1"}`. Any program running on it is stopped first.
 
-Response: `{"success": true}`. Killing the bot instead would not work: a fake player that dies
-respawns.
+Response: `{"success": true}`. This disconnects the bot rather than killing it: a bot that dies in the
+world comes back on the next tick, which is not what an editor's "remove" should do.
 
 ### `POST /api/execute`
 

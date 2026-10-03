@@ -119,8 +119,10 @@ Fake players cannot be shadowed, and neither can the owner of a single-player wo
 /player <name> disconnect    fake players only
 ```
 
-Both are refused for real players ("Only fake players can be moved or killed"). `disconnect` is the
-one to reach for: killing a fake player makes it respawn.
+Both are refused for real players ("Only fake players can be moved or killed"). Both take the fake
+player off the server: `kill` reports "Killed" as the disconnect reason and `disconnect` an empty
+one, and neither of them leaves the bot in the world. A bot that *dies* in the world — lava, the
+void, another player — is a different thing and does come back, on the next tick.
 
 ## Targets and permissions
 
@@ -265,9 +267,10 @@ least 0.9, which is the modern combat rule. Turn that rule on for 1.8-style spam
 /player <name> animate interval <ticks>
 ```
 
-`swing` is the arm animation only. `animate` is the same thing under a different name:
-`animate attack` and `animate use` both start a single `SWING`, `animate continuous` repeats it
-every tick and `animate interval <ticks>` repeats it on an interval.
+`swing` is the arm animation only. `animate` is the same thing under two names: `animate attack`
+swings the main hand once and `animate use` swings the off hand once, `animate continuous` repeats
+the main-hand swing every tick and `animate interval <ticks>` repeats it on an interval. The hand
+each one uses is what a client watching sees, so the two are told apart in game.
 
 ## Interaction, hands and inventory
 
@@ -314,7 +317,7 @@ The bare `drop` drops one item from the slot and `dropStack` drops the whole sta
 ## Item cooldowns
 
 ```
-/player <name> itemCd                       print a message about the cooldowns
+/player <name> itemCd                       clear every item cooldown
 /player <name> itemCd <item>                query one item's cooldown
 /player <name> itemCd <item> reset          clear one item's cooldown
 /player <name> itemCd <item> set            set the default cooldown for one item
@@ -335,8 +338,9 @@ Reading the values: `set` with no ticks uses 20 ticks, whatever the item. The re
 number is an estimate — it is derived from the cooldown percentage, so it is roughly right and no
 more than that.
 
-The bare form, with no item, prints "Item cooldowns will clear on next tick for `<name>`" and then
-leaves the cooldowns alone. To clear them, reset the items by name.
+The bare form, with no item, clears **every** cooldown the player is carrying and reports how many
+there were, "Cleared 3 item cooldowns for `<name>`". Its return value is that same count, so a player
+with nothing on cooldown gets 0 back.
 
 ## Navigation
 
@@ -349,6 +353,16 @@ Navigation needs the rule:
 Every `nav` subcommand only works on a fake player. `nav status` prints the mode, the target, the
 arrival radius, and whatever else the mode has going — the follow target, the blocks being mined,
 the current waypoint, or the chase settings.
+
+### Stop
+
+```
+/player <name> nav stop
+```
+
+Stops navigating and lets go of the movement inputs navigation was driving — forward, strafe,
+sprint and jump — so the bot stands still where it is rather than walking on at its last speed.
+`nav chase stop` is the same command.
 
 ### Goto
 
@@ -408,7 +422,7 @@ refuses and lists the options, because picking for you would be guesswork.
 `crit` and `jumpreset` are the same thing: jump, hit while falling, and jump once per hit cycle
 rather than continuously. Both take the same arguments.
 
-`nav chase stop` is `nav stop`.
+`nav chase stop` is `nav stop`, see [Stop](#stop).
 
 ```
 /player Bot nav chase attack

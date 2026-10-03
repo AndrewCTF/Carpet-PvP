@@ -9,7 +9,6 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
@@ -529,16 +528,15 @@ public class EntityPlayerMPFake extends ServerPlayer
     @Override
     public void kill(ServerLevel level) {
         kill(Messenger.s("Killed"));
-        DamageSource dmgSource = level.damageSources().fellOutOfWorld();
-        die(dmgSource);
     }
 
     public void kill(Component reason) {
         shakeOff();
 
-        if (reason.getContents() instanceof TranslatableContents text && text.getKey().equals("multiplayer.disconnect.duplicate_login")) {
-            this.connection.onDisconnect(new DisconnectionDetails(reason));
-        }
+        // A fake player has no client that could have been shown a death screen, so being killed takes it
+        // off the server the same way a disconnect does. Dying in the world is a different thing and goes
+        // through die(), which respawns the bot.
+        this.fakePlayerDisconnect(reason);
     }
 
     /**

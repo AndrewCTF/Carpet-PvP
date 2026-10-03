@@ -10,6 +10,7 @@ Five kits ship with the mod, one per PvP mode. A server can make its own with `/
 | Command | What it does |
 |---|---|
 | `/bot kit list` | every kit name that can be given, plus any kit that failed to load and why |
+| `/bot kit reload` | read the world's kit folder again, picking up files added or edited by hand |
 | `/bot kit give <players> <kit>` | clear the players' inventories and hand out the kit |
 | `/bot kit save <name>` | save the calling player's inventory as a kit |
 | `/bot kit delete <name>` | delete a custom kit |
@@ -129,7 +130,8 @@ up holding: `apply()` sets the selected slot to 0 after the kit goes on.
 
 ## The kit file format
 
-There are two shapes of kit file, and which one you get depends on how the kit was made.
+There are two shapes of kit file. Both are accepted everywhere a kit is read from; which one a file
+is written in is up to whoever wrote it.
 
 ### Hand-written kits: item descriptions
 
@@ -205,10 +207,15 @@ name, damage, a written book, or any other data component survives the trip thro
 written the same way as above. A saved kit always has an explicit slot for every entry, because
 `capture()` records where each stack actually was.
 
-**This is the only shape a file in `<world>/carpet-kits/` is read as.** Kits in the mod's
-`assets/carpet/kits/` are read the other way round. So a hand-written kit file in the world's kit
-folder, with `item` and `count` instead of `stack`, is refused — write one with `/bot kit save`
-first, or write the stack form yourself.
+## Which shape a file is read as
+
+A file in `<world>/carpet-kits/` may be written in **either** shape. The two are told apart by their
+entries: an entry that carries a `stack` is a saved kit and keeps the finished stack it was written
+with, and any other entry is read as a hand-written item description, the same way the five built-in
+kits in `src/main/resources/assets/carpet/kits/` are. So the description form above can be dropped
+into the world's folder and it works, and so can a file `/bot kit save` wrote out.
+
+The shapes can even be mixed inside one file, entry by entry.
 
 ## Where custom kits live
 
@@ -222,8 +229,8 @@ One file per kit, named after the kit. `/bot kit save` creates the folder if it 
   is nothing to reload afterwards.
 - The folder is read when the store is built, which happens the first time anything asks for it on a
   given server, and then cached for that server's lifetime.
-- A file dropped in by hand is picked up by `KitStore.reload()`, which is what the self-test uses and
-  what a fresh server does for you.
+- A file dropped in or edited by hand is picked up by `/bot kit reload`, which re-reads the folder
+  and drops the problems of any kit that has gone. A fresh server does that for you at startup.
 - Only files ending in `.json` are read. The name is the file name without the extension.
 
 Names are restricted because a name doubles as a file name: 1 to 64 characters, letters, digits,

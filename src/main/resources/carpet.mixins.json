@@ -137,6 +137,7 @@
                    "ChunkMap_creativePlayersLoadChunksMixin",
                    "CollectingNeighborUpdaterAccessor",
                    "EntityDataAccessor_fakePlayerDataMixin",
+                   "ItemCooldowns_cooldownsAccessor",
                    "BlockBehaviourBlockStateBase_mixin",
                    "ChainBlock_customStickyMixin",
                    "ChestBlock_customStickyMixin",

@@ -45,17 +45,21 @@ public final class PvpInitializer implements ModInitializer
     }
 
     /**
-     * Opens the block window of a player that started using a sword. Called for the vanilla use item packets and for
-     * the client's own sword block request; the clients watching the player are told about it right away.
-     */
+ * Opens the block window of a player that started using a sword. Called for the vanilla use item packets, for
+ * the client's own sword block request and by the fake player's use action; the clients watching the player
+ * are told about it right away. Calling it again while the window is already open only tops it up.
+ */
     public static void startSwordBlock(Player player, InteractionHand hand)
     {
         if (!CarpetSettings.swordBlockHitting) return;
         if (!(player.level() instanceof ServerLevel level)) return;
         if (!player.getItemInHand(hand).is(ItemTags.SWORDS)) return;
-        ((PlayerSwordBlockInterface) player).carpet$setSwordBlockTicks(CarpetSettings.swordBlockWindowTicks);
+        PlayerSwordBlockInterface block = (PlayerSwordBlockInterface) player;
+        boolean wasOpen = block.carpet$getSwordBlockTicks() > 0;
+        block.carpet$setSwordBlockTicks(CarpetSettings.swordBlockWindowTicks);
         if (!player.isUsingItem()) player.startUsingItem(hand);
-        ServerNetworkHandler.sendSwordBlock(level, player, CarpetSettings.swordBlockWindowTicks);
+        // A pose the clients have already been told about does not need saying a second time.
+        if (!wasOpen) ServerNetworkHandler.sendSwordBlock(level, player, CarpetSettings.swordBlockWindowTicks);
     }
 
     /** The block window is over, so the clients watching this player stop showing the blocking pose. */

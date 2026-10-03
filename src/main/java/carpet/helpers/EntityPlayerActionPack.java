@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.UUID;
 
 import carpet.patches.EntityPlayerMPFake;
+import carpet.pvp.PvpInitializer;
 import carpet.script.utils.Tracer;
 import carpet.pvp.nav.BotNavMode;
 import carpet.pvp.nav.NavController;
@@ -1163,13 +1164,16 @@ public class EntityPlayerActionPack
             boolean execute(ServerPlayer player, Action action)
             {
                 EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+                if (player.isUsingItem())
+                {
+                    // A sword held up blocks for as long as the item is in use, so the block window is
+                    // kept open rather than running out while the bot is still holding it up.
+                    PvpInitializer.startSwordBlock(player, player.getUsedItemHand());
+                    return true;
+                }
                 if (ap.itemUseCooldown > 0)
                 {
                     ap.itemUseCooldown--;
-                    return true;
-                }
-                if (player.isUsingItem())
-                {
                     return true;
                 }
                 HitResult hit = getTarget(player);
@@ -1223,6 +1227,7 @@ public class EntityPlayerActionPack
                     ItemStack handItem = player.getItemInHand(hand);
                     if (player.gameMode.useItem(player, player.level(), handItem, hand).consumesAction())
                     {
+                        PvpInitializer.startSwordBlock(player, hand);
                         ap.itemUseCooldown = 3;
                         return true;
                     }
@@ -1598,6 +1603,18 @@ public class EntityPlayerActionPack
                 // Plays the arm swing animation without performing any interaction.
                 //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
                 player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+                player.resetLastActionTime();
+                return false;
+            }
+        },
+        SWING_OFF_HAND(true)
+        {
+            @Override
+            boolean execute(ServerPlayer player, Action action)
+            {
+                // The same arm animation with the other hand, which is what using the off hand looks like.
+                //~ if >=26.3 'swing(InteractionHand.OFF_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.OFF_HAND, SwingAnimation.DEFAULT, false)'
+                player.swingAndResetAttackStrength(InteractionHand.OFF_HAND, SwingAnimation.DEFAULT, false);
                 player.resetLastActionTime();
                 return false;
             }

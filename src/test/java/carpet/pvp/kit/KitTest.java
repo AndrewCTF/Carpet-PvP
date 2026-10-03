@@ -102,4 +102,42 @@ class KitTest
         assertThrows(IllegalArgumentException.class, () -> KitSlot.ofIndex(-1));
         assertThrows(IllegalArgumentException.class, () -> KitSlot.ofIndex(36));
     }
+
+    /**
+     * A kit file in the world's folder written by hand describes its items, the same way the ones in the
+     * mod do, rather than carrying finished stacks. Only the saved shape needs the registries.
+     */
+    @Test
+    void aHandWrittenKitInTheWorldFolderIsReadAsItemDescriptions()
+    {
+        Kit kit = KitStore.readCustomKit(null, """
+                {
+                  "name": "mine",
+                  "items": [
+                    { "item": "minecraft:netherite_sword", "slot": 0,
+                      "enchantments": [ { "id": "minecraft:sharpness", "level": 3 } ] },
+                    { "item": "minecraft:cooked_beef", "count": 7, "slot": 1 },
+                    { "item": "minecraft:shield", "slot": "offhand" }
+                  ]
+                }
+                """, "mine");
+
+        assertEquals("mine", kit.name());
+        assertEquals(3, kit.entries().size());
+
+        KitEntry sword = kit.entries().get(0);
+        assertEquals("minecraft:netherite_sword", sword.item());
+        assertEquals(0, sword.slot().index());
+        assertEquals(List.of(new KitEnchantment("minecraft:sharpness", 3)), sword.enchantments());
+
+        assertEquals(7, kit.entries().get(1).count());
+        assertEquals("offhand", kit.entries().get(2).slot().equipment().getName());
+    }
+
+    @Test
+    void aWorldFolderKitTakesItsNameFromTheFileWhenItHasNone()
+    {
+        Kit kit = KitStore.readCustomKit(null, "{\"items\": [{\"item\": \"minecraft:stone\"}]}", "from_file");
+        assertEquals("from_file", kit.name());
+    }
 }
