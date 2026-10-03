@@ -6,7 +6,6 @@ import carpet.mixins.Objective_scarpetMixin;
 import carpet.mixins.PoiRecord_scarpetMixin;
 import carpet.mixins.Scoreboard_scarpetMixin;
 import carpet.fakes.ServerPlayerInteractionManagerInterface;
-import carpet.fakes.ServerWorldInterface;
 import carpet.fakes.SpawnHelperInnerInterface;
 import carpet.fakes.TicketsFetcherInterface;
 //? if <26.3
@@ -69,7 +68,6 @@ import net.minecraft.world.level.block.state.pattern.BlockInWorld;
 //import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.storage.LevelStorageSource;
-import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
@@ -115,11 +113,6 @@ public class Vanilla
     public static Map<ObjectiveCriteria, List<Objective>> Scoreboard_getObjectivesByCriterion(Scoreboard scoreboard)
     {
         return ((Scoreboard_scarpetMixin) scoreboard).getObjectivesByCriterion();
-    }
-
-    public static ServerLevelData ServerLevel_getWorldProperties(ServerLevel world)
-    {
-        return ((ServerWorldInterface) world).getWorldPropertiesCM();
     }
 
     public static Long2ObjectOpenHashMap<List<Ticket>> ChunkTicketManager_getTicketsByPosition(DistanceManager ticketManager)

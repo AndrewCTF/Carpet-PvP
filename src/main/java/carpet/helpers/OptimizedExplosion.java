@@ -33,19 +33,23 @@ public class OptimizedExplosion
     public static List<BlockPos> doExplosionA(Explosion e, ExplosionLogHelper eLogger) {
         ExplosionAccessor eAccess = (ExplosionAccessor) e;
 
+        // Everything here is static, so an explosion that skips the walk below would otherwise leave its
+        // work behind for the next one. Start every explosion from empty caches.
+        rayCalcDone = false;
+        firstRay = true;
+        affectedBlockPositionsSet.clear();
+        stateCache.clear();
+        fluidCache.clear();
+
         List<BlockPos> toBlow;
 
         if (!CarpetSettings.explosionNoBlockDamage && eAccess.getDamageSource() != null) {
-            rayCalcDone = false;
-            firstRay = true;
             getAffectedPositionsOnPlaneY(e,  0,  0, 15,  0, 15); // bottom
             getAffectedPositionsOnPlaneY(e, 15,  0, 15,  0, 15); // top
             getAffectedPositionsOnPlaneX(e,  0,  1, 14,  0, 15); // west
             getAffectedPositionsOnPlaneX(e, 15,  1, 14,  0, 15); // east
             getAffectedPositionsOnPlaneZ(e,  0,  1, 14,  1, 14); // north
             getAffectedPositionsOnPlaneZ(e, 15,  1, 14,  1, 14); // south
-            stateCache.clear();
-            fluidCache.clear();
 
             toBlow = new ArrayList<>(affectedBlockPositionsSet);
             affectedBlockPositionsSet.clear();
