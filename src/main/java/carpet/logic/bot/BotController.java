@@ -1,6 +1,5 @@
 package carpet.logic.bot;
 
-import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
@@ -12,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * The operations a bot program can perform on one fake player.
@@ -473,11 +473,22 @@ public class BotController
     }
 
     /**
-     * Arbitrary commands are not run until programs carry the identity of whoever started them.
+     * Runs a command as the player the program belongs to, with that player's permissions and never the console's.
+     *
+     * @return null when the command was dispatched, otherwise why it was refused
      */
-    public void executeCommand(String command)
+    public String executeCommand(String command, UUID owner)
     {
-        CarpetSettings.LOG.warn("[CarpetLogic] Ignored EXECUTE_COMMAND '{}': programs have no owner to run it as", command);
+        MinecraftServer server = player.level().getServer();
+        ServerPlayer ownerPlayer = owner == null ? null : server.getPlayerList().getPlayer(owner);
+        if (ownerPlayer == null)
+        {
+            return owner == null
+                    ? "EXECUTE_COMMAND only runs in programs a player started from the web editor"
+                    : "EXECUTE_COMMAND needs the player who started this program to be online";
+        }
+        server.getCommands().performPrefixedCommand(ownerPlayer.createCommandSourceStack(), command);
+        return null;
     }
 
     /**

@@ -1,6 +1,7 @@
 package carpet.logic.bot;
 
 import carpet.patches.EntityPlayerMPFake;
+import com.google.gson.JsonObject;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -9,6 +10,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -96,6 +99,30 @@ public class BotManager
             controllers.put(name, controller);
         }
         return controller;
+    }
+
+    public static JsonObject describe(ServerPlayer bot)
+    {
+        JsonObject json = new JsonObject();
+        json.addProperty("name", bot.getGameProfile().name());
+        json.addProperty("x", bot.getX());
+        json.addProperty("y", bot.getY());
+        json.addProperty("z", bot.getZ());
+        json.addProperty("yaw", bot.getYRot());
+        json.addProperty("pitch", bot.getXRot());
+        json.addProperty("health", bot.getHealth());
+        json.addProperty("maxHealth", bot.getMaxHealth());
+        json.addProperty("foodLevel", bot.getFoodData().getFoodLevel());
+        json.addProperty("gamemode", bot.gameMode.getGameModeForPlayer().getName());
+        json.addProperty("dimension", bot.level().dimension().identifier().toString());
+        json.addProperty("sprinting", bot.isSprinting());
+        json.addProperty("sneaking", bot.isCrouching());
+        for (EquipmentSlot slot : EquipmentSlot.values())
+        {
+            ItemStack stack = bot.getItemBySlot(slot);
+            json.addProperty(slot.getName(), stack.isEmpty() ? "empty" : stack.getItem().toString());
+        }
+        return json;
     }
 
     public List<ServerPlayer> getBots()

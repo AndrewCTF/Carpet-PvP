@@ -81,14 +81,11 @@ const ProgramPanel = (() => {
             const name = document.getElementById("program-name").value.trim() || "Untitled";
             const graphData = NodeEditor.getGraphJSON();
             const actions = NodeCompiler.compile(NodeEditor.getGraph());
-            const program = {
-                id: currentProgramId || name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
-                name: name,
-                actions: actions,
-                graphData: graphData
-            };
-            await API.saveProgram(program);
-            currentProgramId = program.id;
+            // A new program has no id yet: the server assigns one.
+            const program = { name: name, actions: actions, graphData: graphData };
+            if (currentProgramId) program.id = currentProgramId;
+            const result = await API.saveProgram(program);
+            currentProgramId = result.id;
             log("Saved: " + name);
         } catch (e) {
             log("Save failed: " + e.message, "error");
@@ -211,19 +208,9 @@ const ProgramPanel = (() => {
         const bot = BotPanel.getTargetBot();
         if (!bot) { log("Select a target bot first", "error"); return; }
         try {
-            // Save program first so server has it, then execute by ID
             const name = document.getElementById("program-name").value.trim() || "Untitled";
-            const graphData = NodeEditor.getGraphJSON();
             const actions = NodeCompiler.compile(NodeEditor.getGraph());
-            const tempId = currentProgramId || "_run_" + Date.now();
-            const program = {
-                id: tempId,
-                name: name,
-                actions: actions,
-                graphData: graphData
-            };
-            await API.saveProgram(program);
-            await API.executeProgram(bot, tempId);
+            await API.runProgram(bot, name, actions);
             document.getElementById("exec-state").textContent = "Running";
             document.getElementById("exec-state").className = "rp-status-value status-running";
             log("Running program on " + bot);

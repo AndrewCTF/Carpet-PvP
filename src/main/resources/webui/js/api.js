@@ -1,87 +1,119 @@
 /**
- * CarpetLogic — API Client
+ * CarpetLogic — API client
  *
- * REST + SSE client for communicating with the CarpetLogic mod web server.
- * Automatically reconnects SSE on disconnect.
+ * Every request carries the token from the link that /carpetlogic open prints in game.
+ * Server events arrive over a streamed fetch rather than EventSource, so the token travels
+ * in a header and never in a URL the server sees.
  */
-
 const API = (() => {
 
-    let baseUrl = '';
-    let eventSource = null;
+    const TOKEN_KEY = 'carpetlogic.token';
+    let token = null;
     let listeners = {};       // event-type → [callback]
     let reconnectTimer = null;
+    let streamAbort = null;
     let connected = false;
 
-    // ── Initialisation ───────────────────────────────────────────
+    // ── Token ────────────────────────────────────────────────────
 
-    /**
-     * Set the server base URL and open the SSE stream.
-     * @param {string} url e.g. "http://localhost:9876"
-     */
-    function connect(url) {
-        baseUrl = url.replace(/\/+$/, '');
-        _openSSE();
+    // The link carries the token in its fragment. Keep it for this tab and take it out of the address bar.
+    function loadToken() {
+        const match = /[#&]token=([A-Za-z0-9_-]+)/.exec(window.location.hash);
+        if (match) {
+            try { sessionStorage.setItem(TOKEN_KEY, match[1]); } catch (e) { /* storage unavailable */ }
+            token = match[1];
+            history.replaceState(null, '', window.location.pathname);
+        } else {
+            try { token = sessionStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+        }
+        return token;
+    }
+
+    function hasToken() {
+        return Boolean(token);
+    }
+
+    // ── Connection ───────────────────────────────────────────────
+
+    function connect() {
+        loadToken();
+        if (!token) {
+            _emit('unauthorized', 'No access token. Run /carpetlogic open in game and use the link it prints.');
+            return;
+        }
+        _openStream();
     }
 
     function disconnect() {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-        }
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-        connected = false;
-        _emit('connectionChange', false);
+        if (streamAbort) streamAbort.abort();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        streamAbort = null;
+        reconnectTimer = null;
+        _setConnected(false);
     }
 
     function isConnected() {
         return connected;
     }
 
-    // ── SSE Stream ───────────────────────────────────────────────
+    function _setConnected(value) {
+        if (connected === value) return;
+        connected = value;
+        _emit('connectionChange', value);
+    }
 
-    function _openSSE() {
-        if (eventSource) eventSource.close();
+    // ── Event stream ─────────────────────────────────────────────
 
+    async function _openStream() {
+        const abort = new AbortController();
+        streamAbort = abort;
         try {
-            eventSource = new EventSource(baseUrl + '/ws');
+            const resp = await fetch('/api/events', {
+                headers: { 'Authorization': 'Bearer ' + token },
+                signal: abort.signal
+            });
+            if (resp.status === 401 || resp.status === 403) {
+                _emit('unauthorized', await _errorText(resp));
+                return;
+            }
+            if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
+            _setConnected(true);
 
-            eventSource.onopen = () => {
-                connected = true;
-                _emit('connectionChange', true);
-                console.log('[API] SSE connected');
-            };
-
-            eventSource.onmessage = (e) => {
-                try {
-                    const data = JSON.parse(e.data);
-                    if (data.type) {
-                        _emit(data.type, data);
-                    }
-                    _emit('message', data);
-                } catch (err) {
-                    console.warn('[API] Failed to parse SSE message:', e.data);
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let end;
+                while ((end = buffer.indexOf('\n\n')) >= 0) {
+                    _dispatch(buffer.slice(0, end));
+                    buffer = buffer.slice(end + 2);
                 }
-            };
-
-            eventSource.onerror = () => {
-                connected = false;
-                _emit('connectionChange', false);
-                eventSource.close();
-                eventSource = null;
-                // Auto-reconnect in 3 seconds
-                reconnectTimer = setTimeout(() => _openSSE(), 3000);
-            };
+            }
         } catch (err) {
-            console.error('[API] SSE connection failed:', err);
-            reconnectTimer = setTimeout(() => _openSSE(), 3000);
+            if (abort.signal.aborted) return;
+        }
+        _setConnected(false);
+        reconnectTimer = setTimeout(_openStream, 3000);
+    }
+
+    function _dispatch(event) {
+        const data = event.split('\n')
+            .filter(line => line.startsWith('data: '))
+            .map(line => line.slice(6))
+            .join('\n');
+        if (!data) return;
+        try {
+            const message = JSON.parse(data);
+            if (message.type) _emit(message.type, message);
+        } catch (err) {
+            console.warn('[API] Unreadable event:', data);
         }
     }
 
-    // ── Event Bus ────────────────────────────────────────────────
+    // ── Event bus ────────────────────────────────────────────────
 
     function on(event, callback) {
         if (!listeners[event]) listeners[event] = [];
@@ -99,134 +131,48 @@ const API = (() => {
         });
     }
 
-    // ── REST Helpers ─────────────────────────────────────────────
+    // ── REST ─────────────────────────────────────────────────────
+
+    async function _errorText(resp) {
+        const text = await resp.text().catch(() => '');
+        try { return JSON.parse(text).error || text; } catch (e) { return text || resp.statusText; }
+    }
 
     async function _fetch(path, options = {}) {
-        const url = baseUrl + path;
-        const defaults = {
-            headers: { 'Content-Type': 'application/json' }
+        if (!token) throw new Error('No access token. Run /carpetlogic open in game.');
+        const opts = {
+            method: options.method || 'GET',
+            headers: { 'Authorization': 'Bearer ' + token }
         };
-        const opts = { ...defaults, ...options };
-        if (opts.body && typeof opts.body === 'object') {
-            opts.body = JSON.stringify(opts.body);
+        if (options.body !== undefined) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(options.body);
         }
-        const resp = await fetch(url, opts);
+        const resp = await fetch(path, opts);
         if (!resp.ok) {
-            const text = await resp.text().catch(() => '');
-            throw new Error(`API ${resp.status}: ${text || resp.statusText}`);
+            const message = await _errorText(resp);
+            if (resp.status === 401) _emit('unauthorized', message);
+            throw new Error(message);
         }
-        const ct = resp.headers.get('content-type') || '';
-        if (ct.includes('application/json')) {
-            return resp.json();
-        }
-        return resp.text();
+        return resp.json();
     }
 
-    // ── API Methods ──────────────────────────────────────────────
-
-    // -- Status --
-    function getStatus() {
-        return _fetch('/api/status');
-    }
-
-    // -- Programs --
-    function getPrograms() {
-        return _fetch('/api/programs');
-    }
-
-    function saveProgram(program) {
-        return _fetch('/api/programs', {
-            method: 'POST',
-            body: program
-        });
-    }
-
-    function deleteProgram(id) {
-        return _fetch('/api/programs/' + encodeURIComponent(id), {
-            method: 'DELETE'
-        });
-    }
-
-    // -- Presets --
-    function getPresets() {
-        return _fetch('/api/presets');
-    }
-
-    // -- Bots --
-    function getBots() {
-        return _fetch('/api/bots');
-    }
-
-    function spawnBot(name, options = {}) {
-        return _fetch('/api/bots/spawn', {
-            method: 'POST',
-            body: { name, ...options }
-        });
-    }
-
-    function killBot(name) {
-        return _fetch('/api/bots/kill', {
-            method: 'POST',
-            body: { name }
-        });
-    }
-
-    // -- Execution --
-    function executeProgram(botName, programId) {
-        return _fetch('/api/execute', {
-            method: 'POST',
-            body: { botName, programId }
-        });
-    }
-
-    function executeProgramDirect(botName, actions) {
-        return _fetch('/api/execute', {
-            method: 'POST',
-            body: { botName, actions }
-        });
-    }
-
-    function stopProgram(botName) {
-        return _fetch('/api/stop', {
-            method: 'POST',
-            body: { botName }
-        });
-    }
-
-    // -- Settings --
-    function getSettings() {
-        return _fetch('/api/settings');
-    }
-
-    // -- AI --
-    function generateAI(params) {
-        return _fetch('/api/ai/generate', {
-            method: 'POST',
-            body: params
-        });
-    }
-
-    // ── Public ───────────────────────────────────────────────────
+    const getStatus = () => _fetch('/api/status');
+    const getSettings = () => _fetch('/api/settings');
+    const getPrograms = () => _fetch('/api/programs');
+    const getPresets = () => _fetch('/api/presets');
+    const saveProgram = (program) => _fetch('/api/programs', { method: 'POST', body: program });
+    const deleteProgram = (id) => _fetch('/api/programs/' + encodeURIComponent(id), { method: 'DELETE' });
+    const getBots = () => _fetch('/api/bots');
+    const spawnBot = (name) => _fetch('/api/bots/spawn', { method: 'POST', body: { name } });
+    const killBot = (name) => _fetch('/api/bots/kill', { method: 'POST', body: { name } });
+    const runProgram = (botName, name, actions) => _fetch('/api/execute', { method: 'POST', body: { botName, name, actions } });
+    const stopProgram = (botName) => _fetch('/api/stop', { method: 'POST', body: { botName } });
 
     return {
-        connect,
-        disconnect,
-        isConnected,
-        on,
-        off,
-        getStatus,
-        getPrograms,
-        saveProgram,
-        deleteProgram,
-        getPresets,
-        getBots,
-        spawnBot,
-        killBot,
-        executeProgram,
-        executeProgramDirect,
-        stopProgram,
-        getSettings,
-        generateAI
+        connect, disconnect, isConnected, hasToken, on, off,
+        getStatus, getSettings, getPrograms, getPresets, saveProgram, deleteProgram,
+        getBots, spawnBot, killBot, runProgram, stopProgram
     };
 
 })();

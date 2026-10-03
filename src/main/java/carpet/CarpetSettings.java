@@ -1287,8 +1287,48 @@ public class CarpetSettings
     @Rule(desc = "Damage invulnerability ticks for other/unknown damage types", category = FEATURE, validate = Validators.NonNegativeNumber.class)
     public static int damageTickOther = 10;
 
-    @Rule(desc = "Enables /carpetlogic command to run bot programs on fake players", category = COMMAND)
+    @Rule(desc = "Enables /carpetlogic command to run bot programs on fake players and open the web editor", category = COMMAND)
     public static String commandCarpetLogic = "ops";
+
+    private static class CarpetLogicPortValidator extends Validator<Integer> {
+        @Override public Integer validate(CommandSourceStack source, CarpetRule<Integer> currentRule, Integer newValue, String string) {
+            return (newValue > 0 && newValue <= 65535) ? newValue : null;
+        }
+        @Override
+        public String description() { return "You must choose a value from 1 to 65535";}
+    }
+    @Rule(
+            desc = "Port the CarpetLogic web editor listens on",
+            extra = "Applied when the server starts",
+            options = {"9876"},
+            category = CREATIVE,
+            strict = false,
+            validate = CarpetLogicPortValidator.class
+    )
+    public static int carpetLogicPort = 9876;
+
+    @Rule(
+            desc = "Address the CarpetLogic web editor listens on",
+            extra = {
+                    "127.0.0.1 only accepts connections from the machine the server runs on",
+                    "Applied when the server starts"
+            },
+            options = {"127.0.0.1", "0.0.0.0"},
+            category = CREATIVE,
+            strict = false
+    )
+    public static String carpetLogicBindAddress = "127.0.0.1";
+
+    @Rule(desc = "Hours a link from /carpetlogic open stays valid", category = CREATIVE,
+            options = {"1", "24"}, strict = false, validate = Validators.NonNegativeNumber.class)
+    public static int carpetLogicSessionHours = 24;
+
+    @Rule(desc = "Ticks between bot status updates sent to the CarpetLogic web editor", category = CREATIVE,
+            options = {"1", "5", "20"}, strict = false, validate = PushLimitLimits.class)
+    public static int carpetLogicUpdateInterval = 5;
+
+    @Rule(desc = "The CarpetLogic web editor can look at bots and programs but not change or run anything", category = CREATIVE)
+    public static boolean carpetLogicViewerMode = false;
 
     @Rule(desc = "Maximum number of bot programs running at the same time", category = CREATIVE,
             validate = Validators.NonNegativeNumber.class)

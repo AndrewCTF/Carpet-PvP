@@ -24,13 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
     BotPanel.init();
     ProgramPanel.init();
 
-    // 3. Connect to server
-    const host = window.location.hostname || "localhost";
-    const port = window.location.port || "9876";
-    const url = `http://${host}:${port}`;
-    API.connect(url);
-
-    // 4. Connection status
+    // 3. Connection status
     API.on("connectionChange", (connected) => {
         const dot = document.getElementById("connection-dot");
         const text = document.getElementById("connection-text");
@@ -44,6 +38,14 @@ document.addEventListener("DOMContentLoaded", () => {
             log("Disconnected — retrying…", "error");
         }
     });
+
+    API.on("unauthorized", (message) => {
+        document.getElementById("connection-text").textContent = "No access";
+        log(message || "Not authorised. Run /carpetlogic open in game for a link.", "error");
+    });
+
+    // 4. Connect to the server this page came from
+    API.connect();
 
     // 5. Console toggle
     const logPanel = document.getElementById("log-panel");

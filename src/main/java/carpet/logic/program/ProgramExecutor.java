@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.IntSupplier;
 
@@ -70,6 +71,14 @@ public class ProgramExecutor
             {
                 tickProgram(state, controller);
             }
+            catch (IllegalStateException e)
+            {
+                state.status = ProgramStatus.ERROR;
+                state.errorMessage = e.getMessage();
+                controller.stopAll();
+                LOG.warn("Program '{}' on bot '{}' stopped: {}", state.program.getName(), botName, e.getMessage());
+                logListener.accept("ERROR", "Program '" + state.program.getName() + "' on " + botName + " stopped: " + e.getMessage());
+            }
             catch (Exception e)
             {
                 state.status = ProgramStatus.ERROR;
@@ -79,26 +88,28 @@ public class ProgramExecutor
         }
     }
 
-    public boolean startProgram(String botName, BotProgram program)
+    /**
+     * @param owner the player the program runs on behalf of, or null when it was started from the console
+     * @return null when the program was started, otherwise why it was not
+     */
+    public String startProgram(String botName, BotProgram program, UUID owner)
     {
-        if (runningPrograms.size() >= maxPrograms.getAsInt() && !runningPrograms.containsKey(botName))
-        {
-            LOG.warn("Cannot start program: {} programs are already running", runningPrograms.size());
-            return false;
-        }
         if (botManager.getController(botName) == null)
         {
-            LOG.warn("Cannot start program: bot '{}' not found", botName);
-            return false;
+            return "There is no bot named '" + botName + "'";
+        }
+        if (runningPrograms.size() >= maxPrograms.getAsInt() && !runningPrograms.containsKey(botName))
+        {
+            return runningPrograms.size() + " programs are already running (carpetLogicMaxPrograms)";
         }
 
         stopProgram(botName);
 
-        ProgramState state = new ProgramState(program);
+        ProgramState state = new ProgramState(program, owner);
         state.status = ProgramStatus.RUNNING;
         runningPrograms.put(botName, state);
         logListener.accept("INFO", "Started '" + program.getName() + "' on " + botName);
-        return true;
+        return null;
     }
 
     public boolean stopProgram(String botName)
@@ -361,7 +372,11 @@ public class ProgramExecutor
                 String command = action.getStringParam("command");
                 if (command != null && !command.isEmpty())
                 {
-                    controller.executeCommand(command);
+                    String refused = controller.executeCommand(command, state.owner);
+                    if (refused != null)
+                    {
+                        throw new IllegalStateException(refused);
+                    }
                 }
             }
 
@@ -447,6 +462,7 @@ public class ProgramExecutor
     private static class ProgramState
     {
         final BotProgram program;
+        final UUID owner;
         final Deque<StackFrame> executionStack = new ArrayDeque<>();
         ProgramStatus status;
         int delayRemaining;
@@ -457,9 +473,10 @@ public class ProgramExecutor
         CompletionCheck completionCheck;
         TickAction tickAction;
 
-        ProgramState(BotProgram program)
+        ProgramState(BotProgram program, UUID owner)
         {
             this.program = program;
+            this.owner = owner;
             pushFrame(this, program.getActions(), false, 1);
         }
 

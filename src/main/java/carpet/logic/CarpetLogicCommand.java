@@ -2,6 +2,8 @@ package carpet.logic;
 
 import carpet.CarpetSettings;
 import carpet.logic.program.BotProgram;
+import carpet.logic.web.WebServer;
+import carpet.patches.EntityPlayerMPFake;
 import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
 import com.mojang.brigadier.CommandDispatcher;
@@ -9,6 +11,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 
 import java.util.List;
 
@@ -23,6 +26,7 @@ public class CarpetLogicCommand
                 .requires(source -> CommandHelper.canUseCommand(source, CarpetSettings.commandCarpetLogic))
                 .executes(CarpetLogicCommand::showStatus)
                 .then(literal("status").executes(CarpetLogicCommand::showStatus))
+                .then(literal("open").executes(CarpetLogicCommand::open))
                 .then(literal("programs")
                         .executes(CarpetLogicCommand::listPrograms)
                         .then(literal("run")
@@ -45,10 +49,42 @@ public class CarpetLogicCommand
         return false;
     }
 
+    private static int open(CommandContext<CommandSourceStack> ctx)
+    {
+        CommandSourceStack source = ctx.getSource();
+        WebServer web = CarpetLogic.INSTANCE.getWebServer();
+        if (web == null)
+        {
+            Messenger.m(source, "r The web editor is not running; the server log says why");
+            return 0;
+        }
+        // The link is only ever shown to whoever its token is bound to. In particular it does not go back to
+        // the sender of an "/execute as <player> run carpetlogic open", and it is not broadcast to operators.
+        long lifetime = CarpetSettings.carpetLogicSessionHours * 3_600_000L;
+        Entity entity = source.getEntity();
+        if (entity instanceof ServerPlayer player && !(player instanceof EntityPlayerMPFake))
+        {
+            String token = CarpetLogic.INSTANCE.getAuth().issue(player.getUUID(), player.getGameProfile().name(), lifetime);
+            player.sendSystemMessage(Messenger.c("w Bot editor: ", "cu open in browser", "@" + web.url() + "/#token=" + token,
+                    "g  (for you only, valid " + CarpetSettings.carpetLogicSessionHours + "h)"));
+            return 1;
+        }
+        if (entity == null && CommandHelper.hasPermissionLevel(source, 4))
+        {
+            String token = CarpetLogic.INSTANCE.getAuth().issue(null, source.getTextName(), lifetime);
+            source.sendSuccess(() -> Messenger.c("w Bot editor: " + web.url() + "/#token=" + token), false);
+            return 1;
+        }
+        Messenger.m(source, "r Only a player or the server console can open the web editor");
+        return 0;
+    }
+
     private static int showStatus(CommandContext<CommandSourceStack> ctx)
     {
         if (notReady(ctx)) return 0;
         CarpetLogic logic = CarpetLogic.INSTANCE;
+        WebServer web = logic.getWebServer();
+        Messenger.m(ctx.getSource(), "w Web editor: ", web == null ? "r not running" : "l " + web.url());
         Messenger.m(ctx.getSource(), "w CarpetLogic: ",
                 "y " + logic.getBotManager().getBots().size(), "w  bots, ",
                 "y " + logic.getProgramExecutor().getRunningCount(), "w  running programs, ",
@@ -83,9 +119,11 @@ public class CarpetLogicCommand
             Messenger.m(ctx.getSource(), "r Program '" + programName + "' not found");
             return 0;
         }
-        if (!CarpetLogic.INSTANCE.getProgramExecutor().startProgram(botName, program))
+        // No owner: commands inside a program only run for the player whose editor started it.
+        String refused = CarpetLogic.INSTANCE.getProgramExecutor().startProgram(botName, program, null);
+        if (refused != null)
         {
-            Messenger.m(ctx.getSource(), "r Failed to start the program. Is the bot spawned?");
+            Messenger.m(ctx.getSource(), "r " + refused);
             return 0;
         }
         Messenger.m(ctx.getSource(), "g Started '" + programName + "' on bot '" + botName + "'");

@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -24,6 +25,8 @@ public class ProgramStorage
 {
     private static final Logger LOG = LogManager.getLogger("CarpetLogic");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    // An id names the program's file, so it may never contain a path separator or a dot.
+    private static final Pattern ID = Pattern.compile("[A-Za-z0-9_-]{1,64}");
 
     private final Path programDir;
     private final Map<String, BotProgram> programs = new ConcurrentHashMap<>();
@@ -66,9 +69,13 @@ public class ProgramStorage
         try
         {
             BotProgram program = GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), BotProgram.class);
-            if (program != null && program.getId() != null)
+            if (program != null && isValidId(program.getId()))
             {
                 programs.put(program.getId(), program);
+            }
+            else
+            {
+                LOG.warn("Skipped program {}: missing or invalid id", path);
             }
         }
         catch (Exception e)
@@ -77,8 +84,24 @@ public class ProgramStorage
         }
     }
 
+    public static boolean isValidId(String id)
+    {
+        return id != null && ID.matcher(id).matches();
+    }
+
+    /**
+     * @throws IllegalArgumentException when the id is not a valid program id or belongs to a preset
+     */
     public void save(BotProgram program)
     {
+        if (!isValidId(program.getId()))
+        {
+            throw new IllegalArgumentException("Program ids are 1-64 letters, digits, '_' or '-'");
+        }
+        if (presets.stream().anyMatch(p -> p.getId().equals(program.getId())))
+        {
+            throw new IllegalArgumentException("'" + program.getId() + "' is a built-in preset");
+        }
         programs.put(program.getId(), program);
         Path file = programDir.resolve(program.getId() + ".json");
         try
@@ -93,7 +116,7 @@ public class ProgramStorage
 
     public boolean delete(String id)
     {
-        if (programs.remove(id) == null)
+        if (!isValidId(id) || programs.remove(id) == null)
         {
             return false;
         }
@@ -111,6 +134,10 @@ public class ProgramStorage
 
     public BotProgram getById(String id)
     {
+        if (!isValidId(id))
+        {
+            return null;
+        }
         BotProgram program = programs.get(id);
         if (program != null)
         {
