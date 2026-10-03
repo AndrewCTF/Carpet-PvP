@@ -10,9 +10,12 @@ group = property("maven_group") as String
 base.archivesName = "${property("archives_base_name")}-$mcVersion"
 
 loom {
+    accessWidenerPath = rootProject.file("src/main/resources/carpet.accesswidener")
+
     runConfigs.configureEach {
-        // One world per Minecraft version: an older server cannot open a newer world.
-        runDir("../../run/$mcVersion")
+        // One world per Minecraft version (an older server cannot open a newer world), and
+        // separate client and server directories so both can run at once.
+        runDir("../../run/$mcVersion/$name")
         // -PmixinAudit: fail at boot if any mixin no longer matches its target.
         if (providers.gradleProperty("mixinAudit").isPresent) vmArg("-Dcarpet.mixinAudit=true")
     }

@@ -55,6 +55,8 @@
                    "Player_xpNoCooldownMixin",
                    "ServerPlayer_actionPackMixin",
                    "ServerPlayer_fakeLastMovementMixin",
+                   "CustomPacketPayload_networkStuffMixin",
+                   "ServerGamePacketListenerimpl_connectionMixin",
                    "PlayerList_coreMixin",
                    "PlayerList_fakePlayersMixin",
                    "RedstoneWireBlock_fastMixin",
@@ -144,6 +146,10 @@
                    "DefaultRedstoneWireEvaluator_redstoneMixin"
                ],
     "client":  [
+                   "ClientPacketListener_clientCommandMixin",
+                   "ClientPacketListener_customPacketsMixin",
+                   "ClientCommonPacketListenerImpl_customPacketMixin",
+                   "LevelRenderer_scarpetRenderMixin",
                    "PlayerTabOverlayMixin",
                    "PistonHeadRenderer_movableBEMixin",
                    "StructureBlockRenderer_mixin",

@@ -29,7 +29,6 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.nbt.ByteTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.DoubleTag;
@@ -58,7 +57,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -277,21 +276,17 @@ public class ShapeDispatcher
 
     public abstract static class ExpiringShape
     {
-        public static final Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> shapeProviders = createShapeProviders();
-
-        private static Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> createShapeProviders()
-        {
-            Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> map = new HashMap<>();
-            map.put("line", creator(Line::new));
-            map.put("box", creator(Box::new));
-            map.put("sphere", creator(Sphere::new));
-            map.put("cylinder", creator(Cylinder::new));
-            map.put("label", creator(DisplayedText::new));
-            map.put("polygon", creator(Polyface::new));
-            map.put("block", creator(() -> new DisplayedSprite(false)));
-            map.put("item", creator(() -> new DisplayedSprite(true)));
-            return map;
-        }
+        public static final Map<String, BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape>> shapeProviders = new HashMap<>()
+        {{
+            put("line", creator(Line::new));
+            put("box", creator(Box::new));
+            put("sphere", creator(Sphere::new));
+            put("cylinder", creator(Cylinder::new));
+            put("label", creator(DisplayedText::new));
+            put("polygon", creator(Polyface::new));
+            put("block", creator(() -> new DisplayedSprite(false)));
+            put("item", creator(() -> new DisplayedSprite(true)));
+        }};
 
         private static BiFunction<Map<String, Value>, RegistryAccess, ExpiringShape> creator(Supplier<ExpiringShape> shapeFactory)
         {
@@ -305,7 +300,9 @@ public class ShapeDispatcher
         float lineWidth;
         protected float r, g, b, a;
         protected int color;
+        protected int argb;
         protected float fr, fg, fb, fa;
+        protected int fargb;
         protected int fillColor;
         protected int duration = 0;
         private long key;
@@ -315,6 +312,7 @@ public class ShapeDispatcher
         protected boolean discreteX, discreteY, discreteZ;
         protected ResourceKey<Level> shapeDimension;
         protected boolean debug;
+        protected boolean seethrough;
 
 
         protected ExpiringShape()
@@ -356,6 +354,11 @@ public class ShapeDispatcher
             init(options, regs);
         }
 
+        private int rgba2argb(int color) {
+            // return shift bits from alpha
+            return ((color & 0xFF) << 24) + (color >> 8 & 0xFFFFFF);
+        }
+
 
         protected void init(Map<String, Value> options, RegistryAccess regs)
         {
@@ -365,12 +368,14 @@ public class ShapeDispatcher
             lineWidth = NumericValue.asNumber(options.getOrDefault("line", optional.get("line"))).getFloat();
 
             fillColor = NumericValue.asNumber(options.getOrDefault("fill", optional.get("fill"))).getInt();
+            this.fargb = rgba2argb(fillColor);
             this.fr = (fillColor >> 24 & 0xFF) / 255.0F;
             this.fg = (fillColor >> 16 & 0xFF) / 255.0F;
             this.fb = (fillColor >> 8 & 0xFF) / 255.0F;
             this.fa = (fillColor & 0xFF) / 255.0F;
 
             color = NumericValue.asNumber(options.getOrDefault("color", optional.get("color"))).getInt();
+            this.argb = rgba2argb(color);
             this.r = (color >> 24 & 0xFF) / 255.0F;
             this.g = (color >> 16 & 0xFF) / 255.0F;
             this.b = (color >> 8 & 0xFF) / 255.0F;
@@ -380,6 +385,12 @@ public class ShapeDispatcher
             if (options.containsKey("debug"))
             {
                 debug = options.get("debug").getBoolean();
+            }
+
+            seethrough = false;
+            if (options.containsKey("debug"))
+            {
+                seethrough = options.get("seethrough").getBoolean();
             }
 
             key = 0;
@@ -469,6 +480,7 @@ public class ShapeDispatcher
             hash ^= followEntity;
             hash *= 1099511628211L;
             hash ^= Boolean.hashCode(debug);
+            hash ^= Boolean.hashCode(seethrough);
             hash *= 1099511628211L;
             if (followEntity >= 0)
             {
@@ -501,6 +513,7 @@ public class ShapeDispatcher
                 "follow", new NumericValue(-1),
                 "line", new NumericValue(2.0),
                 "debug", Value.FALSE,
+                "seethrough", Value.FALSE,
                 "fill", new NumericValue(0xffffff00),
                 "snap", new StringValue("xyz")
         );
@@ -731,7 +744,7 @@ public class ShapeDispatcher
             }
             else
             {
-                this.item = ItemStack.CODEC.parse(regs.createSerializationContext(NbtOps.INSTANCE), ((NBTSerializableValue) options.get("item")).getCompoundTag() ).result().orElse(null);
+                this.item = ItemStack.CODEC.parse(regs.createSerializationContext(NbtOps.INSTANCE), ((NBTSerializableValue) options.get("item")).getCompoundTag() ).getOrThrow(s -> new InternalExpressionException("Failed to parse item stack data: " + s));
             }
             blockLight = NumericValue.asNumber(options.getOrDefault("blocklight", optional.get("blocklight"))).getInt();
             if (blockLight > 15)
@@ -767,7 +780,7 @@ public class ShapeDispatcher
         {
             return p -> {
                 ParticleOptions particle;
-                Registry<Block> blocks = ((ServerLevel) p.level()).getServer().registryAccess().lookupOrThrow(Registries.BLOCK);
+                Registry<Block> blocks = p.level().getServer().registryAccess().lookupOrThrow(Registries.BLOCK);
                 if (this.isitem)
                 {
                     if (Block.byItem(this.item.getItem()).defaultBlockState().isAir())
@@ -782,7 +795,7 @@ public class ShapeDispatcher
                 }
 
                 Vec3 v = relativiseRender(p.level(), this.pos, 0);
-                ((net.minecraft.server.level.ServerLevel) p.level()).sendParticles(p, particle, true, true, v.x, v.y, v.z, 1, 0.0, 0.0, 0.0, 0.0);
+                p.level().sendParticles(p, particle, true, true, v.x, v.y, v.z, 1, 0.0, 0.0, 0.0, 0.0);
             };
         }
 
@@ -1077,7 +1090,7 @@ public class ShapeDispatcher
                     ParticleOptions locparticledata = new DustParticleOptions(ARGB.colorFromFloat(1.0f, fr, fg, fb), 1);
                     for (Vec3 v : getAlterPoint(p))
                     {
-                        ((net.minecraft.server.level.ServerLevel) p.level()).sendParticles(p, locparticledata, true, true,
+                        p.level().sendParticles(p, locparticledata, true, true,
                                 v.x, v.y, v.z, 1,
                                 0.0, 0.0, 0.0, 0.0);
                     }
@@ -1287,7 +1300,7 @@ public class ShapeDispatcher
             {
                 int partno = Math.min(1000, 20 * subdivisions);
                 RandomSource rand = p.level().getRandom();
-                ServerLevel world = (ServerLevel) p.level();
+                ServerLevel world = p.level();
                 ParticleOptions particle = replacementParticle(world.registryAccess());
 
                 Vec3 ccenter = relativiseRender(world, center, 0);
@@ -1384,7 +1397,7 @@ public class ShapeDispatcher
             {
                 int partno = (int) Math.min(1000, Math.sqrt(20 * subdivisions * (1 + height)));
                 RandomSource rand = p.level().getRandom();
-                ServerLevel world = (ServerLevel) p.level();
+                ServerLevel world = p.level();
                 ParticleOptions particle = replacementParticle(world.registryAccess());
 
                 Vec3 ccenter = relativiseRender(world, center, 0);
@@ -1402,7 +1415,7 @@ public class ShapeDispatcher
                         double x = radius * Mth.cos(phi);
                         double y = d;
                         double z = radius * Mth.sin(phi);
-                        world.sendParticles(p, particle, true, true, x + ccx, y + ccy, z + ccz, 1, 0.0, 0.0, 0.0, 0.0);
+                        world.sendParticles(p, particle, true, true,x + ccx, y + ccy, z + ccz, 1, 0.0, 0.0, 0.0, 0.0);
                     }
                 }
                 else if (axis == Direction.Axis.X)
@@ -1453,20 +1466,17 @@ public class ShapeDispatcher
 
     public abstract static class Param
     {
-        public static final Map<String, Param> of = createParamMap();
-
-        private static Map<String, Param> createParamMap()
-        {
-            Map<String, Param> map = new HashMap<>();
-            map.put("mode", new StringChoiceParam("mode", "polygon", "strip", "triangles"));
-            map.put("relative", new OptionalBoolListParam("relative"));
-            map.put("inner", new BoolParam("inner"));
-            map.put("shape", new ShapeParam());
-            map.put("dim", new DimensionParam());
-            map.put("duration", new NonNegativeIntParam("duration"));
-            map.put("color", new ColorParam("color"));
-            map.put("follow", new EntityParam("follow"));
-            map.put("variant", new StringChoiceParam("variant",
+        public static final Map<String, Param> of = new HashMap<>()
+        {{
+            put("mode", new StringChoiceParam("mode", "polygon", "strip", "triangles"));
+            put("relative", new OptionalBoolListParam("relative"));
+            put("inner", new BoolParam("inner"));
+            put("shape", new ShapeParam());
+            put("dim", new DimensionParam());
+            put("duration", new NonNegativeIntParam("duration"));
+            put("color", new ColorParam("color"));
+            put("follow", new EntityParam("follow"));
+            put("variant", new StringChoiceParam("variant",
                     "NONE",
                     "THIRD_PERSON_LEFT_HAND",
                     "THIRD_PERSON_RIGHT_HAND",
@@ -1475,7 +1485,8 @@ public class ShapeDispatcher
                     "HEAD",
                     "GUI",
                     "GROUND",
-                    "FIXED")
+                    "FIXED",
+                    "ON_SHELF")
             {
                 @Override
                 public Value validate(Map<String, Value> o, MinecraftServer s, Value v)
@@ -1483,24 +1494,24 @@ public class ShapeDispatcher
                     return super.validate(o, s, new StringValue(v.getString().toUpperCase(Locale.ROOT)));
                 }
             });
-            map.put("snap", new StringChoiceParam("snap",
+            put("snap", new StringChoiceParam("snap",
                     "xyz", "xz", "yz", "xy", "x", "y", "z",
                     "dxdydz", "dxdz", "dydz", "dxdy", "dx", "dy", "dz",
                     "xdz", "dxz", "ydz", "dyz", "xdy", "dxy",
                     "xydz", "xdyz", "xdydz", "dxyz", "dxydz", "dxdyz"
             ));
-            map.put("line", new PositiveFloatParam("line"));
-            map.put("fill", new ColorParam("fill"));
+            put("line", new PositiveFloatParam("line"));
+            put("fill", new ColorParam("fill"));
 
-            map.put("from", new Vec3Param("from", false));
-            map.put("to", new Vec3Param("to", true));
-            map.put("center", new Vec3Param("center", false));
-            map.put("pos", new Vec3Param("pos", false));
-            map.put("radius", new PositiveFloatParam("radius"));
-            map.put("level", new PositiveIntParam("level"));
-            map.put("height", new FloatParam("height"));
-            map.put("width", new FloatParam("width"));
-            map.put("scale", new Vec3Param("scale", false)
+            put("from", new Vec3Param("from", false));
+            put("to", new Vec3Param("to", true));
+            put("center", new Vec3Param("center", false));
+            put("pos", new Vec3Param("pos", false));
+            put("radius", new PositiveFloatParam("radius"));
+            put("level", new PositiveIntParam("level"));
+            put("height", new FloatParam("height"));
+            put("width", new FloatParam("width"));
+            put("scale", new Vec3Param("scale", false)
             {
                 @Override
                 public Value validate(java.util.Map<String, Value> options, MinecraftServer server, Value value)
@@ -1513,28 +1524,27 @@ public class ShapeDispatcher
                 }
 
             });
-            map.put("axis", new StringChoiceParam("axis", "x", "y", "z"));
-            map.put("points", new PointsParam("points"));
-            map.put("text", new FormattedTextParam("text"));
-            map.put("value", new FormattedTextParam("value"));
-            map.put("size", new PositiveIntParam("size"));
-            map.put("align", new StringChoiceParam("align", "center", "left", "right"));
+            put("axis", new StringChoiceParam("axis", "x", "y", "z"));
+            put("points", new PointsParam("points"));
+            put("text", new FormattedTextParam("text"));
+            put("value", new FormattedTextParam("value"));
+            put("size", new PositiveIntParam("size"));
+            put("align", new StringChoiceParam("align", "center", "left", "right"));
 
-            map.put("block", new BlockParam("block"));
-            map.put("item", new ItemParam("item"));
-            map.put("blocklight", new NonNegativeIntParam("blocklight"));
-            map.put("skylight", new NonNegativeIntParam("skylight"));
-            map.put("indent", new FloatParam("indent"));
-            map.put("raise", new FloatParam("raise"));
-            map.put("tilt", new FloatParam("tilt"));
-            map.put("lean", new FloatParam("lean"));
-            map.put("turn", new FloatParam("turn"));
-            map.put("facing", new StringChoiceParam("facing", "player", "camera", "north", "south", "east", "west", "up", "down"));
-            map.put("doublesided", new BoolParam("doublesided"));
-            map.put("debug", new BoolParam("debug"));
-            return map;
-        }
+            put("block", new BlockParam("block"));
+            put("item", new ItemParam("item"));
+            put("blocklight", new NonNegativeIntParam("blocklight"));
+            put("skylight", new NonNegativeIntParam("skylight"));
+            put("indent", new FloatParam("indent"));
+            put("raise", new FloatParam("raise"));
+            put("tilt", new FloatParam("tilt"));
+            put("lean", new FloatParam("lean"));
+            put("turn", new FloatParam("turn"));
+            put("facing", new StringChoiceParam("facing", "player", "camera", "north", "south", "east", "west", "up", "down"));
+            put("doublesided", new BoolParam("doublesided"));
+            put("debug", new BoolParam("debug"));
 
+        }};
         protected String id;
 
         protected Param(String id)
@@ -1672,7 +1682,7 @@ public class ShapeDispatcher
         public Value validate(Map<String, Value> options, MinecraftServer server, Value value)
         {
             ItemStack item = ValueConversions.getItemStackFromValue(value, true, server.registryAccess());
-            return new NBTSerializableValue(ItemStack.CODEC.encodeStart(server.registryAccess().createSerializationContext(NbtOps.INSTANCE), item).result().orElse(null));
+            return new NBTSerializableValue(ItemStack.CODEC.encodeStart(server.registryAccess().createSerializationContext(NbtOps.INSTANCE), item).getOrThrow(s -> new InternalExpressionException("Failed to parse item stack data: " + s)));
         }
 
         @Override
@@ -1727,13 +1737,13 @@ public class ShapeDispatcher
             {
                 value = new FormattedTextValue(Component.literal(value.getString()));
             }
-            return StringTag.valueOf(((FormattedTextValue) value).serialize(regs));
+            return ((FormattedTextValue) value).serialize(regs);
         }
 
         @Override
         public Value decode(Tag tag, Level level)
         {
-            return FormattedTextValue.deserialize(tag.asString().get(), level.registryAccess());
+            return FormattedTextValue.deserialize(tag, level.registryAccess());
         }
     }
 
@@ -2194,7 +2204,7 @@ public class ShapeDispatcher
         int parts = 0;
         for (ServerPlayer player : playerList)
         {
-            ServerLevel world = (ServerLevel) player.level();
+            ServerLevel world = player.level();
             world.sendParticles(player, particle, true, true,
                     (towards.x) / 2 + from.x, (towards.y) / 2 + from.y, (towards.z) / 2 + from.z, particles / 3,
                     towards.x / 6, towards.y / 6, towards.z / 6, 0.0);
@@ -2211,7 +2221,7 @@ public class ShapeDispatcher
             int dev = 2 * divider;
             for (ServerPlayer player : playerList)
             {
-                ServerLevel world = (ServerLevel) player.level();
+                ServerLevel world = player.level();
                 world.sendParticles(player, particle, true, true,
                         (towards.x) / center + from.x, (towards.y) / center + from.y, (towards.z) / center + from.z, particles / divider,
                         towards.x / dev, towards.y / dev, towards.z / dev, 0.0);
@@ -2243,7 +2253,7 @@ public class ShapeDispatcher
                 Vec3 at = from.add(towards.scale(rand.nextDouble()));
                 for (ServerPlayer player : players)
                 {
-                    ((net.minecraft.server.level.ServerLevel) player.level()).sendParticles(player, particle, true, true,
+                    player.level().sendParticles(player, particle, true, true,
                             at.x, at.y, at.z, 1,
                             0.0, 0.0, 0.0, 0.0);
                     pcount++;
@@ -2264,7 +2274,7 @@ public class ShapeDispatcher
         {
             for (ServerPlayer player : players)
             {
-                ((net.minecraft.server.level.ServerLevel) player.level()).sendParticles(player, particle, true, true,
+                player.level().sendParticles(player, particle, true, true,
                         delta.x + from.x, delta.y + from.y, delta.z + from.z, 1,
                         0.0, 0.0, 0.0, 0.0);
                 pcount++;
