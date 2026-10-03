@@ -185,6 +185,10 @@ public final class SelfTest
     private static Scenario current;
     private static boolean acting;
     private static boolean finished;
+    private static int drainTicks;
+    private static final int DRAINED_CHUNKS = 600;
+    private static final int DRAIN_MIN_TICKS = 60;
+    private static final int DRAIN_TIMEOUT_TICKS = 1200;
     private static int ticks;
 
     private SelfTest() {}
@@ -205,7 +209,7 @@ public final class SelfTest
         {
             if (results.size() == names.size())
             {
-                finish(server);
+                if (drained(server)) finish(server);
                 return;
             }
             acting = false;
@@ -2486,6 +2490,26 @@ public final class SelfTest
         Result result = new Result(names.get(results.size()), passed, ticks, detail);
         results.add(result);
         log(server, fmt("%s %s after %d ticks: %s", passed ? "PASS" : "FAIL", result.name(), result.ticks(), detail));
+    }
+
+    /**
+     * The scenarios leave tens of thousands of chunks on their way out, and a sprinting server has no spare time
+     * to unload them in, so they pile up. Vanilla runs every queued chunk task inline once it is stopping, one
+     * stack frame set per task, and overflows its stack on a queue that long ("Exception stopping the server").
+     * A server at its normal tick rate does not get there (checked with thirty bots online, 400 blocks apart),
+     * so the run stops sprinting and gives the server a few seconds of ordinary ticks before it stops.
+     */
+    static boolean drained(MinecraftServer server)
+    {
+        if (drainTicks++ == 0)
+        {
+            run(server, "forceload remove all");
+            run(server, "tick sprint stop");
+        }
+        int loaded = server.overworld().getChunkSource().getLoadedChunksCount();
+        if ((drainTicks < DRAIN_MIN_TICKS || loaded > DRAINED_CHUNKS) && drainTicks < DRAIN_TIMEOUT_TICKS) return false;
+        log(server, fmt("%d chunks still loaded %d ticks after the last scenario", loaded, drainTicks));
+        return true;
     }
 
     static void finish(MinecraftServer server)
