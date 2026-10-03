@@ -5,19 +5,32 @@ import carpet.logic.program.BotAction;
 import carpet.logic.program.BotProgram;
 import carpet.logic.program.ProgramExecutor.ProgramInfo;
 import carpet.pvp.selftest.SelfTestReport.Result;
+import carpet.pvp.kit.Kit;
+import carpet.pvp.kit.KitEntry;
+import carpet.pvp.kit.KitInventory;
+import carpet.pvp.kit.KitStore;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.RedstoneLampBlock;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,7 +51,17 @@ public final class SelfTest
     private static final List<String> SCENARIOS = List.of(
             "spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow",
             "chase_attack", "chase_crit", "script_run", "fill_updates", "logic_program", "logic_forever_budget",
-            "spawn_exact_name", "spawn_gamemode", "shield_disable");
+            "spawn_exact_name", "spawn_gamemode", "shield_disable", "kit_give", "kit_roundtrip");
+
+    /** What every built-in kit has to put on the player it is given to. */
+    private record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
+
+    private static final List<KitExpectation> KIT_EXPECTATIONS = List.of(
+            new KitExpectation("sword", "diamond_sword", "diamond_chestplate", "minecraft:protection", 4, "golden_apple", 4),
+            new KitExpectation("axe", "diamond_sword", "diamond_chestplate", "minecraft:protection", 4, "golden_apple", 4),
+            new KitExpectation("smp", "netherite_sword", "netherite_chestplate", "minecraft:protection", 4, "experience_bottle", 16),
+            new KitExpectation("mace", "mace", "netherite_chestplate", "minecraft:protection", 4, "wind_charge", 16),
+            new KitExpectation("crystal", "netherite_sword", "netherite_chestplate", "minecraft:blast_protection", 4, "end_crystal", 8));
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     private static final double SURFACE_Y = -60.0D;
@@ -318,6 +341,58 @@ public final class SelfTest
                             blocker.isBlocking() ? "still blocking" : "not blocking",
                             cooling ? "on cooldown" : "not on cooldown"));
                 });
+            case "kit_give":
+                List<Bot> kitBots = new ArrayList<>();
+                List<String> kitCommands = new ArrayList<>();
+                for (int i = 0; i < KIT_EXPECTATIONS.size(); i++)
+                {
+                    String botName = a + "k" + i;
+                    kitBots.add(new Bot(botName, origin.add(2.0D * i, 0.0D, 0.0D)));
+                    kitCommands.add("bot kit give " + botName + " " + KIT_EXPECTATIONS.get(i).kit());
+                }
+                return new Scenario(200, kitBots, kitCommands, server ->
+                        kitsGiven(server, kitBots.stream().map(Bot::name).toList()));
+            case "kit_roundtrip":
+                return new Scenario(200, List.of(new Bot(a, origin)), List.of(
+                        "give " + a + " minecraft:diamond_sword",
+                        "give " + a + " minecraft:golden_apple 5",
+                        "give " + a + " minecraft:netherite_chestplate",
+                        "give " + a + " minecraft:shield",
+                        "give " + a + " minecraft:cooked_beef 32"), server ->
+                {
+                    ServerPlayer bot = player(server, a);
+                    List<ItemStack> before = slots(bot);
+                    int selected = bot.getInventory().getSelectedSlot();
+                    KitStore store = KitStore.of(server);
+
+                    // The three calls /bot kit give and /bot kit restore make for a real player.
+                    KitInventory.save(bot);
+                    KitInventory.apply(bot, store.get("sword").orElseThrow(), server.registryAccess());
+                    if (!holds(bot.getMainHandItem(), "diamond_sword")) return new Probe(false, "the kit did not go on");
+                    KitInventory.restore(bot);
+                    if (bot.getInventory().getSelectedSlot() != selected) return new Probe(false, "the selected slot changed");
+                    String problem = sameInventory(before, slots(bot));
+                    if (problem != null) return new Probe(false, "after restore " + problem);
+
+                    // The same inventory again, but through the kit file a player would save.
+                    String kitName = "self_test_" + a;
+                    try
+                    {
+                        store.save(KitInventory.capture(bot, kitName));
+                        store.reload();
+                    }
+                    catch (IOException e)
+                    {
+                        return new Probe(false, "could not save the kit: " + e);
+                    }
+                    Kit saved = store.get(kitName).orElse(null);
+                    if (saved == null) return new Probe(false, kitName + " did not come back from its file");
+                    KitInventory.apply(bot, saved, server.registryAccess());
+                    problem = sameInventory(before, slots(bot));
+                    if (problem != null) return new Probe(false, "from the kit file " + problem);
+                    if (!store.delete(kitName) || store.get(kitName).isPresent()) return new Probe(false, kitName + " was not deleted");
+                    return new Probe(true, fmt("all %d slots of %s survived both round trips", before.size(), a));
+                });
             default:
                 return null;
         }
@@ -342,6 +417,97 @@ public final class SelfTest
     {
         ProgramInfo info = CarpetLogic.INSTANCE.getProgramExecutor().getPrograms().get(botName);
         return info == null ? "gone" : info.status();
+    }
+
+    /** The first slot where the two lists differ, or null when they hold the same things. */
+    private static String sameInventory(List<ItemStack> expected, List<ItemStack> actual)
+    {
+        if (expected.size() != actual.size()) return fmt("there are %d slots, not %d", actual.size(), expected.size());
+        for (int i = 0; i < expected.size(); i++)
+        {
+            if (!ItemStack.matches(expected.get(i), actual.get(i)))
+            {
+                return fmt("slot %d is %s, was %s", i, describe(actual.get(i)), describe(expected.get(i)));
+            }
+        }
+        return null;
+    }
+
+    private static Probe kitsGiven(MinecraftServer server, List<String> bots)
+    {
+        KitStore store = KitStore.of(server);
+        if (!store.problems().isEmpty()) return new Probe(false, "kits did not load: " + store.problems());
+
+        for (String name : store.builtInNames())
+        {
+            Kit kit = store.get(name).orElseThrow();
+            for (KitEntry entry : kit.entries())
+            {
+                try
+                {
+                    entry.createStack(server.registryAccess());
+                }
+                catch (IllegalArgumentException e)
+                {
+                    return new Probe(false, "kit " + name + " does not build: " + e.getMessage());
+                }
+            }
+        }
+
+        List<String> given = new ArrayList<>();
+        for (int i = 0; i < bots.size(); i++)
+        {
+            KitExpectation expected = KIT_EXPECTATIONS.get(i);
+            String problem = checkKit(player(server, bots.get(i)), expected, server);
+            if (problem != null) return new Probe(false, expected.kit() + ": " + problem);
+            given.add(expected.kit());
+        }
+        return new Probe(true, fmt("%s each gave their weapon, chestplate and stack", String.join(", ", given)));
+    }
+
+    private static String checkKit(ServerPlayer bot, KitExpectation expected, MinecraftServer server)
+    {
+        if (!holds(bot.getMainHandItem(), expected.mainHand()))
+            return "holds " + describe(bot.getMainHandItem()) + " instead of " + expected.mainHand();
+
+        ItemStack chest = bot.getItemBySlot(EquipmentSlot.CHEST);
+        if (!holds(chest, expected.chestplate())) return "wears " + describe(chest) + " instead of " + expected.chestplate();
+
+        Holder<Enchantment> enchantment = server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                .get(Identifier.parse(expected.enchantment())).orElseThrow();
+        int level = EnchantmentHelper.getItemEnchantmentLevel(enchantment, chest);
+        if (level != expected.level()) return fmt("%s has %s %d, expected %d", expected.chestplate(), expected.enchantment(), level, expected.level());
+
+        int count = 0;
+        for (ItemStack stack : bot.getInventory().getNonEquipmentItems())
+        {
+            if (holds(stack, expected.stack())) count += stack.getCount();
+        }
+        if (count != expected.count()) return fmt("has %d %s, expected %d", count, expected.stack(), expected.count());
+        return null;
+    }
+
+    /** Every slot a kit can touch: the hotbar and inventory, the armour and the offhand. */
+    private static List<ItemStack> slots(ServerPlayer player)
+    {
+        List<ItemStack> slots = new ArrayList<>();
+        for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) slots.add(player.getInventory().getItem(i).copy());
+        for (EquipmentSlot slot : EquipmentSlot.values())
+        {
+            if (slot.isArmor() || slot == EquipmentSlot.OFFHAND) slots.add(player.getItemBySlot(slot).copy());
+        }
+        return slots;
+    }
+
+    private static boolean holds(ItemStack stack, String item)
+    {
+        Identifier key = Identifier.withDefaultNamespace(item);
+        return !stack.isEmpty() && BuiltInRegistries.ITEM.containsKey(key) && stack.getItem() == BuiltInRegistries.ITEM.getValue(key);
+    }
+
+    private static String describe(ItemStack stack)
+    {
+        return stack.isEmpty() ? "nothing" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
     private static void conclude(MinecraftServer server, boolean passed, String detail)
