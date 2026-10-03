@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     id("net.fabricmc.fabric-loom")
     id("maven-publish")
@@ -14,10 +16,21 @@ loom {
 
     runConfigs.configureEach {
         // One world per Minecraft version (an older server cannot open a newer world), and
-        // separate client and server directories so both can run at once.
-        runDir("../../run/$mcVersion/$name")
+        // separate client, server and self-test directories so they can run at once.
+        runDir(if (name == "selfTest") "../../run/selftest-$mcVersion" else "../../run/$mcVersion/$name")
         // -PmixinAudit: fail at boot if any mixin no longer matches its target.
         if (providers.gradleProperty("mixinAudit").isPresent) vmArg("-Dcarpet.mixinAudit=true")
+    }
+    runs {
+        // Headless self-test, see carpet.pvp.selftest. -PselfTest=a,b picks scenarios.
+        create("selfTest") {
+            server()
+            jvmArguments.addAll(
+                "-Dcarpet.selftest=${providers.gradleProperty("selfTest").getOrElse("all")}",
+                "-Dcarpet.mixinAudit=true"
+            )
+            generateRunConfig = false
+        }
     }
 }
 
@@ -41,6 +54,33 @@ tasks.test {
     useJUnitPlatform()
     // One test JVM per core
     maxParallelForks = Runtime.getRuntime().availableProcessors()
+}
+
+tasks.named<JavaExec>("runSelfTest") {
+    val dir = rootProject.file("run/selftest-$mcVersion")
+    val report = dir.resolve("selftest-report.json")
+    timeout = Duration.ofMinutes(10)
+    doFirst {
+        dir.resolve("world").deleteRecursively()
+        report.delete()
+        dir.mkdirs()
+        dir.resolve("eula.txt").writeText("eula=true\n")
+        // Port 0: the OS hands out a free port, so parallel runs and other dev servers cannot collide.
+        dir.resolve("server.properties").writeText(
+            """
+            server-port=0
+            online-mode=false
+            level-type=minecraft:flat
+            generate-structures=false
+            difficulty=peaceful
+            pause-when-empty-seconds=0
+            """.trimIndent() + "\n"
+        )
+    }
+    // A server that dies before the runner finishes may still exit with 0.
+    doLast {
+        if (!report.isFile) throw GradleException("Self-test wrote no report: $report")
+    }
 }
 
 tasks.processResources {
