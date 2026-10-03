@@ -2,6 +2,7 @@ package carpet.pvp;
 
 import carpet.CarpetSettings;
 
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -16,6 +17,37 @@ public final class BotPvpConfig
 {
     /** Combat styles a bot can use against its target. */
     public enum CombatStyle { MELEE, CRYSTAL, ANCHOR, RANGED, MACE }
+
+    /** Skill presets; {@link #difficulty} picks the one a bot starts from. */
+    public enum Difficulty { BEGINNER, CASUAL, AVERAGE, SKILLED, EXPERT }
+
+    /** One named set of skill, pace and technique settings. */
+    private record Preset(double skill, int reactionDelay, int pingTicks, double clicksPerSecond,
+                           boolean critical, boolean strafe, boolean wtap, boolean shieldPlay,
+                           int horizon, int population)
+    {
+        Preset
+        {
+            skill = clampD(skill, 0.0, 1.0);
+            reactionDelay = clampI(reactionDelay, 0, 40);
+            pingTicks = clampI(pingTicks, 0, 20);
+            clicksPerSecond = clampD(clicksPerSecond, 1.0, 20.0);
+            horizon = clampI(horizon, 2, 40);
+            population = clampI(population, 2, 64);
+        }
+    }
+
+    private static Preset presetOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> new Preset(0.15, 9, 2, 6.0, false, false, false, true, 8, 6);
+            case CASUAL -> new Preset(0.35, 7, 1, 8.0, true, false, false, true, 10, 8);
+            case AVERAGE -> new Preset(0.60, 5, 1, 10.0, true, true, false, true, 12, 10);
+            case SKILLED -> new Preset(0.80, 3, 0, 12.0, true, true, true, true, 14, 12);
+            case EXPERT -> new Preset(1.00, 2, 0, 14.0, true, true, true, true, 16, 16);
+        };
+    }
 
     // --- master / targeting ---
     public boolean combat;
@@ -38,18 +70,36 @@ public final class BotPvpConfig
 
     // --- combat tactics ---
     public CombatStyle combatStyle;
+    public Difficulty difficulty;
     public boolean preferSword;
     public boolean shieldBreak;
     public boolean critical;
     public boolean strafe;
     public boolean bhop;
+    public boolean wtap;
+    public boolean shieldPlay;
     public double meleeRange;
     public int attackCooldown;
+
+    // --- human model ---
+    /** Skill from 0 (beginner) to 1 (expert); drives the look profile and the presets. */
+    public double skill;
+    /** Ticks between seeing the target and reacting to it. */
+    public int reactionDelay;
+    /** Ticks the target's state is behind, as if it were on a laggy connection. */
+    public int pingTicks;
+    /** Mouse clicks per second. */
+    public double clicksPerSecond;
+    /** Blocks from the target within which the navigation controller takes over. */
+    public double plannerRange;
+
+    // --- planner ---
+    public int plannerHorizon;
+    public int plannerPopulation;
 
     // --- realism ---
     public int missChance;     // 0-100
     public int mistakeChance;  // 0-100
-    public int reactionDelay;  // ticks
 
     // --- faction membership (null = no faction) ---
     public String faction;
@@ -77,25 +127,85 @@ public final class BotPvpConfig
         autoRepair = CarpetSettings.botAutoRepair;
 
         combatStyle    = parseStyle(CarpetSettings.botCombatStyle);
+        difficulty     = parseDifficulty(CarpetSettings.botDifficulty);
         preferSword    = CarpetSettings.botPreferSword;
         shieldBreak    = CarpetSettings.botShieldBreak;
         critical       = CarpetSettings.botCritical;
         strafe         = CarpetSettings.botStrafe;
         bhop           = CarpetSettings.botBhop;
+        wtap           = CarpetSettings.botWTap;
+        shieldPlay     = CarpetSettings.botShieldPlay;
         meleeRange     = CarpetSettings.botMeleeRange;
         attackCooldown = CarpetSettings.botAttackCooldown;
 
+        skill          = CarpetSettings.botSkill;
+        reactionDelay  = CarpetSettings.botReactionDelay;
+        pingTicks      = CarpetSettings.botPingTicks;
+        clicksPerSecond = CarpetSettings.botClicksPerSecond;
+        plannerRange   = CarpetSettings.botPlannerRange;
+        plannerHorizon = CarpetSettings.botPlannerHorizon;
+        plannerPopulation = CarpetSettings.botPlannerPopulation;
+
         missChance    = CarpetSettings.botMissChance;
         mistakeChance = CarpetSettings.botMistakeChance;
-        reactionDelay = CarpetSettings.botReactionDelay;
 
         faction = null;
     }
 
     private static CombatStyle parseStyle(String s)
     {
-        try { return CombatStyle.valueOf(s.toUpperCase()); }
+        try { return CombatStyle.valueOf(s.toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException e) { return CombatStyle.MELEE; }
+    }
+
+    private static Difficulty parseDifficulty(String s)
+    {
+        try { return Difficulty.valueOf(s.toUpperCase(Locale.ROOT)); }
+        catch (IllegalArgumentException e) { return Difficulty.AVERAGE; }
+    }
+
+    /** The named difficulty presets, for tab-completion. */
+    public static String[] difficulties()
+    {
+        Difficulty[] values = Difficulty.values();
+        String[] names = new String[values.length];
+        for (int i = 0; i < values.length; i++)
+        {
+            names[i] = values[i].name().toLowerCase(Locale.ROOT);
+        }
+        return names;
+    }
+
+    /**
+     * Applies a named difficulty preset: the skill, the pace and the techniques of that preset
+     * replace the current values, everything else is left alone.
+     *
+     * @return the error string, or null on success
+     */
+    public String applyDifficulty(String name)
+    {
+        Difficulty wanted;
+        try
+        {
+            wanted = Difficulty.valueOf(name.toUpperCase(Locale.ROOT));
+        }
+        catch (IllegalArgumentException e)
+        {
+            return "Unknown difficulty: " + name;
+        }
+        Preset preset = presetOf(wanted);
+        difficulty = wanted;
+        skill = preset.skill();
+        reactionDelay = preset.reactionDelay();
+        pingTicks = preset.pingTicks();
+        clicksPerSecond = preset.clicksPerSecond();
+        critical = preset.critical();
+        strafe = preset.strafe();
+        wtap = preset.wtap();
+        shieldPlay = preset.shieldPlay();
+        plannerHorizon = preset.horizon();
+        plannerPopulation = preset.population();
+        return null;
     }
 
     /**
@@ -107,7 +217,7 @@ public final class BotPvpConfig
     {
         try
         {
-            switch (key.toLowerCase())
+            switch (key.toLowerCase(Locale.ROOT))
             {
                 case "combat"        -> combat = parseBool(value);
                 case "autotarget"    -> autoTarget = parseBool(value);
@@ -126,18 +236,31 @@ public final class BotPvpConfig
                 case "autoweapon" -> autoWeapon = parseBool(value);
                 case "autorepair" -> autoRepair = parseBool(value);
 
-                case "combatstyle"    -> combatStyle = CombatStyle.valueOf(value.toUpperCase());
+                case "combatstyle"    -> combatStyle = CombatStyle.valueOf(value.toUpperCase(Locale.ROOT));
+                case "difficulty"     -> {
+                    String error = applyDifficulty(value);
+                    if (error != null) return error;
+                }
                 case "prefersword"    -> preferSword = parseBool(value);
                 case "shieldbreak"    -> shieldBreak = parseBool(value);
                 case "critical"       -> critical = parseBool(value);
                 case "strafe"         -> strafe = parseBool(value);
                 case "bhop"           -> bhop = parseBool(value);
+                case "wtap"           -> wtap = parseBool(value);
+                case "shieldplay"     -> shieldPlay = parseBool(value);
                 case "meleerange"     -> meleeRange = clampD(Double.parseDouble(value), 2.0, 6.0);
                 case "attackcooldown" -> attackCooldown = clampI(Integer.parseInt(value), 0, 40);
 
+                case "skill"           -> skill = clampD(Double.parseDouble(value), 0.0, 1.0);
+                case "reactiondelay"   -> reactionDelay = clampI(Integer.parseInt(value), 0, 40);
+                case "pingticks"       -> pingTicks = clampI(Integer.parseInt(value), 0, 20);
+                case "clickspersecond" -> clicksPerSecond = clampD(Double.parseDouble(value), 1.0, 20.0);
+                case "plannerrange"    -> plannerRange = clampD(Double.parseDouble(value), 2.0, 16.0);
+                case "plannerhorizon"  -> plannerHorizon = clampI(Integer.parseInt(value), 2, 40);
+                case "plannerpopulation" -> plannerPopulation = clampI(Integer.parseInt(value), 2, 64);
+
                 case "misschance"    -> missChance = clampI(Integer.parseInt(value), 0, 100);
                 case "mistakechance" -> mistakeChance = clampI(Integer.parseInt(value), 0, 100);
-                case "reactiondelay" -> reactionDelay = clampI(Integer.parseInt(value), 0, 40);
 
                 case "faction" -> faction = value.isEmpty() || value.equalsIgnoreCase("none") ? null : value;
 
@@ -164,10 +287,15 @@ public final class BotPvpConfig
                 + " range=" + targetRange + " retreatHP=" + retreatHealth
                 + " | auto[totem=" + autoTotem + ",shield=" + autoShield + ",food=" + autoFood
                 + ",potion=" + autoPotion + ",armor=" + autoArmor + ",weapon=" + autoWeapon + ",repair=" + autoRepair + "]"
-                + " | style=" + combatStyle + " preferSword=" + preferSword + " shieldBreak=" + shieldBreak
+                + " | style=" + combatStyle + " difficulty=" + difficulty
+                + " preferSword=" + preferSword + " shieldBreak=" + shieldBreak
                 + " crit=" + critical + " strafe=" + strafe + " bhop=" + bhop
+                + " wtap=" + wtap + " shieldPlay=" + shieldPlay
                 + " meleeRange=" + meleeRange + " atkCd=" + attackCooldown
-                + " | realism[miss=" + missChance + ",mistake=" + mistakeChance + ",reaction=" + reactionDelay + "]"
+                + " | human[skill=" + skill + ",reaction=" + reactionDelay + ",ping=" + pingTicks
+                + ",clicks/s=" + clicksPerSecond + ",plannerRange=" + plannerRange + "]"
+                + " planner[horizon=" + plannerHorizon + ",population=" + plannerPopulation + "]"
+                + " | realism[miss=" + missChance + ",mistake=" + mistakeChance + "]"
                 + " | faction=" + (faction == null ? "none" : faction);
     }
 
@@ -186,8 +314,13 @@ public final class BotPvpConfig
             "combat", "autotarget", "targetplayers", "targetmobs", "targetbots", "revenge",
             "targetrange", "retreathealth",
             "autototem", "autoshield", "autofood", "autopotion", "autoarmor", "autoweapon", "autorepair",
-            "combatstyle", "prefersword", "shieldbreak", "critical", "strafe", "bhop",
-            "meleerange", "attackcooldown",
-            "misschance", "mistakechance", "reactiondelay", "faction"
+            "combatstyle", "difficulty", "prefersword", "shieldbreak", "critical", "strafe", "bhop",
+            "wtap", "shieldplay", "meleerange", "attackcooldown",
+            "skill", "reactiondelay", "pingticks", "clickspersecond", "plannerrange",
+            "plannerhorizon", "plannerpopulation",
+            "misschance", "mistakechance", "faction"
     };
+
+    /** Default mouse sensitivity the bot's look profile is built for. */
+    public static final float SENSITIVITY = 0.5F;
 }

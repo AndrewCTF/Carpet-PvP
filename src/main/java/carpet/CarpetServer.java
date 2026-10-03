@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import carpet.commands.BotCombatCommand;
 import carpet.commands.CounterCommand;
 import carpet.commands.BotCommand;
 import carpet.commands.DistanceCommand;
@@ -23,6 +24,7 @@ import carpet.commands.SpawnPlayerCommand;
 import carpet.commands.TestCommand;
 import carpet.network.ServerNetworkHandler;
 import carpet.patches.EntityPlayerMPFake;
+import carpet.pvp.BotBudget;
 import carpet.pvp.selftest.SelfTest;
 import carpet.helpers.HopperCounter;
 import carpet.logging.LoggerRegistry;
@@ -117,6 +119,8 @@ public class CarpetServer
         ScheduleCommand.tick(server);
         CarpetSettings.impendingFillSkipUpdates.set(false);
         extensions.forEach(e -> e.onTick(server));
+        BotBudget.instance().beginTick(CarpetSettings.botSimBudget);
+        BotCombatCommand.tick(server);
         SelfTest.tick(server);
     }
 
@@ -132,8 +136,9 @@ public class CarpetServer
         CounterCommand.register(dispatcher, commandBuildContext);
         LogCommand.register(dispatcher, commandBuildContext);
         SpawnCommand.register(dispatcher, commandBuildContext);
-PlayerCommand.register(dispatcher, commandBuildContext);
+        PlayerCommand.register(dispatcher, commandBuildContext);
         BotCommand.register(dispatcher, commandBuildContext);
+        BotCombatCommand.register(dispatcher, commandBuildContext);
         SpawnPlayerCommand.register(dispatcher, commandBuildContext);
         InfoCommand.register(dispatcher, commandBuildContext);
         DistanceCommand.register(dispatcher, commandBuildContext);

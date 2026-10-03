@@ -1133,6 +1133,28 @@ public class EntityPlayerActionPack
         player.connection.send(new ClientboundSetHeldSlotPacket(slot-1));
     }
 
+    /**
+     * The vanilla melee hit of {@link ActionType#ATTACK} against a target the caller has already
+     * validated (reach, aim, charge), for callers that decide on their own when a click is a hit.
+     */
+    public boolean attackEntity(Entity target)
+    {
+        player.attack(target);
+        //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+        player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+        player.resetAttackStrengthTicker();
+        player.resetLastActionTime();
+        return true;
+    }
+
+    /** Swings the main hand without hitting anything, as a client does when a click hits air. */
+    public void swing()
+    {
+        //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
+        player.swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+        player.resetLastActionTime();
+    }
+
     public enum ActionType
     {
         USE(true)
