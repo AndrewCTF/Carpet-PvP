@@ -1,6 +1,7 @@
 package carpet.pvp.nav;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -9,44 +10,48 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
+import carpet.pvp.nav.BudgetedSearch.Budget;
+import carpet.pvp.nav.BudgetedSearch.Status;
+
 /**
- * Baritone-inspired bounded voxel A* pathfinder for fake-player navigation.
+ * Bounded voxel A* over foot positions, built so that one search can be spread over as many ticks as it takes.
  *
- * Movement types supported:
- *   - Walking (cardinal + diagonal)
- *   - Jumping / ascending (step up 1 block)
- *   - Falling / descending (configurable max fall)
- *   - Parkour (gap-jumping up to maxParkourLength blocks, including ascending)
- *   - Pillar (place block below to go up; high cost)
- *   - Break-through (mine obstacles; configurable cost)
- *   - Descend-mine (mine block below feet to descend)
- *   - Swimming (water traversal)
- *   - Amphibious (land + water)
+ * <p>A {@link Search} is started with {@link Search#begin} and then fed an expansion budget once per tick until
+ * it reports itself {@link Search#done() done}, so no single tick pays for a whole path however long that path
+ * is. While a search runs, the caller keeps doing what it was doing before: walking the path it already had, or
+ * steering straight at the goal.
  *
- * Cost model follows Baritone conventions:
- *   - Walk 1 block = 1.0; diagonal = sqrt(2)
- *   - Jump penalty (extra hunger cost)
- *   - Break penalty (scaled by estimated break time)
- *   - Place/pillar penalty (scarce blocks)
- *   - Sprint multiplier (faster = lower cost)
- *   - Mob avoidance overlay (adds cost near hostile mobs)
- *   - Fall damage penalty (per block beyond safe threshold)
- *   - Soul sand slowdown penalty
- *   - Door/fence-gate traversal with small cost
+ * <p>Moves:
+ * <ul>
+ *   <li>Walking, level or over a step, including diagonals that do not clip a corner</li>
+ *   <li>Jumping a block up, and falling off one</li>
+ *   <li>Climbing a ladder, a vine or a scaffolding up or down, where nothing else fits</li>
+ *   <li>Parkour across a gap, plain or needing a run-up</li>
+ *   <li>Pillar (place a block underfoot to go up), break-through (mine into a wall), descend-mine</li>
+ *   <li>Swimming, on the surface by default or through the water when asked</li>
+ * </ul>
+ *
+ * <p>Costs follow the usual conventions: a block walked is 1.0 and a diagonal is 1.414, sprinting is cheaper, a
+ * jump and a parkour cost extra, mining and placing cost a lot, a fall past the safe height costs more the
+ * further it goes, and cells near hostile mobs cost more when mob avoidance is on. Steps are measured between
+ * real surfaces, so a half slab costs a walk and a full block costs a jump.
+ *
+ * <p>Nothing here reads a server setting or a block directly: the rules arrive in {@link Settings} and the world
+ * through a {@link LevelWalkability}.
  */
 public final class NavAStarPathfinder
 {
+    private static final int[] PARKOUR_DX = {1, -1, 0, 0};
+    private static final int[] PARKOUR_DZ = {0, 0, 1, -1};
+    private static final int NO_NODE = Integer.MIN_VALUE;
+
     public enum Traversal
     {
         LAND,
@@ -55,8 +60,9 @@ public final class NavAStarPathfinder
     }
 
     /**
-     * Flags attached to each path node indicating the movement used to reach it.
-     * The navigation executor uses these to perform the correct action.
+     * Flags attached to each path node indicating the movement used to reach it, which the navigation executor
+     * uses to perform the right action. The order matters: {@link #WALK} is first, so the ordinals double as the
+     * move codes {@link PathSmoother} works with, where anything but a walk pins its waypoint.
      */
     public enum MoveType
     {
@@ -64,6 +70,9 @@ public final class NavAStarPathfinder
         JUMP,
         FALL,
         PARKOUR,
+        PARKOUR_RUNUP,
+        CLIMB_UP,
+        CLIMB_DOWN,
         PILLAR,
         BREAK_THROUGH,
         SWIM,
@@ -91,6 +100,7 @@ public final class NavAStarPathfinder
             float pillarCost,
             boolean allowParkour,
             int maxParkourLength,
+            int parkourRunUpLength,
             boolean allowDescendMine,
             float descendMineCost,
             boolean allowSprint,
@@ -130,7 +140,8 @@ public final class NavAStarPathfinder
                     false,      // allowPillar
                     20.0F,      // pillarCost
                     true,       // allowParkour
-                    4,          // maxParkourLength (4-block gap)
+                    4,          // maxParkourLength, a four-block gap
+                    3,          // parkourRunUpLength, the first gap too wide for a standing jump
                     false,      // allowDescendMine
                     6.0F,       // descendMineCost
                     true,       // allowSprint
@@ -151,18 +162,19 @@ public final class NavAStarPathfinder
         }
     }
 
+    /** One node of a search: a foot position, what it cost to get there, and what it came from. */
     public static final class Node
     {
         public final long key;
         public final int x;
         public final int y;
         public final int z;
-        public final long parent;
         public final float g;
         public final float f;
         public final MoveType moveType;
+        private final Node parent;
 
-        Node(long key, int x, int y, int z, long parent, float g, float f, MoveType moveType)
+        Node(long key, int x, int y, int z, Node parent, float g, float f, MoveType moveType)
         {
             this.key = key;
             this.x = x;
@@ -185,385 +197,605 @@ public final class NavAStarPathfinder
     }
 
     /**
-     * Finds a path from start to goal. Returns a PathResult with positions and
-     * move types, or null if no path could be found.
+     * One resumable search. Call {@link #begin}, then {@link #run} once per tick with that tick's expansion
+     * budget until {@link #done()}, then read {@link #result()}.
      */
-    public PathResult findPath(ServerLevel level, BlockPos start, BlockPos goal, Traversal traversal, Settings settings)
+    public static final class Search implements BudgetedSearch.Step
     {
-        BlockPos s = sanitizeStart(level, start, traversal, settings);
-        BlockPos g = sanitizeGoal(level, goal, traversal, settings);
-        if (s == null || g == null)
+        private final Map<Long, Node> best = new HashMap<>();
+        private final Set<Long> closed = new HashSet<>();
+        private final PriorityQueue<Node> open = new PriorityQueue<>(Comparator.comparingDouble(n -> n.f));
+        private final BudgetedSearch runner = new BudgetedSearch();
+
+        private LevelWalkability view;
+        private Settings settings;
+        private Traversal traversal;
+        private Set<Long> mobDangerZone = Set.of();
+        private BlockPos start;
+        private BlockPos goal;
+        private long goalKey;
+        private PathResult result;
+        private boolean started;
+        private boolean done;
+        private int expanded;
+
+        // Where the neighbour being considered ends up, so the hot loop does not have to allocate for it.
+        private int nextY;
+        private MoveType nextMove;
+
+        /**
+         * Starts a search from {@code start} to {@code goal}. Either may be anywhere: the nearest position a player
+         * can occupy is found for both. Returns false when there is nothing to search for, which leaves the search
+         * done with no result.
+         */
+        public boolean begin(LevelWalkability view, BlockPos start, BlockPos goal, Traversal traversal,
+                Settings settings)
         {
-            return null;
+            this.view = view;
+            this.traversal = traversal;
+            this.settings = settings;
+            this.mobDangerZone = settings.avoidMobs() ? buildMobDangerMap(view, start, goal, settings) : Set.of();
+            best.clear();
+            closed.clear();
+            open.clear();
+            expanded = 0;
+            result = null;
+            started = false;
+            done = false;
+
+            BlockPos from = footOf(view, start, traversal, settings);
+            BlockPos to = footOf(view, goal, traversal, settings);
+            if (from == null || to == null)
+            {
+                done = true;
+                return false;
+            }
+            this.start = from;
+            this.goal = to;
+            this.goalKey = to.asLong();
+            Node startNode = new Node(from.asLong(), from.getX(), from.getY(), from.getZ(), null, 0.0F,
+                    heuristic(from.getX(), from.getY(), from.getZ(), to, settings), MoveType.WALK);
+            open.add(startNode);
+            best.put(startNode.key, startNode);
+            started = true;
+            return true;
         }
 
-        // Pre-compute mob danger map if avoidance is enabled.
-        Set<Long> mobDangerZone = settings.avoidMobs() ? buildMobDangerMap(level, s, g, settings) : Set.of();
-
-        long startKey = s.asLong();
-        long goalKey = g.asLong();
-
-        PriorityQueue<Node> open = new PriorityQueue<>((a, b) -> Float.compare(a.f, b.f));
-        Map<Long, Node> best = new HashMap<>();
-        Set<Long> closed = new HashSet<>();
-
-        Node startNode = new Node(startKey, s.getX(), s.getY(), s.getZ(), 0L, 0.0F, heuristic(s, g, settings), MoveType.WALK);
-        open.add(startNode);
-        best.put(startKey, startNode);
-
-        int expanded = 0;
-        while (!open.isEmpty())
+        /** Runs the search with this search's own runner, for a caller that does not keep one. */
+        public Status run(int maxExpansions)
         {
-            if (expanded++ > settings.maxExpanded())
+            return runner.run(this, maxExpansions);
+        }
+
+        @Override
+        public boolean expand(Budget budget)
+        {
+            if (done || !started) return true;
+            while (budget.left() && !open.isEmpty())
             {
-                return buildPartialPath(best, closed, g, settings);
+                budget.spend();
+                expanded++;
+                Node cur = open.poll();
+                if (cur == null) break;
+                if (!best.containsKey(cur.key) || closed.contains(cur.key)) continue;
+
+                if (cur.key == goalKey)
+                {
+                    result = reconstructPath(cur);
+                    done = true;
+                    return true;
+                }
+                closed.add(cur.key);
+                expandNode(cur);
+
+                if (expanded > settings.maxExpanded() || open.size() > settings.maxQueued())
+                {
+                    result = bestApproach();
+                    done = true;
+                    return true;
+                }
             }
-            if (open.size() > settings.maxQueued())
+            if (open.isEmpty())
             {
-                return buildPartialPath(best, closed, g, settings);
+                done = true;
             }
+            return done;
+        }
 
-            Node cur = open.poll();
-            if (cur == null) break;
-            if (!best.containsKey(cur.key)) continue;
-            if (closed.contains(cur.key)) continue;
+        /** True once the search has finished, whether it found a path or gave up. */
+        public boolean done()
+        {
+            return done;
+        }
 
-            if (cur.key == goalKey)
-            {
-                return reconstructPath(cur, best);
-            }
+        /** True while the search is unfinished, which is when the caller needs something else to do. */
+        public boolean searching()
+        {
+            return started && !done;
+        }
 
-            closed.add(cur.key);
+        /** The path found, or the closest approach to it, once {@link #done()}; null when there is none. */
+        public PathResult result()
+        {
+            return result;
+        }
 
-            // === Standard movement: cardinal + diagonal walking ===
+        /** Node expansions this search has used in total, however many ticks they were spread over. */
+        public int expansions()
+        {
+            return expanded;
+        }
+
+        /** Throws the search away, for a bot whose goal has changed or who has stopped navigating. */
+        public void cancel()
+        {
+            best.clear();
+            closed.clear();
+            open.clear();
+            result = null;
+            started = false;
+            done = true;
+        }
+
+        // --- expansion ---
+
+        private void expandNode(Node cur)
+        {
+            boolean land = traversal != Traversal.WATER;
             for (int dx = -1; dx <= 1; dx++)
             {
                 for (int dz = -1; dz <= 1; dz++)
                 {
                     if (dx == 0 && dz == 0) continue;
-                    boolean isDiag = (dx != 0 && dz != 0);
-                    if (!settings.allowDiagonal() && isDiag) continue;
+                    boolean diagonal = dx != 0 && dz != 0;
+                    if (!settings.allowDiagonal() && diagonal) continue;
 
                     int nx = cur.x + dx;
                     int nz = cur.z + dz;
+                    if (!withinBounds(nx, cur.y, nz)) continue;
 
-                    if (!withinBounds(nx, cur.y, nz, s, g, settings)) continue;
-                    if (!level.hasChunk(nx >> 4, nz >> 4)) continue;
-
-                    BlockPos nextPos;
-                    MoveType moveType = MoveType.WALK;
-
-                    if (traversal == Traversal.LAND)
+                    if (land && landNeighbour(cur, nx, nz))
                     {
-                        nextPos = nextStandableLand(level, cur.x, cur.y, cur.z, nx, nz, settings);
-                    }
-                    else if (traversal == Traversal.WATER)
-                    {
-                        nextPos = nextSwimmable(level, cur.x, cur.y, cur.z, nx, nz, settings);
-                        if (nextPos != null) moveType = MoveType.SWIM;
+                        if (diagonal && !diagonalClear(cur, nx, nz)) continue;
+                        offer(cur, nx, nextY, nz, nextMove);
                     }
                     else
                     {
-                        nextPos = nextAmphibious(level, cur.x, cur.y, cur.z, nx, nz, settings);
+                        int ny = swimY(nx, cur.y, nz);
+                        if (ny == NO_NODE) continue;
+                        if (diagonal && !diagonalClear(cur, nx, nz)) continue;
+                        offer(cur, nx, ny, nz, MoveType.SWIM);
                     }
-
-                    if (nextPos == null)
-                    {
-                        // If break-through is allowed, check if we can mine through.
-                        if (settings.allowBreakThrough() && traversal != Traversal.WATER)
-                        {
-                            nextPos = nextBreakThrough(level, cur.x, cur.y, cur.z, nx, nz, settings);
-                            if (nextPos != null) moveType = MoveType.BREAK_THROUGH;
-                        }
-                        if (nextPos == null) continue;
-                    }
-
-                    // Classify movement type from height difference.
-                    int heightDiff = nextPos.getY() - cur.y;
-                    if (heightDiff > 0 && moveType == MoveType.WALK) moveType = MoveType.JUMP;
-                    if (heightDiff < 0 && moveType == MoveType.WALK) moveType = MoveType.FALL;
-
-                    // Diagonal ascend/descend restrictions.
-                    if (isDiag && heightDiff > 0 && !settings.allowDiagonalAscend()) continue;
-                    if (isDiag && heightDiff < 0 && !settings.allowDiagonalDescend()) continue;
-
-                    // Avoid corner-cutting on diagonals.
-                    if (isDiag)
-                    {
-                        if (!canMoveDiagonally(level, cur.x, cur.y, cur.z, dx, dz, traversal, settings))
-                        {
-                            continue;
-                        }
-                    }
-
-                    long nKey = nextPos.asLong();
-                    if (closed.contains(nKey)) continue;
-
-                    float stepCost = calcStepCost(cur.x, cur.y, cur.z, nextPos, moveType, level, mobDangerZone, settings);
-                    float ng = cur.g + stepCost;
-
-                    Node prev = best.get(nKey);
-                    if (prev != null && ng >= prev.g) continue;
-
-                    float nf = ng + heuristic(nextPos, g, settings);
-                    Node next = new Node(nKey, nextPos.getX(), nextPos.getY(), nextPos.getZ(), cur.key, ng, nf, moveType);
-                    best.put(nKey, next);
-                    open.add(next);
                 }
             }
 
-            // === Parkour / gap-jump links ===
-            if ((traversal == Traversal.LAND || traversal == Traversal.AMPHIBIOUS)
-                    && settings.allowParkour() && settings.maxParkourLength() >= 2)
-            {
-                expandParkour(level, cur, s, g, settings, closed, best, open, mobDangerZone);
-            }
+            if (traversal == Traversal.WATER) return;
 
-            // === Pillar up ===
-            if ((traversal == Traversal.LAND || traversal == Traversal.AMPHIBIOUS)
-                    && settings.allowPillar())
-            {
-                expandPillar(level, cur, s, g, settings, closed, best, open, mobDangerZone);
-            }
+            expandClimb(cur);
+            expandClimbOff(cur);
 
-            // === Descend by mining ===
-            if ((traversal == Traversal.LAND || traversal == Traversal.AMPHIBIOUS)
-                    && settings.allowDescendMine())
+            if (settings.allowParkour() && settings.maxParkourLength() >= 2)
             {
-                expandDescendMine(level, cur, s, g, settings, closed, best, open, mobDangerZone);
+                expandParkour(cur);
+            }
+            if (settings.allowPillar())
+            {
+                expandPillar(cur);
+            }
+            if (settings.allowDescendMine())
+            {
+                expandDescendMine(cur);
             }
         }
 
+        /**
+         * The position to move to in the next column and the move that gets there: a walk when the two surfaces
+         * are within a step of each other, a jump for a block up, a fall for a drop. A walkable step beats a jump
+         * and a jump beats a drop, whichever order the candidates come in.
+         */
+        private boolean landNeighbour(Node cur, int toX, int toZ)
+        {
+            double from = view.surfaceY(cur.x, cur.y, cur.z);
+            int bestRank = 3;
+            int bestY = 0;
+            MoveType bestMove = MoveType.WALK;
+            for (int dy = settings.maxStepUp(); dy >= -settings.maxFall(); dy--)
+            {
+                int ny = cur.y + dy;
+                if (!withinBounds(toX, ny, toZ)) continue;
+                if (!view.canStand(toX, ny, toZ)) continue;
+                double delta = view.surfaceY(toX, ny, toZ) - from;
+                int rank;
+                if (delta > LevelWalkability.STEP_HEIGHT)
+                {
+                    if (delta > LevelWalkability.MAX_STEP_UP) continue;
+                    rank = 1;
+                }
+                else if (delta < -LevelWalkability.STEP_HEIGHT)
+                {
+                    if (-delta > settings.maxFall() && !swimmable(toX, ny, toZ)) continue;
+                    rank = 2;
+                }
+                else
+                {
+                    rank = 0;
+                }
+                if (rank < bestRank)
+                {
+                    bestRank = rank;
+                    bestY = ny;
+                    bestMove = rank == 0 ? MoveType.WALK : rank == 1 ? MoveType.JUMP : MoveType.FALL;
+                    if (rank == 0) break;
+                }
+            }
+            if (bestRank == 3)
+            {
+                return breakThrough(cur, toX, toZ);
+            }
+            nextY = bestY;
+            nextMove = bestMove;
+            return true;
+        }
+
+        /** A diagonal move has to squeeze between the two blocks it passes, whatever is in either of them. */
+        private boolean diagonalClear(Node cur, int nx, int nz)
+        {
+            return view.canPass(nx, cur.y, cur.z) && view.canPass(cur.x, cur.y, nz);
+        }
+
+        /** Mining into a column that is in the way, which only a bot allowed to break blocks may do. */
+        private boolean breakThrough(Node cur, int toX, int toZ)
+        {
+            if (!settings.allowBreakThrough()) return false;
+            int ny = cur.y;
+            if (!withinBounds(toX, ny, toZ) || !view.canStand(toX, ny, toZ)) return false;
+            if (view.canPass(toX, ny, toZ) && view.canPass(toX, ny + 1, toZ)) return false;
+            if (!view.breakable(toX, ny, toZ) || !view.breakable(toX, ny + 1, toZ)) return false;
+            nextY = ny;
+            nextMove = MoveType.BREAK_THROUGH;
+            return true;
+        }
+
+        private void expandClimb(Node cur)
+        {
+            if (view.canPass(cur.x, cur.y + 1, cur.z)
+                    && (view.climbable(cur.x, cur.y, cur.z) || view.climbable(cur.x, cur.y + 1, cur.z)))
+            {
+                offer(cur, cur.x, cur.y + 1, cur.z, MoveType.CLIMB_UP);
+            }
+            if (view.canPass(cur.x, cur.y - 1, cur.z) && view.climbable(cur.x, cur.y - 1, cur.z))
+            {
+                offer(cur, cur.x, cur.y - 1, cur.z, MoveType.CLIMB_DOWN);
+            }
+        }
+
+        /**
+         * Stepping off an edge into a ladder or a vine. The column has no floor in it, so there is nothing to walk
+         * on to and this is the only way in - and the only way out of a platform that ends at a vine.
+         */
+        private void expandClimbOff(Node cur)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (dx == 0 && dz == 0) continue;
+                    int nx = cur.x + dx;
+                    int nz = cur.z + dz;
+                    if (!withinBounds(nx, cur.y, nz)) continue;
+                    if (!view.climbable(nx, cur.y, nz)) continue;
+                    if (view.canStand(nx, cur.y, nz)) continue;
+                    if (!view.canPass(nx, cur.y, nz)) continue;
+                    offer(cur, nx, cur.y, nz, MoveType.CLIMB_DOWN);
+                }
+            }
+        }
+
+        private void expandParkour(Node cur)
+        {
+            for (int dir = 0; dir < PARKOUR_DX.length; dir++)
+            {
+                int dx = PARKOUR_DX[dir];
+                int dz = PARKOUR_DZ[dir];
+                for (int len = 2; len <= settings.maxParkourLength(); len++)
+                {
+                    int nx = cur.x + dx * len;
+                    int nz = cur.z + dz * len;
+                    if (!withinBounds(nx, cur.y, nz)) continue;
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        int ny = cur.y + dy;
+                        if (!view.canStand(nx, ny, nz)) continue;
+                        if (!jumpArcClear(cur, nx, ny, nz)) continue;
+                        // A gap too wide for a standing jump, or one that has to be climbed out of, is only taken
+                        // with a run up; paying for the run up is what stops the search choosing it over a step.
+                        boolean runUp = len >= settings.parkourRunUpLength() || dy != 0;
+                        offer(cur, nx, ny, nz, runUp ? MoveType.PARKOUR_RUNUP : MoveType.PARKOUR);
+                    }
+                }
+            }
+        }
+
+        /** Nothing may stand in the way between the take-off and the landing, and there has to be headroom. */
+        private boolean jumpArcClear(Node cur, int toX, int toY, int toZ)
+        {
+            if (!view.canPass(cur.x, cur.y + 1, cur.z)) return false;
+            double arc = Math.max(view.surfaceY(cur.x, cur.y, cur.z), view.surfaceY(toX, toY, toZ));
+            int y = Mth.floor(arc);
+            int dx = Integer.signum(toX - cur.x);
+            int dz = Integer.signum(toZ - cur.z);
+            int steps = Math.max(Math.abs(toX - cur.x), Math.abs(toZ - cur.z));
+            for (int i = 1; i < steps; i++)
+            {
+                int mx = cur.x + dx * i;
+                int mz = cur.z + dz * i;
+                if (!withinBounds(mx, y, mz)) return false;
+                if (!view.canPass(mx, y, mz) || !view.canPass(mx, y + 1, mz)) return false;
+            }
+            return true;
+        }
+
+        private void expandPillar(Node cur)
+        {
+            int ny = cur.y + 1;
+            if (!withinBounds(cur.x, ny, cur.z)) return;
+            if (!view.canPass(cur.x, ny, cur.z) || !view.canPass(cur.x, ny + 1, cur.z)) return;
+            if (!view.canStand(cur.x, ny - 1, cur.z)) return;
+            offer(cur, cur.x, ny, cur.z, MoveType.PILLAR);
+        }
+
+        private void expandDescendMine(Node cur)
+        {
+            int ny = cur.y - 1;
+            if (!withinBounds(cur.x, ny, cur.z)) return;
+            if (!view.canStand(cur.x, ny, cur.z)) return;
+            if (!view.breakable(cur.x, ny, cur.z)) return;
+            if (!view.canStand(cur.x, ny - 1, cur.z) || view.hazard(cur.x, ny - 1, cur.z)) return;
+            offer(cur, cur.x, ny, cur.z, MoveType.DESCEND_MINE);
+        }
+
+        private void offer(Node cur, int nx, int ny, int nz, MoveType move)
+        {
+            long key = BlockPos.asLong(nx, ny, nz);
+            if (closed.contains(key)) return;
+            float g = cur.g + cost(view, cur.x, cur.y, cur.z, nx, ny, nz, move, mobDangerZone, settings);
+            Node previous = best.get(key);
+            if (previous != null && g >= previous.g) return;
+            float f = g + heuristic(nx, ny, nz, goal, settings);
+            Node node = new Node(key, nx, ny, nz, cur, g, f, move);
+            best.put(key, node);
+            open.add(node);
+        }
+
+        /** The nearest position in this column a player can swim to, or {@link #NO_NODE}. */
+        private int swimY(int toX, int fromY, int toZ)
+        {
+            if (settings.allowSwimming())
+            {
+                for (int dy = -2; dy <= 2; dy++)
+                {
+                    if (swimmable(toX, fromY + dy, toZ)) return fromY + dy;
+                }
+            }
+            else
+            {
+                // Floating: the highest water a body fits in, so the bot swims at the surface.
+                for (int dy = 1; dy >= -1; dy--)
+                {
+                    if (swimmable(toX, fromY + dy, toZ) && view.waterSurface(toX, fromY + dy, toZ))
+                    {
+                        return fromY + dy;
+                    }
+                }
+                for (int dy = 1; dy >= -1; dy--)
+                {
+                    if (swimmable(toX, fromY + dy, toZ)) return fromY + dy;
+                }
+            }
+            return NO_NODE;
+        }
+
+        private boolean swimmable(int x, int y, int z)
+        {
+            return withinBounds(x, y, z) && view.inWater(x, y, z)
+                    && view.canPass(x, y, z) && view.canPass(x, y + 1, z);
+        }
+
+        private boolean withinBounds(int x, int y, int z)
+        {
+            return NavAStarPathfinder.withinBounds(x, y, z, start, goal, settings);
+        }
+
+        /** The reached node closest to the goal, for a search that ran out of budget rather than out of world. */
+        private PathResult bestApproach()
+        {
+            Node closest = null;
+            float closestDistance = Float.MAX_VALUE;
+            for (Long key : closed)
+            {
+                Node node = best.get(key);
+                if (node == null) continue;
+                float distance = heuristic(node.x, node.y, node.z, goal, settings);
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closest = node;
+                }
+            }
+            return closest == null ? null : reconstructPath(closest);
+        }
+    }
+
+    // --- shared helpers ---
+
+    /** The nearest position a player can occupy to {@code around}: a standable one on land, a swimmable one in water. */
+    private static BlockPos footOf(LevelWalkability view, BlockPos around, Traversal traversal, Settings settings)
+    {
+        ServerLevel level = view.level();
+        if (!level.hasChunk(around.getX() >> 4, around.getZ() >> 4)) return null;
+        if (traversal == Traversal.WATER)
+        {
+            return waterNear(view, around);
+        }
+        int y = view.standYNear(around.getX(), around.getY(), around.getZ(), 8);
+        if (y != LevelWalkability.NO_STAND) return new BlockPos(around.getX(), y, around.getZ());
+        if (traversal != Traversal.WATER && view.canPass(around.getX(), around.getY(), around.getZ()))
+        {
+            // Nowhere to stand within reach, but a body fits here: a bot on a ladder or a vine starts or ends its
+            // search on the climbable it is holding.
+            return around.immutable();
+        }
+        if (traversal == Traversal.LAND) return null;
+        return waterNear(view, around);
+    }
+
+    private static BlockPos waterNear(LevelWalkability view, BlockPos around)
+    {
+        for (int dy = 4; dy >= -4; dy--)
+        {
+            int y = around.getY() + dy;
+            if (view.inWater(around.getX(), y, around.getZ()) && view.canPass(around.getX(), y, around.getZ()))
+            {
+                return new BlockPos(around.getX(), y, around.getZ());
+            }
+        }
         return null;
     }
 
-    // ====== Legacy compatibility: returns just positions (for callers that don't need MoveType) ======
-
-    /**
-     * Legacy method: returns just the list of positions, or null.
-     */
-    public List<BlockPos> findPathPositions(ServerLevel level, BlockPos start, BlockPos goal, Traversal traversal, Settings settings)
+    /** The path from the start node down to {@code node}, walking the parent links. */
+    private static PathResult reconstructPath(Node node)
     {
-        PathResult result = findPath(level, start, goal, traversal, settings);
-        return result != null ? result.positions() : null;
+        List<BlockPos> reversedPos = new ArrayList<>();
+        List<MoveType> reversedMoves = new ArrayList<>();
+        Node cur = node;
+        int guard = 0;
+        while (cur != null && guard++ < 500_000)
+        {
+            reversedPos.add(new BlockPos(cur.x, cur.y, cur.z));
+            reversedMoves.add(cur.moveType);
+            cur = cur.parent;
+        }
+        List<BlockPos> positions = new ArrayList<>(reversedPos.size());
+        List<MoveType> moves = new ArrayList<>(reversedMoves.size());
+        for (int i = reversedPos.size() - 1; i >= 0; i--)
+        {
+            positions.add(reversedPos.get(i));
+            moves.add(reversedMoves.get(i));
+        }
+        return new PathResult(positions, moves);
     }
 
-    // --- Parkour expansion ---
-    private void expandParkour(ServerLevel level, Node cur, BlockPos s, BlockPos g,
-                                Settings settings, Set<Long> closed, Map<Long, Node> best,
-                                PriorityQueue<Node> open, Set<Long> mobDangerZone)
+    private static float cost(LevelWalkability view, int fx, int fy, int fz, int nx, int ny, int nz, MoveType move,
+            Set<Long> mobDangerZone, Settings settings)
     {
-        for (int[] dir : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}})
+        int dx = Math.abs(nx - fx);
+        int dz = Math.abs(nz - fz);
+        double rise = view.surfaceY(nx, ny, nz) - view.surfaceY(fx, fy, fz);
+
+        float cost;
+        switch (move)
         {
-            int dx = dir[0];
-            int dz = dir[1];
-            for (int len = 2; len <= settings.maxParkourLength(); len++)
+            case PARKOUR:
+            case PARKOUR_RUNUP:
+                cost = Mth.sqrt((nx - fx) * (nx - fx) + (nz - fz) * (nz - fz)) + settings.jumpPenalty() * 2.0F;
+                if (move == MoveType.PARKOUR_RUNUP) cost += 0.5F;
+                break;
+            case PILLAR:
+                cost = settings.pillarCost();
+                break;
+            case BREAK_THROUGH:
+                cost = settings.breakCostBase()
+                        + view.breakCost(nx, ny, nz, settings.breakCostBase())
+                        + view.breakCost(nx, ny + 1, nz, settings.breakCostBase());
+                break;
+            case DESCEND_MINE:
+                cost = settings.descendMineCost() + view.breakCost(nx, ny, nz, settings.breakCostBase());
+                break;
+            default:
+                cost = (dx != 0 && dz != 0) ? 1.4142F : 1.0F;
+                break;
+        }
+
+        if (rise > 0.0D)
+        {
+            cost += (float) (settings.jumpPenalty() * Math.min(1.0D, rise));
+        }
+        else if (rise < 0.0D)
+        {
+            float fall = (float) -rise;
+            if (fall > settings.maxFallNoWater() && !view.bodyInWater(nx, ny, nz))
             {
-                int nx = cur.x + dx * len;
-                int nz = cur.z + dz * len;
-
-                if (!withinBounds(nx, cur.y, nz, s, g, settings)) continue;
-                if (!level.hasChunk(nx >> 4, nz >> 4)) continue;
-
-                // Check intermediate chunks are loaded.
-                boolean allLoaded = true;
-                for (int i = 1; i < len; i++)
-                {
-                    int mx = cur.x + dx * i;
-                    int mz = cur.z + dz * i;
-                    if (!level.hasChunk(mx >> 4, mz >> 4)) { allLoaded = false; break; }
-                }
-                if (!allLoaded) continue;
-
-                // Allow ascending parkour: landing up to 1 block higher or lower.
-                for (int dy = -1; dy <= 1; dy++)
-                {
-                    int targetY = cur.y + dy;
-                    BlockPos nextPos = new BlockPos(nx, targetY, nz);
-                    if (!isStandable(level, nextPos, settings)) continue;
-
-                    if (!isJumpArcClear(level, cur.x, cur.y, cur.z, nextPos, len, settings))
-                    {
-                        continue;
-                    }
-
-                    long nKey = nextPos.asLong();
-                    if (closed.contains(nKey)) continue;
-
-                    float jumpCost = calcStepCost(cur.x, cur.y, cur.z, nextPos, MoveType.PARKOUR, level, mobDangerZone, settings);
-                    float ng = cur.g + jumpCost;
-
-                    Node prev = best.get(nKey);
-                    if (prev != null && ng >= prev.g) continue;
-
-                    float nf = ng + heuristic(nextPos, g, settings);
-                    Node next = new Node(nKey, nextPos.getX(), nextPos.getY(), nextPos.getZ(), cur.key, ng, nf, MoveType.PARKOUR);
-                    best.put(nKey, next);
-                    open.add(next);
-                }
+                cost += settings.fallDamagePenalty() * (fall - settings.maxFallNoWater());
             }
+            cost += 0.1F * fall;
         }
-    }
 
-    // --- Pillar expansion: place block at feet, stand on it ---
-    private void expandPillar(ServerLevel level, Node cur, BlockPos s, BlockPos g,
-                               Settings settings, Set<Long> closed, Map<Long, Node> best,
-                               PriorityQueue<Node> open, Set<Long> mobDangerZone)
-    {
-        int nx = cur.x;
-        int nz = cur.z;
-        int ny = cur.y + 1;
-
-        if (!withinBounds(nx, ny, nz, s, g, settings)) return;
-
-        BlockPos pillarFeet = new BlockPos(nx, ny, nz);
-        if (!isPassable(level, pillarFeet, settings)) return;
-        if (!isPassable(level, pillarFeet.above(), settings)) return;
-        if (!isPassable(level, pillarFeet.above(2), settings)) return;
-
-        long nKey = pillarFeet.asLong();
-        if (closed.contains(nKey)) return;
-
-        float cost = settings.pillarCost() + calcMobOverlayCost(nx, ny, nz, mobDangerZone, settings);
-        float ng = cur.g + cost;
-
-        Node prev = best.get(nKey);
-        if (prev != null && ng >= prev.g) return;
-
-        float nf = ng + heuristic(pillarFeet, g, settings);
-        Node next = new Node(nKey, nx, ny, nz, cur.key, ng, nf, MoveType.PILLAR);
-        best.put(nKey, next);
-        open.add(next);
-    }
-
-    // --- Descend by mining the block at (cur.x, cur.y-1, cur.z) ---
-    private void expandDescendMine(ServerLevel level, Node cur, BlockPos s, BlockPos g,
-                                    Settings settings, Set<Long> closed, Map<Long, Node> best,
-                                    PriorityQueue<Node> open, Set<Long> mobDangerZone)
-    {
-        int nx = cur.x;
-        int nz = cur.z;
-        int ny = cur.y - 1;
-
-        if (!withinBounds(nx, ny, nz, s, g, settings)) return;
-        if (!withinWorldY(level, ny)) return;
-
-        BlockPos belowFeet = new BlockPos(nx, ny, nz);
-        BlockState feetState = level.getBlockState(belowFeet);
-        if (feetState.isAir() || isLiquid(feetState)) return; // Already passable = just fall.
-
-        if (!isBreakable(level, belowFeet, feetState, settings)) return;
-
-        // Don't mine into lava.
-        BlockState twoBelow = level.getBlockState(belowFeet.below());
-        if (settings.avoidLava() && twoBelow.getFluidState().is(FluidTags.LAVA)) return;
-
-        // Ground below the new position must be solid.
-        if (twoBelow.getCollisionShape(level, belowFeet.below()).isEmpty()) return;
-
-        long nKey = belowFeet.asLong();
-        if (closed.contains(nKey)) return;
-
-        float cost = settings.descendMineCost() + estimateBreakCost(level, belowFeet, settings)
-                + calcMobOverlayCost(nx, ny, nz, mobDangerZone, settings);
-        float ng = cur.g + cost;
-
-        Node prev = best.get(nKey);
-        if (prev != null && ng >= prev.g) return;
-
-        float nf = ng + heuristic(belowFeet, g, settings);
-        Node next = new Node(nKey, nx, ny, nz, cur.key, ng, nf, MoveType.DESCEND_MINE);
-        best.put(nKey, next);
-        open.add(next);
-    }
-
-    // --- Break-through: mine 1-2 blocks to walk into a solid column ---
-    private static BlockPos nextBreakThrough(ServerLevel level, int fromX, int fromY, int fromZ, int toX, int toZ, Settings settings)
-    {
-        BlockPos feetPos = new BlockPos(toX, fromY, toZ);
-        BlockPos headPos = feetPos.above();
-        BlockState feetState = level.getBlockState(feetPos);
-        BlockState headState = level.getBlockState(headPos);
-
-        boolean feetNeedsBreak = !feetState.getCollisionShape(level, feetPos).isEmpty();
-        boolean headNeedsBreak = !headState.getCollisionShape(level, headPos).isEmpty();
-
-        if (!feetNeedsBreak && !headNeedsBreak) return null; // Already passable.
-
-        if (feetNeedsBreak && !isBreakable(level, feetPos, feetState, settings)) return null;
-        if (headNeedsBreak && !isBreakable(level, headPos, headState, settings)) return null;
-
-        // Ground below must be solid.
-        BlockPos below = feetPos.below();
-        BlockState ground = level.getBlockState(below);
-        if (ground.getCollisionShape(level, below).isEmpty()) return null;
-        if (settings.avoidLava() && ground.getFluidState().is(FluidTags.LAVA)) return null;
-
-        return feetPos;
-    }
-
-    private static boolean isBreakable(ServerLevel level, BlockPos pos, BlockState state, Settings settings)
-    {
-        if (state.isAir()) return true;
-        if (state.getDestroySpeed(level, pos) < 0) return false; // Bedrock, barrier, etc.
-        if (!state.getFluidState().isEmpty()) return false;       // Don't "break" liquid.
-        return true;
-    }
-
-    private static float estimateBreakCost(ServerLevel level, BlockPos pos, Settings settings)
-    {
-        BlockState state = level.getBlockState(pos);
-        if (state.isAir()) return 0.0F;
-        float hardness = state.getDestroySpeed(level, pos);
-        if (hardness < 0) return Float.MAX_VALUE;
-        return settings.breakCostBase() + hardness * 2.0F;
-    }
-
-    private static boolean isJumpArcClear(ServerLevel level, int fromX, int fromY, int fromZ,
-                                           BlockPos landing, int distance, Settings settings)
-    {
-        int dx = Integer.signum(landing.getX() - fromX);
-        int dz = Integer.signum(landing.getZ() - fromZ);
-
-        for (int i = 1; i < distance; i++)
+        // Sprinting is the fast way round, so a level walk is cheaper at a sprint.
+        if (settings.allowSprint() && move == MoveType.WALK && Math.abs(rise) < 1.0E-3D)
         {
-            int mx = fromX + dx * i;
-            int mz = fromZ + dz * i;
-            int baseY = Math.max(fromY, landing.getY());
-
-            BlockPos midFeet = new BlockPos(mx, baseY, mz);
-            if (!isPassable(level, midFeet, settings)) return false;
-            if (!isPassable(level, midFeet.above(), settings)) return false;
-            if (!isPassable(level, midFeet.above(2), settings)) return false;
+            cost *= settings.sprintCostMultiplier();
         }
 
-        // Headroom at start for the jump.
-        BlockPos startHead = new BlockPos(fromX, fromY + 2, fromZ);
-        if (!isPassable(level, startHead, settings)) return false;
+        if (settings.avoidSoulSand() && view.onSoulSand(nx, ny, nz))
+        {
+            cost *= 2.5F;
+        }
+        if (view.onIce(nx, ny, nz))
+        {
+            cost *= 1.3F;
+        }
+        if (view.isDoorOrGate(nx, ny, nz))
+        {
+            cost += 1.0F;
+        }
 
-        return true;
+        cost += mobOverlay(view, nx, ny, nz, mobDangerZone, settings);
+        return cost;
     }
 
-    // --- Mob danger zone computation ---
-    private static Set<Long> buildMobDangerMap(ServerLevel level, BlockPos start, BlockPos goal, Settings settings)
+    private static float mobOverlay(LevelWalkability view, int x, int y, int z, Set<Long> mobDangerZone,
+            Settings settings)
     {
-        Set<Long> dangerZone = new HashSet<>();
-        int radius = settings.mobAvoidanceRadius();
+        if (!settings.avoidMobs() || mobDangerZone.isEmpty()) return 0.0F;
+        return mobDangerZone.contains(BlockPos.asLong(x, y, z)) ? settings.mobAvoidanceCost() : 0.0F;
+    }
 
+    private static float heuristic(int x, int y, int z, BlockPos goal, Settings settings)
+    {
+        float dx = x - goal.getX();
+        float dy = y - goal.getY();
+        float dz = z - goal.getZ();
+        float distance = Mth.sqrt(dx * dx + dy * dy + dz * dz);
+        return settings.allowSprint() ? distance * settings.sprintCostMultiplier() : distance;
+    }
+
+    private static boolean withinBounds(int x, int y, int z, BlockPos start, BlockPos goal, Settings settings)
+    {
         int minX = Math.min(start.getX(), goal.getX()) - settings.maxRangeXZ();
         int maxX = Math.max(start.getX(), goal.getX()) + settings.maxRangeXZ();
         int minZ = Math.min(start.getZ(), goal.getZ()) - settings.maxRangeXZ();
         int maxZ = Math.max(start.getZ(), goal.getZ()) + settings.maxRangeXZ();
+        int minY = Math.min(start.getY(), goal.getY()) - settings.maxRangeY();
+        int maxY = Math.max(start.getY(), goal.getY()) + settings.maxRangeY();
+        return x >= minX && x <= maxX && z >= minZ && z <= maxZ && y >= minY && y <= maxY;
+    }
 
+    private static Set<Long> buildMobDangerMap(LevelWalkability view, BlockPos start, BlockPos goal, Settings settings)
+    {
+        Set<Long> dangerZone = new HashSet<>();
+        int radius = settings.mobAvoidanceRadius();
+        int minX = Math.min(start.getX(), goal.getX()) - settings.maxRangeXZ();
+        int maxX = Math.max(start.getX(), goal.getX()) + settings.maxRangeXZ();
+        int minZ = Math.min(start.getZ(), goal.getZ()) - settings.maxRangeXZ();
+        int maxZ = Math.max(start.getZ(), goal.getZ()) + settings.maxRangeXZ();
+        ServerLevel level = view.level();
         AABB searchBox = new AABB(minX, level.getMinY(), minZ, maxX, level.getMaxY(), maxZ);
         List<Entity> mobs = level.getEntities((Entity) null, searchBox, e -> e instanceof Monster);
-
         for (Entity mob : mobs)
         {
             int mobX = Mth.floor(mob.getX());
             int mobY = Mth.floor(mob.getY());
             int mobZ = Mth.floor(mob.getZ());
-
             for (int ddx = -radius; ddx <= radius; ddx++)
             {
                 for (int ddz = -radius; ddz <= radius; ddz++)
@@ -581,208 +813,7 @@ public final class NavAStarPathfinder
         return dangerZone;
     }
 
-    private static float calcMobOverlayCost(int x, int y, int z, Set<Long> mobDangerZone, Settings settings)
-    {
-        if (!settings.avoidMobs() || mobDangerZone.isEmpty()) return 0.0F;
-        return mobDangerZone.contains(BlockPos.asLong(x, y, z)) ? settings.mobAvoidanceCost() : 0.0F;
-    }
-
-    // --- Cost calculation with all Baritone-like modifiers ---
-    private static float calcStepCost(int fx, int fy, int fz, BlockPos next, MoveType moveType,
-                                       ServerLevel level, Set<Long> mobDangerZone, Settings settings)
-    {
-        int dx = Math.abs(next.getX() - fx);
-        int dz = Math.abs(next.getZ() - fz);
-        int dy = next.getY() - fy;
-
-        float cost;
-        switch (moveType)
-        {
-            case PARKOUR:
-                float dist = Mth.sqrt((next.getX() - fx) * (next.getX() - fx) + (next.getZ() - fz) * (next.getZ() - fz));
-                cost = dist + settings.jumpPenalty() * 2.0F;
-                break;
-            case PILLAR:
-                cost = settings.pillarCost();
-                break;
-            case BREAK_THROUGH:
-                cost = settings.breakCostBase();
-                BlockPos feetPos = new BlockPos(next.getX(), next.getY(), next.getZ());
-                BlockPos headPos = feetPos.above();
-                cost += estimateBreakCost(level, feetPos, settings);
-                cost += estimateBreakCost(level, headPos, settings);
-                break;
-            case DESCEND_MINE:
-                cost = settings.descendMineCost();
-                break;
-            default:
-                cost = (dx != 0 && dz != 0) ? 1.4142F : 1.0F;
-                break;
-        }
-
-        // Height change penalties.
-        if (dy > 0)
-        {
-            cost += settings.jumpPenalty() * dy;
-        }
-        else if (dy < 0)
-        {
-            int fallDist = -dy;
-            if (fallDist > settings.maxFallNoWater())
-            {
-                cost += settings.fallDamagePenalty() * (fallDist - settings.maxFallNoWater());
-            }
-            cost += 0.1F * fallDist;
-        }
-
-        // Sprint discount for flat walking.
-        if (settings.allowSprint() && moveType == MoveType.WALK && dy == 0)
-        {
-            cost *= settings.sprintCostMultiplier();
-        }
-
-        // Soul sand slowdown penalty.
-        if (settings.avoidSoulSand())
-        {
-            BlockState belowState = level.getBlockState(new BlockPos(next.getX(), next.getY() - 1, next.getZ()));
-            if (belowState.is(Blocks.SOUL_SAND))
-            {
-                cost *= 2.5F;
-            }
-        }
-
-        // Ice slippery penalty: slightly increase cost on ice to prefer normal paths.
-        {
-            BlockState belowForIce = level.getBlockState(new BlockPos(next.getX(), next.getY() - 1, next.getZ()));
-            if (isIce(belowForIce))
-            {
-                cost *= 1.3F;
-            }
-        }
-
-        // Door/fence-gate cost.
-        BlockState nextState = level.getBlockState(new BlockPos(next.getX(), next.getY(), next.getZ()));
-        if (nextState.getBlock() instanceof DoorBlock || nextState.getBlock() instanceof FenceGateBlock)
-        {
-            cost += 1.0F;
-        }
-
-        // Mob avoidance overlay.
-        cost += calcMobOverlayCost(next.getX(), next.getY(), next.getZ(), mobDangerZone, settings);
-
-        return cost;
-    }
-
-    // --- Heuristic ---
-    private static float heuristic(BlockPos a, BlockPos b, Settings settings)
-    {
-        float ddx = a.getX() - b.getX();
-        float ddy = a.getY() - b.getY();
-        float ddz = a.getZ() - b.getZ();
-        float dist = Mth.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-        if (settings.allowSprint())
-        {
-            dist *= settings.sprintCostMultiplier();
-        }
-        return dist;
-    }
-
-    // --- Build partial path toward closest explored node to goal ---
-    private PathResult buildPartialPath(Map<Long, Node> best, Set<Long> closed, BlockPos goal, Settings settings)
-    {
-        Node closest = null;
-        float closestDist = Float.MAX_VALUE;
-        for (Long key : closed)
-        {
-            Node node = best.get(key);
-            if (node == null) continue;
-            float dist = heuristic(new BlockPos(node.x, node.y, node.z), goal, settings);
-            if (dist < closestDist)
-            {
-                closestDist = dist;
-                closest = node;
-            }
-        }
-        if (closest == null) return null;
-        return reconstructPath(closest, best);
-    }
-
-    // --- Standard movement helpers ---
-
-    private static BlockPos nextStandableLand(ServerLevel level, int fromX, int fromY, int fromZ, int toX, int toZ, Settings settings)
-    {
-        for (int stepUp = 0; stepUp <= settings.maxStepUp(); stepUp++)
-        {
-            BlockPos p = new BlockPos(toX, fromY + stepUp, toZ);
-            if (isStandable(level, p, settings))
-            {
-                if (!isBodyPassable(level, p, settings)) return null;
-                return p;
-            }
-        }
-
-        for (int fall = 1; fall <= settings.maxFall(); fall++)
-        {
-            BlockPos p = new BlockPos(toX, fromY - fall, toZ);
-            if (isStandable(level, p, settings))
-            {
-                if (!isBodyPassable(level, p, settings)) return null;
-                return p;
-            }
-        }
-
-        return null;
-    }
-
-    private static BlockPos nextSwimmable(ServerLevel level, int fromX, int fromY, int fromZ, int toX, int toZ, Settings settings)
-    {
-        if (settings.allowSwimming())
-        {
-            // Full underwater navigation: search wider vertical range.
-            for (int dy = -2; dy <= 2; dy++)
-            {
-                BlockPos p = new BlockPos(toX, fromY + dy, toZ);
-                if (!withinWorldY(level, p.getY())) continue;
-                if (isSwimmable(level, p, settings))
-                {
-                    return p;
-                }
-            }
-        }
-        else
-        {
-            // Surface-only: prefer water surface positions (floating mode).
-            for (int dy = 1; dy >= -1; dy--)
-            {
-                BlockPos p = new BlockPos(toX, fromY + dy, toZ);
-                if (!withinWorldY(level, p.getY())) continue;
-                if (isSwimmable(level, p, settings) && isWaterSurface(level, p))
-                {
-                    return p;
-                }
-            }
-            // Fallback: allow non-surface swimmable to avoid getting stuck
-            // at water entry/exit points.
-            for (int dy = 1; dy >= -1; dy--)
-            {
-                BlockPos p = new BlockPos(toX, fromY + dy, toZ);
-                if (!withinWorldY(level, p.getY())) continue;
-                if (isSwimmable(level, p, settings))
-                {
-                    return p;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static BlockPos nextAmphibious(ServerLevel level, int fromX, int fromY, int fromZ, int toX, int toZ, Settings settings)
-    {
-        BlockPos land = nextStandableLand(level, fromX, fromY, fromZ, toX, toZ, settings);
-        if (land != null) return land;
-        return nextSwimmable(level, fromX, fromY, fromZ, toX, toZ, settings);
-    }
-
+    /** How often a raw path is thinned out when only the turns matter. */
     public static List<BlockPos> compressWaypoints(List<BlockPos> raw, int stride)
     {
         if (raw == null || raw.isEmpty()) return raw;
@@ -799,187 +830,8 @@ public final class NavAStarPathfinder
         return out;
     }
 
-    private static boolean withinBounds(int x, int y, int z, BlockPos start, BlockPos goal, Settings settings)
-    {
-        int minX = Math.min(start.getX(), goal.getX()) - settings.maxRangeXZ();
-        int maxX = Math.max(start.getX(), goal.getX()) + settings.maxRangeXZ();
-        int minZ = Math.min(start.getZ(), goal.getZ()) - settings.maxRangeXZ();
-        int maxZ = Math.max(start.getZ(), goal.getZ()) + settings.maxRangeXZ();
-        int minY = Math.min(start.getY(), goal.getY()) - settings.maxRangeY();
-        int maxY = Math.max(start.getY(), goal.getY()) + settings.maxRangeY();
-        return x >= minX && x <= maxX && z >= minZ && z <= maxZ && y >= minY && y <= maxY;
-    }
-
-    private static BlockPos sanitizeStart(ServerLevel level, BlockPos start, Traversal traversal, Settings settings)
-    {
-        if (!level.hasChunk(start.getX() >> 4, start.getZ() >> 4)) return null;
-        if (traversal == Traversal.WATER) return findNearbySwimmable(level, start, settings);
-        if (traversal == Traversal.AMPHIBIOUS) return findNearbyAmphibious(level, start, settings);
-        return findNearbyStandable(level, start, settings);
-    }
-
-    private static BlockPos sanitizeGoal(ServerLevel level, BlockPos goal, Traversal traversal, Settings settings)
-    {
-        if (!level.hasChunk(goal.getX() >> 4, goal.getZ() >> 4)) return null;
-        if (traversal == Traversal.WATER) return findNearbySwimmable(level, goal, settings);
-        if (traversal == Traversal.AMPHIBIOUS) return findNearbyAmphibious(level, goal, settings);
-        return findNearbyStandable(level, goal, settings);
-    }
-
-    private static BlockPos findNearbyStandable(ServerLevel level, BlockPos around, Settings settings)
-    {
-        for (int dy = 0; dy <= 3; dy++)
-        {
-            BlockPos up = around.above(dy);
-            if (isStandable(level, up, settings)) return up;
-        }
-        for (int dy = 1; dy <= 8; dy++)
-        {
-            BlockPos down = around.below(dy);
-            if (isStandable(level, down, settings)) return down;
-        }
-        return null;
-    }
-
-    private static BlockPos findNearbySwimmable(ServerLevel level, BlockPos around, Settings settings)
-    {
-        if (!settings.allowSwimming())
-        {
-            // Surface mode: find highest swimmable (surface) position.
-            for (int dy = 4; dy >= -4; dy--)
-            {
-                BlockPos p = around.offset(0, dy, 0);
-                if (isSwimmable(level, p, settings) && isWaterSurface(level, p)) return p;
-            }
-        }
-        // Full swimming or fallback: any swimmable.
-        for (int dy = -4; dy <= 4; dy++)
-        {
-            BlockPos p = around.offset(0, dy, 0);
-            if (isSwimmable(level, p, settings)) return p;
-        }
-        return null;
-    }
-
-    private static BlockPos findNearbyAmphibious(ServerLevel level, BlockPos around, Settings settings)
-    {
-        BlockPos water = findNearbySwimmable(level, around, settings);
-        if (water != null) return water;
-        return findNearbyStandable(level, around, settings);
-    }
-
-    static boolean withinWorldY(ServerLevel level, int y)
-    {
-        return y >= level.getMinY() + 1 && y <= level.getMaxY() - 2;
-    }
-
-    private static boolean canMoveDiagonally(ServerLevel level, int x, int y, int z, int dx, int dz, Traversal traversal, Settings settings)
-    {
-        BlockPos a = new BlockPos(x + dx, y, z);
-        BlockPos b = new BlockPos(x, y, z + dz);
-        if (traversal == Traversal.WATER)
-        {
-            return isSwimmable(level, a, settings) && isSwimmable(level, b, settings);
-        }
-        return isBodyPassable(level, a, settings) && isBodyPassable(level, b, settings);
-    }
-
-    private static boolean isBodyPassable(ServerLevel level, BlockPos feet, Settings settings)
-    {
-        return isPassable(level, feet, settings) && isPassable(level, feet.above(), settings);
-    }
-
-    static boolean isStandable(ServerLevel level, BlockPos feet, Settings settings)
-    {
-        if (!withinWorldY(level, feet.getY())) return false;
-        if (!isBodyPassable(level, feet, settings)) return false;
-
-        BlockPos below = feet.below();
-        BlockState ground = level.getBlockState(below);
-        if (settings.avoidLava() && ground.getFluidState().is(FluidTags.LAVA)) return false;
-        if (settings.avoidFire() && (ground.is(Blocks.FIRE) || ground.is(Blocks.SOUL_FIRE))) return false;
-        if (settings.avoidPowderSnow() && ground.is(Blocks.POWDER_SNOW)) return false;
-        if (settings.avoidCobwebs() && ground.is(Blocks.COBWEB)) return false;
-        return !ground.getCollisionShape(level, below).isEmpty()
-                && (!ground.getFluidState().is(FluidTags.WATER) || isIce(ground));
-    }
-
-    private static boolean isSwimmable(ServerLevel level, BlockPos feet, Settings settings)
-    {
-        if (!withinWorldY(level, feet.getY())) return false;
-        BlockState s0 = level.getBlockState(feet);
-        BlockState s1 = level.getBlockState(feet.above());
-        boolean inWater = s0.getFluidState().is(FluidTags.WATER);
-        boolean headOk = s1.getFluidState().is(FluidTags.WATER) || isPassable(level, feet.above(), settings);
-        if (!inWater || !headOk) return false;
-        return isPassable(level, feet, settings) && isPassable(level, feet.above(), settings);
-    }
-
-    static boolean isPassable(ServerLevel level, BlockPos pos, Settings settings)
-    {
-        BlockState state = level.getBlockState(pos);
-        if (settings.avoidLava() && state.getFluidState().is(FluidTags.LAVA)) return false;
-        if (settings.avoidFire() && (state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE))) return false;
-        if (settings.avoidPowderSnow() && state.is(Blocks.POWDER_SNOW)) return false;
-        if (settings.avoidCobwebs() && state.is(Blocks.COBWEB)) return false;
-
-        // Doors and fence gates can be opened.
-        if (state.getBlock() instanceof DoorBlock && settings.allowOpenDoors()) return true;
-        if (state.getBlock() instanceof FenceGateBlock && settings.allowOpenFenceGates()) return true;
-
-        return state.getCollisionShape(level, pos).isEmpty();
-    }
-
-    private static boolean isLiquid(BlockState state)
-    {
-        return !state.getFluidState().isEmpty();
-    }
-
-    private static boolean isIce(BlockState state)
-    {
-        return state.is(Blocks.ICE) || state.is(Blocks.PACKED_ICE) || state.is(Blocks.BLUE_ICE) || state.is(Blocks.FROSTED_ICE);
-    }
-
     /**
-     * Checks if position is at the water surface (bot can breathe).
-     * Surface = feet in water but the block above the player's head is NOT water.
-     */
-    private static boolean isWaterSurface(ServerLevel level, BlockPos feet)
-    {
-        BlockState aboveHead = level.getBlockState(feet.above(2));
-        return !aboveHead.getFluidState().is(FluidTags.WATER);
-    }
-
-    // --- Path reconstruction returning positions + move types ---
-    private static PathResult reconstructPath(Node goal, Map<Long, Node> best)
-    {
-        List<BlockPos> revPos = new ArrayList<>();
-        List<MoveType> revMoves = new ArrayList<>();
-        Node cur = goal;
-        int guard = 0;
-        while (cur != null && guard++ < 500_000)
-        {
-            revPos.add(new BlockPos(cur.x, cur.y, cur.z));
-            revMoves.add(cur.moveType);
-            if (cur.parent == 0L) break;
-            cur = best.get(cur.parent);
-        }
-
-        List<BlockPos> outPos = new ArrayList<>(revPos.size());
-        List<MoveType> outMoves = new ArrayList<>(revMoves.size());
-        for (int i = revPos.size() - 1; i >= 0; i--)
-        {
-            outPos.add(revPos.get(i));
-            outMoves.add(revMoves.get(i));
-        }
-        return new PathResult(outPos, outMoves);
-    }
-
-    // ====== Block search utilities (for mining feature) ======
-
-    /**
-     * Searches for the nearest instance of any of the given blocks within a radius.
-     * Searches in expanding shells for best average-case performance.
+     * Searches for the nearest instance of any of the given blocks within a radius, in expanding shells.
      */
     public static BlockPos findNearestBlock(ServerLevel level, BlockPos center, List<Block> targets, int radius)
     {

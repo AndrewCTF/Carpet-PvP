@@ -512,6 +512,16 @@ public class EntityPlayerActionPack
         return nav.isEnabled();
     }
 
+    public boolean isNavSearching()
+    {
+        return nav.isSearchRunning();
+    }
+
+    public boolean isNavFollowingFlowField()
+    {
+        return nav.isFollowingFlowField();
+    }
+
     public BotNavMode getNavMode()
     {
         return nav.getMode();
@@ -626,7 +636,9 @@ public class EntityPlayerActionPack
                 CarpetSettings.fakePlayerNavAvoidSoulSand,
                 CarpetSettings.fakePlayerNavAllowOpenDoors,
                 CarpetSettings.fakePlayerNavAllowOpenFenceGates,
-                CarpetSettings.fakePlayerNavAllowSwimming
+                CarpetSettings.fakePlayerNavAllowSwimming,
+                CarpetSettings.fakePlayerNavSearchBudget,
+                CarpetSettings.fakePlayerNavSearchBudgetTotal
         );
     }
 

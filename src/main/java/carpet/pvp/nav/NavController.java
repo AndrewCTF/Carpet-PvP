@@ -5,6 +5,8 @@ import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
 import carpet.helpers.EntityPlayerActionPack.GlideArrivalAction;
 import carpet.patches.EntityPlayerMPFake;
+import carpet.pvp.look.LookController;
+import carpet.pvp.look.LookProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -19,12 +21,12 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.food.FoodData;
+import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -37,8 +39,11 @@ import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
+
 
 /**
  * Fake-player navigation. One instance per {@link EntityPlayerActionPack}, ticked from its
@@ -47,6 +52,19 @@ import java.util.UUID;
  * <p>Rule values arrive as a {@link Settings} snapshot built once per tick by the action pack, so this class
  * never reads server settings itself. Per-bot overrides set with {@code /player <bot> nav option ...} win over
  * the snapshot; a {@code null} override means "follow the rule".</p>
+ *
+ * <p>How a bot gets to where it is going:
+ * <ul>
+ *   <li>With {@link DirectSteer} it walks straight there when nothing is in the way, which is the usual case in
+ *       the open and costs nothing.</li>
+ *   <li>Otherwise a path is searched, a slice of the search per tick (see {@link NavSearchBudget}), so a long
+ *       search never holds up the tick. While it runs the bot keeps walking the path it had.</li>
+ *   <li>The path is smoothed with {@link PathSmoother} into the few straight lines a player would walk, and the
+ *       jumps, drops, gaps and climbs in it stay where they are.</li>
+ *   <li>Several bots chasing one player share one {@link FlowField} instead of each searching.</li>
+ *   <li>Turning goes through {@link LookController}, so the view has a human's acceleration and leads the way
+ *       round a corner slightly before the body takes it.</li>
+ * </ul>
  */
 public final class NavController
 {
@@ -77,15 +95,45 @@ public final class NavController
             boolean avoidSoulSand,
             boolean allowOpenDoors,
             boolean allowOpenFenceGates,
-            boolean allowSwimming
+            boolean allowSwimming,
+            int searchBudget,
+            int searchBudgetTotal
     ) {}
 
     private static final ElytraAStarPathfinder ELYTRA_PATHFINDER = new ElytraAStarPathfinder();
-    private static final NavAStarPathfinder ASTAR = new NavAStarPathfinder();
 
     public static final int CHASE_CRIT_JUMP_LEAD_TICKS = 6;
     private static final int CHASE_REPATH_INTERVAL = 10;
     private static final double DEFAULT_CHASE_ATTACK_RANGE = 2.5D;
+    /** Ticks between looks at whether the goal can be walked to straight. */
+    private static final int DIRECT_STEER_RECHECK = 5;
+    /** How close to a waypoint counts as having reached it, in blocks. */
+    private static final double WAYPOINT_RADIUS = 0.9D;
+    /** Past this fraction of a leg a waypoint counts as passed, which is what stops the bot steering back for one. */
+    private static final double WAYPOINT_PASSED = 0.9D;
+    /** How close to a corner the bot has to come before it turns, rather than cutting it or clipping the wall. */
+    private static final double CORNER_RADIUS = 0.45D;
+    /** Dot product of two legs at the angle where a waypoint counts as a corner rather than a straight run. */
+    private static final double CORNER_ANGLE = 0.76D;
+    /** Yaw error, in degrees, at which the sideways correction is at its strongest. */
+    private static final double STRAFE_GAIN = 45.0D;
+    /** How close the view looks at the waypoint being walked to before it looks at the one after it. */
+    private static final double LOOK_LEAD_DISTANCE = 3.0D;
+    /** Angle the view considers itself to be on a path waypoint, in degrees. */
+    private static final float WAYPOINT_ANGLE = 2.5F;
+    /** Climb rate along a ladder or a vine, in blocks per tick. */
+    private static final double CLIMB_UP_SPEED = 0.2D;
+    private static final double CLIMB_DOWN_SPEED = -0.18D;
+    /** Horizontal speed, in blocks per tick, that counts as the momentum a long parkour gap needs. */
+    private static final double SPRINT_SPEED = 0.12D;
+    /** Ticks a bot will gather speed before jumping a gap that needs momentum anyway. */
+    private static final int RUN_UP_TICKS = 20;
+    /** Ticks a bot stops following a shared field after it has got stuck on one. */
+    private static final int FIELD_BYPASS_TICKS = 40;
+    /** Ticks of not getting any closer to the waypoint before the bot tries to work itself off a wall. */
+    private static final int STUCK_TICKS = 8;
+    /** How long the bot spends working itself off a wall once it has decided to. */
+    private static final int UNSTICK_TICKS = 12;
 
     private enum AirArrival
     {
@@ -95,6 +143,21 @@ public final class NavController
 
     private final EntityPlayerActionPack pack;
     private final ServerPlayer player;
+    private final LookController look;
+    private final NavAStarPathfinder.Search search = new NavAStarPathfinder.Search();
+    private final BudgetedSearch searchRunner = new BudgetedSearch();
+    private long[] smoothPath = new long[512];
+    private int[] smoothMoves = new int[512];
+    private long[] smoothOut = new long[512];
+    private int[] smoothOutMoves = new int[512];
+    /** True while the bot is following a flow field shared with the other chasers of its target. */
+    private boolean navFlowField = false;
+    /** True once a search has come back with no path at all, which is what makes a mode move on. */
+    private boolean navRouteFailed = false;
+    /** Set by chase mode on the ticks when the bot should be looking at the target rather than at the route. */
+    private boolean navAimAtTarget = false;
+    /** Ticks to leave the shared field alone after it has led this bot into something it could not get past. */
+    private int navFieldBypass = 0;
 
     private boolean navEnabled = false;
     private BotNavMode navMode = BotNavMode.AUTO;
@@ -104,14 +167,22 @@ public final class NavController
     private AirArrival navAirArrival = AirArrival.LAND;
     private Vec3 navAirRequestedTargetPos = null;
 
-    private List<BlockPos> navNodes = null;
     private List<Vec3> navWaypoints = null;
+    private List<NavAStarPathfinder.MoveType> navMoveTypes = null;
     private int navWaypointIndex = 0;
     private int navRepathCooldownTicks = 0;
     private boolean navNeedsRepath = false;
+    private BlockPos navSearchGoal = null;
+    private Vec3 navDirectTarget = null;
+    private int navDirectSteerTicks = 0;
+    private int navRunUpTicks = 0;
 
+    private LevelWalkability view = null;
     private double navLastDistanceToNext = Double.POSITIVE_INFINITY;
     private int navNoProgressTicks = 0;
+    private int navStuckTicks = 0;
+    private int navUnstickTicks = 0;
+    private float navUnstickStrafe = 0.0F;
     private int navJumpCooldownTicks = 0;
     private boolean navWaterJumping = false;
 
@@ -172,13 +243,11 @@ public final class NavController
     private int navPatrolIndex = 0;
     private boolean navPatrolReverse = false;
 
-    // Node / move types for advanced movement execution.
-    private List<NavAStarPathfinder.MoveType> navMoveTypes = null;
-
     public NavController(EntityPlayerActionPack pack)
     {
         this.pack = pack;
         this.player = pack.getPlayer();
+        this.look = new LookController(LookProfile.ofSkill(0.6, 0.5F), new Random(player.getUUID().hashCode()));
     }
 
     // ====== Auto-eating ======
@@ -451,13 +520,6 @@ public final class NavController
         return player.level().getFluidState(feet).is(FluidTags.WATER) || player.level().getFluidState(feet.above()).is(FluidTags.WATER);
     }
 
-    private boolean isOnIce()
-    {
-        BlockPos below = player.blockPosition().below();
-        BlockState state = player.level().getBlockState(below);
-        return state.is(Blocks.ICE) || state.is(Blocks.PACKED_ICE) || state.is(Blocks.BLUE_ICE) || state.is(Blocks.FROSTED_ICE);
-    }
-
     // ====== Settings overrides ======
 
     private boolean navOpt(Boolean overrideValue, boolean ruleValue)
@@ -583,15 +645,16 @@ public final class NavController
         navTargetPos = null;
         navArrivalRadius = 1.0D;
 
-        navNodes = null;
-        navWaypoints = null;
-        navWaypointIndex = 0;
+        clearPath();
+        search.cancel();
+        navSearchGoal = null;
         navRepathCooldownTicks = 0;
         navNeedsRepath = false;
         navNoProgressTicks = 0;
         navLastDistanceToNext = Double.POSITIVE_INFINITY;
         navJumpCooldownTicks = 0;
-        navMoveTypes = null;
+        releaseChaseField();
+        look.clearTarget();
 
         // Follow mode
         navFollowTarget = null;
@@ -639,13 +702,7 @@ public final class NavController
         navArrivalRadius = Math.max(0.0D, arrivalRadius);
         navAirArrival = AirArrival.LAND;
         navAirRequestedTargetPos = null;
-        navNodes = null;
-        navWaypoints = null;
-        navWaypointIndex = 0;
-        navNeedsRepath = true;
-        navRepathCooldownTicks = 0;
-        navNoProgressTicks = 0;
-        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        resetRoute();
     }
 
     public void gotoAir(Vec3 targetPos, double arrivalRadius, boolean landOnFloor)
@@ -665,13 +722,7 @@ public final class NavController
             navTargetPos = targetPos;
         }
 
-        navNodes = null;
-        navWaypoints = null;
-        navWaypointIndex = 0;
-        navNeedsRepath = true;
-        navRepathCooldownTicks = 0;
-        navNoProgressTicks = 0;
-        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        resetRoute();
     }
 
     public void follow(UUID targetUUID, double radius)
@@ -682,7 +733,8 @@ public final class NavController
         navFollowTarget = targetUUID;
         navFollowRadius = Math.max(1.0D, radius);
         navFollowRepathTicks = 0;
-        navArrivalRadius = radius;
+        navArrivalRadius = navFollowRadius;
+        resetRoute();
     }
 
     public void chase(UUID targetUUID, boolean crit, double attackRange, int attackInterval)
@@ -701,6 +753,7 @@ public final class NavController
         navChaseInJumpRange = false;
         navChaseTargetEntityId = -1;
         navArrivalRadius = navChaseAttackRange;
+        ChaseFlowFields.acquire(targetUUID);
         // Start the attack action
         pack.setAttackCritical(crit);
         pack.start(ActionType.ATTACK, Action.continuous());
@@ -716,7 +769,7 @@ public final class NavController
         navMineMaxCount = maxCount;
         navMinedCount = 0;
         navMineCurrentTarget = null;
-        navNeedsRepath = true;
+        resetRoute();
     }
 
     public void come(Vec3 senderPos, double arrivalRadius)
@@ -738,7 +791,7 @@ public final class NavController
         if (!navPatrolWaypoints.isEmpty())
         {
             navTargetPos = navPatrolWaypoints.get(0);
-            navNeedsRepath = true;
+            resetRoute();
         }
     }
 
@@ -786,6 +839,12 @@ public final class NavController
 
     public void setChaseAttackCooldown(int cooldown) { navChaseAttackCooldown = cooldown; }
 
+    /** True while this bot's own search still has nodes to expand, which is how the self-test watches it spread over ticks. */
+    public boolean isSearchRunning() { return search.searching(); }
+
+    /** True while this bot is following a shared flow field towards its chase target. */
+    public boolean isFollowingFlowField() { return navFlowField; }
+
     // ====== Ticking ======
 
     public void tick(Settings settings)
@@ -824,6 +883,10 @@ public final class NavController
         if (navJumpCooldownTicks > 0)
         {
             navJumpCooldownTicks--;
+        }
+        if (navFieldBypass > 0)
+        {
+            navFieldBypass--;
         }
 
         // Dispatch to mode-specific tick handlers.
@@ -946,6 +1009,8 @@ public final class NavController
                 }
 
                 navWaypoints = waypoints;
+                navMoveTypes = new ArrayList<>(Collections.nCopies(waypoints.size(),
+                        NavAStarPathfinder.MoveType.WALK));
                 navWaypointIndex = 0;
                 pack.setGlideEnabled(true);
                 if (navAirArrival == AirArrival.DROP)
@@ -963,311 +1028,7 @@ public final class NavController
             return;
         }
 
-        if (navNeedsRepath && navRepathCooldownTicks <= 0)
-        {
-            navNeedsRepath = false;
-            navRepathCooldownTicks = 20;
-
-            BlockPos start = player.blockPosition();
-            BlockPos goal = BlockPos.containing(navTargetPos);
-            NavAStarPathfinder.Settings pathSettings = buildPathSettings(settings);
-            NavAStarPathfinder.Traversal traversal = (effectiveMode == BotNavMode.WATER) ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
-            NavAStarPathfinder.PathResult result = ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, pathSettings);
-            if (result == null || result.positions().isEmpty())
-            {
-                stop();
-                return;
-            }
-
-            List<BlockPos> raw = result.positions();
-            // Keep node-to-node fidelity so the follower can detect jump edges.
-            navNodes = raw;
-            navMoveTypes = result.moveTypes();
-
-            List<Vec3> waypoints = new ArrayList<>(raw.size());
-            for (BlockPos p : raw)
-            {
-                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
-            }
-            navWaypoints = waypoints;
-            navWaypointIndex = 0;
-        }
-
-        if (pack.isGlideEnabled())
-        {
-            pack.setGlideEnabled(false);
-        }
-
-        if (navWaypoints == null || navWaypointIndex >= navWaypoints.size())
-        {
-            navNeedsRepath = true;
-            return;
-        }
-
-        Vec3 next = navWaypoints.get(navWaypointIndex);
-        double dist = player.position().distanceTo(next);
-
-        BlockPos nextFeet = BlockPos.containing(next);
-        BlockState nextState = player.level().getBlockState(nextFeet);
-        BlockState nextBelow = player.level().getBlockState(nextFeet.below());
-        boolean cobwebAhead = isCobweb(nextState) || isCobweb(nextBelow);
-        if (avoidCobwebs(settings) && !allowBreakCobwebs(settings) && cobwebAhead)
-        {
-            navNeedsRepath = true;
-            return;
-        }
-        if (avoidLava(settings) && (isLava(nextState) || isLava(nextBelow)))
-        {
-            navNeedsRepath = true;
-            return;
-        }
-        if (avoidFire(settings) && (isFire(nextState) || isFire(nextBelow)))
-        {
-            navNeedsRepath = true;
-            return;
-        }
-        if (avoidPowderSnow(settings) && (isPowderSnow(nextState) || isPowderSnow(nextBelow)))
-        {
-            navNeedsRepath = true;
-            return;
-        }
-
-        if (allowBreakCobwebs(settings) && cobwebAhead && dist <= 2.0D)
-        {
-            tryBreakBlock(isCobweb(nextState) ? nextFeet : nextFeet.below(), Direction.UP, settings);
-            navNeedsRepath = true;
-            return;
-        }
-
-        if (allowPlaceBlocks(settings) && dist <= 1.6D)
-        {
-            if (tryPlaceBridgeBlock(nextFeet, settings))
-            {
-                navNeedsRepath = true;
-                return;
-            }
-        }
-
-        // Adaptive waypoint arrival distance: wider on ice to account for sliding.
-        double arrivalDist = isOnIce() ? 1.8D : 0.85D;
-        if (dist <= arrivalDist)
-        {
-            navWaypointIndex++;
-            navNoProgressTicks = 0;
-            navLastDistanceToNext = Double.POSITIVE_INFINITY;
-            if (navWaterJumping)
-            {
-                player.setJumping(false);
-                navWaterJumping = false;
-            }
-            return;
-        }
-
-        if (dist + 0.01D >= navLastDistanceToNext)
-        {
-            navNoProgressTicks++;
-        }
-        else
-        {
-            navNoProgressTicks = 0;
-        }
-        navLastDistanceToNext = dist;
-
-        if (navNoProgressTicks > 60)
-        {
-            navNoProgressTicks = 0;
-            if (allowBreakBlocks(settings) && tryBreakBlockingAhead(settings))
-            {
-                navNeedsRepath = true;
-                return;
-            }
-            navNeedsRepath = true;
-            return;
-        }
-
-        Vec2 rot = rotationsTowards(player.getEyePosition(1.0F), next);
-        pack.look(stepYaw(player.getYRot(), rot.x, 40.0F), player.getXRot());
-
-        // Determine the MoveType for the current waypoint.
-        NavAStarPathfinder.MoveType currentMoveType = NavAStarPathfinder.MoveType.WALK;
-        if (navMoveTypes != null && navWaypointIndex < navMoveTypes.size())
-        {
-            currentMoveType = navMoveTypes.get(navWaypointIndex);
-        }
-
-        // Handle door/fence gate opening.
-        BlockState nextBlockState = player.level().getBlockState(nextFeet);
-        if (nextBlockState.getBlock() instanceof DoorBlock door && allowOpenDoors(settings))
-        {
-            if (!door.isOpen(nextBlockState))
-            {
-                door.setOpen(player, player.level(), nextBlockState, nextFeet, true);
-            }
-        }
-        if (nextBlockState.getBlock() instanceof FenceGateBlock && allowOpenFenceGates(settings))
-        {
-            if (!nextBlockState.getValue(FenceGateBlock.OPEN))
-            {
-                player.level().setBlock(nextFeet, nextBlockState.setValue(FenceGateBlock.OPEN, true), 2);
-            }
-        }
-
-        // Handle break-through: mine blocks ahead.
-        if (currentMoveType == NavAStarPathfinder.MoveType.BREAK_THROUGH && allowBreakBlocks(settings) && dist <= 2.5D)
-        {
-            BlockState feetAhead = player.level().getBlockState(nextFeet);
-            BlockState headAhead = player.level().getBlockState(nextFeet.above());
-            if (!feetAhead.getCollisionShape(player.level(), nextFeet).isEmpty())
-            {
-                tryBreakBlock(nextFeet, Direction.UP, settings);
-                return;
-            }
-            if (!headAhead.getCollisionShape(player.level(), nextFeet.above()).isEmpty())
-            {
-                tryBreakBlock(nextFeet.above(), Direction.UP, settings);
-                return;
-            }
-        }
-
-        // Handle descend-mine: mine block below.
-        if (currentMoveType == NavAStarPathfinder.MoveType.DESCEND_MINE && allowBreakBlocks(settings) && dist <= 1.5D)
-        {
-            BlockPos belowTarget = new BlockPos(nextFeet.getX(), nextFeet.getY(), nextFeet.getZ());
-            BlockState belowState = player.level().getBlockState(belowTarget);
-            if (!belowState.getCollisionShape(player.level(), belowTarget).isEmpty())
-            {
-                tryBreakBlock(belowTarget, Direction.UP, settings);
-                return;
-            }
-        }
-
-        // Handle pillar: place block at feet to go up.
-        if (currentMoveType == NavAStarPathfinder.MoveType.PILLAR && allowPlaceBlocks(settings) && dist <= 1.5D)
-        {
-            BlockPos placeFeet = player.blockPosition();
-            if (tryPlaceBridgeBlock(placeFeet, settings))
-            {
-                // Jump onto the placed block.
-                if (player.onGround() && navJumpCooldownTicks <= 0)
-                {
-                    navJumpCooldownTicks = 8;
-                    pack.start(ActionType.JUMP, Action.once());
-                }
-                return;
-            }
-        }
-
-        // Sprint based on settings and move type.
-        // Disable sprint on ice to prevent overshooting waypoints.
-        boolean onIce = isOnIce();
-        boolean shouldSprint = allowSprint(settings) && !onIce && (currentMoveType == NavAStarPathfinder.MoveType.WALK
-                || currentMoveType == NavAStarPathfinder.MoveType.PARKOUR);
-
-        // Slow down on ice when approaching waypoint to reduce overshoot.
-        float forwardSpeed = 1.0F;
-        if (onIce && dist <= 3.0D)
-        {
-            forwardSpeed = 0.4F;
-        }
-
-        pack.setSneaking(false);
-        pack.setSprinting(shouldSprint);
-        pack.setForward(forwardSpeed);
-        pack.setStrafing(0.0F);
-
-        boolean wantUp = next.y > player.getY() + 0.2D;
-        boolean wantDown = next.y < player.getY() - 0.4D;
-        if (effectiveMode == BotNavMode.WATER)
-        {
-            boolean inWater = isInWaterish();
-            if (inWater)
-            {
-                if (allowSwimming(settings))
-                {
-                    // Full swimming mode: 3D navigation in water.
-                    // Look toward the waypoint in 3D (including pitch).
-                    Vec2 swimRot = rotationsTowards(player.getEyePosition(1.0F), next);
-                    pack.look(stepYaw(player.getYRot(), swimRot.x, 40.0F), swimRot.y);
-
-                    if (wantUp)
-                    {
-                        player.setJumping(true);
-                        navWaterJumping = true;
-                        pack.setSneaking(false);
-                    }
-                    else if (wantDown)
-                    {
-                        // Descend: sneak to sink in water.
-                        player.setJumping(false);
-                        navWaterJumping = false;
-                        pack.setSneaking(true);
-                    }
-                    else
-                    {
-                        // Horizontal swimming.
-                        player.setJumping(false);
-                        navWaterJumping = false;
-                        pack.setSneaking(false);
-                    }
-                    // Sprint-swim for faster underwater movement.
-                    if (allowSprint(settings))
-                    {
-                        pack.setSprinting(true);
-                    }
-                }
-                else
-                {
-                    // Floating mode (default): stay at surface, navigate horizontally.
-                    // Always jump to keep at the water surface.
-                    player.setJumping(true);
-                    navWaterJumping = true;
-                    pack.setSneaking(false);
-                }
-            }
-            else if (navWaterJumping)
-            {
-                player.setJumping(false);
-                navWaterJumping = false;
-            }
-        }
-        else
-        {
-            boolean needsPlannedJump = false;
-            if (navNodes != null && navWaypointIndex < navNodes.size())
-            {
-                BlockPos cur = player.blockPosition();
-                BlockPos planned = navNodes.get(navWaypointIndex);
-                int dx = Math.abs(planned.getX() - cur.getX());
-                int dz = Math.abs(planned.getZ() - cur.getZ());
-                // A 2-block cardinal move or parkour move is a planned gap-jump.
-                needsPlannedJump = (dx + dz) >= 2 && (dx == 0 || dz == 0);
-            }
-
-            // Parkour: always sprint-jump.
-            if (currentMoveType == NavAStarPathfinder.MoveType.PARKOUR)
-            {
-                needsPlannedJump = true;
-                pack.setSprinting(true);
-            }
-
-            boolean shouldJump = wantUp || (needsPlannedJump && dist <= 1.35D);
-            if (shouldJump && player.onGround() && navJumpCooldownTicks <= 0)
-            {
-                // Check head clearance: don't jump if there's a solid block above the player's head
-                BlockPos headAbove = player.blockPosition().above(2);
-                BlockState headAboveState = player.level().getBlockState(headAbove);
-                if (!headAboveState.getCollisionShape(player.level(), headAbove).isEmpty())
-                {
-                    // Can't jump - ceiling too low; try to path around instead
-                    navNeedsRepath = true;
-                }
-                else
-                {
-                    navJumpCooldownTicks = 8;
-                    pack.start(ActionType.JUMP, Action.once());
-                }
-            }
-        }
+        tickGround(settings, effectiveMode, true);
     }
 
     // --- Follow mode: re-path periodically to stay near a target player ---
@@ -1298,9 +1059,7 @@ public final class NavController
         if (distToTarget <= navFollowRadius)
         {
             pack.stopMovement();
-            navWaypoints = null;
-            navNodes = null;
-            navMoveTypes = null;
+            clearRoute();
             // Still keep following – just wait.
             navFollowRepathTicks = Math.min(navFollowRepathTicks, 10);
         }
@@ -1309,35 +1068,11 @@ public final class NavController
         if (navFollowRepathTicks <= 0 && distToTarget > navFollowRadius)
         {
             navFollowRepathTicks = navFollowRepathInterval;
-            navTargetPos = target.position();
-
-            BlockPos start = player.blockPosition();
-            BlockPos goal = BlockPos.containing(navTargetPos);
-            NavAStarPathfinder.Settings pathSettings = buildPathSettings(settings);
-            NavAStarPathfinder.Traversal traversal = isInWaterish() ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
-            NavAStarPathfinder.PathResult result = ASTAR.findPath(level, start, goal, traversal, pathSettings);
-            if (result == null || result.positions().isEmpty())
-            {
-                navWaypoints = null;
-                navNodes = null;
-                navMoveTypes = null;
-                return;
-            }
-            navNodes = result.positions();
-            navMoveTypes = result.moveTypes();
-            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
-            for (BlockPos p : navNodes)
-            {
-                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
-            }
-            navWaypoints = waypoints;
-            navWaypointIndex = 0;
-            navNoProgressTicks = 0;
-            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+            navNeedsRepath = true;
         }
+        navTargetPos = target.position();
 
-        // Execute movement along waypoints (shared logic).
-        tickWaypointFollowing(BotNavMode.LAND, settings);
+        tickGround(settings, BotNavMode.LAND, false);
     }
 
     // --- Chase mode: follow a player and attack them ---
@@ -1367,8 +1102,9 @@ public final class NavController
 
         double distToTarget = player.position().distanceTo(target.position());
 
-        // Always look at the target when chasing.
-        pack.lookAt(target.position().add(0, target.getBbHeight() * 0.5, 0));
+        // While closing in the bot looks where it is going, so the view leads the route round obstacles; from a
+        // hit away it looks at the target, which is what its swing has to be lined up on.
+        navAimAtTarget = distToTarget <= navChaseAttackRange + critJumpDistance;
 
         // Update in-range state and entity ID for the ATTACK action.
         if (distToTarget <= navChaseAttackRange)
@@ -1378,9 +1114,8 @@ public final class NavController
 
             // Stop moving, face target, let the attack action handle the rest.
             pack.stopMovement();
-            navWaypoints = null;
-            navNodes = null;
-            navMoveTypes = null;
+            clearRoute();
+            navAimAtTarget = true;
             navChaseRepathTicks = Math.min(navChaseRepathTicks, 5);
         }
         else
@@ -1390,42 +1125,19 @@ public final class NavController
             navChaseTargetEntityId = -1;
         }
 
-        // Re-path to target if needed.
+        // Re-path to the target when it is time to, but keep walking the path we have while the new one is
+        // being searched.
         navChaseRepathTicks--;
-        if (navChaseRepathTicks <= 0 && distToTarget > navChaseAttackRange)
+        if (navChaseRepathTicks <= 0)
         {
             navChaseRepathTicks = CHASE_REPATH_INTERVAL;
-            navTargetPos = target.position();
-
-            BlockPos start = player.blockPosition();
-            BlockPos goal = BlockPos.containing(navTargetPos);
-            NavAStarPathfinder.Settings pathSettings = buildPathSettings(settings);
-            NavAStarPathfinder.Traversal traversal = isInWaterish() ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
-            NavAStarPathfinder.PathResult result = ASTAR.findPath(level, start, goal, traversal, pathSettings);
-            if (result == null || result.positions().isEmpty())
-            {
-                navWaypoints = null;
-                navNodes = null;
-                navMoveTypes = null;
-                return;
-            }
-            navNodes = result.positions();
-            navMoveTypes = result.moveTypes();
-            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
-            for (BlockPos p : navNodes)
-            {
-                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
-            }
-            navWaypoints = waypoints;
-            navWaypointIndex = 0;
-            navNoProgressTicks = 0;
-            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+            navNeedsRepath = true;
         }
+        navTargetPos = target.position();
 
-        // Execute movement along waypoints (shared logic).
         if (distToTarget > navChaseAttackRange)
         {
-            tickWaypointFollowing(BotNavMode.LAND, settings);
+            tickGround(settings, BotNavMode.LAND, false);
         }
     }
 
@@ -1475,9 +1187,7 @@ public final class NavController
                 // Block was already mined or changed; find new target.
                 navMinedCount++;
                 navMineCurrentTarget = null;
-                navWaypoints = null;
-                navNodes = null;
-                navMoveTypes = null;
+                clearRoute();
                 return;
             }
             tryBreakBlock(navMineCurrentTarget, Direction.UP, settings);
@@ -1485,37 +1195,7 @@ public final class NavController
             return;
         }
 
-        // Path to the target block.
-        if (navNeedsRepath && navRepathCooldownTicks <= 0)
-        {
-            navNeedsRepath = false;
-            navRepathCooldownTicks = 20;
-
-            BlockPos start = player.blockPosition();
-            BlockPos goal = navMineCurrentTarget;
-            NavAStarPathfinder.Settings pathSettings = buildPathSettings(settings);
-            NavAStarPathfinder.PathResult result = ASTAR.findPath(level, start, goal, NavAStarPathfinder.Traversal.AMPHIBIOUS, pathSettings);
-            if (result == null || result.positions().isEmpty())
-            {
-                // Can't reach; try another target.
-                navMineCurrentTarget = null;
-                navNeedsRepath = true;
-                return;
-            }
-            navNodes = result.positions();
-            navMoveTypes = result.moveTypes();
-            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
-            for (BlockPos p : navNodes)
-            {
-                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
-            }
-            navWaypoints = waypoints;
-            navWaypointIndex = 0;
-            navNoProgressTicks = 0;
-            navLastDistanceToNext = Double.POSITIVE_INFINITY;
-        }
-
-        tickWaypointFollowing(BotNavMode.LAND, settings);
+        tickGround(settings, BotNavMode.LAND, true);
     }
 
     // --- Patrol mode: walk between waypoints ---
@@ -1566,135 +1246,781 @@ public final class NavController
             navNeedsRepath = true;
         }
 
-        // Path to current patrol target.
-        if (navNeedsRepath && navRepathCooldownTicks <= 0)
+        tickGround(settings, BotNavMode.LAND, true);
+        if (navRouteFailed)
         {
-            navNeedsRepath = false;
-            navRepathCooldownTicks = 20;
+            // No route to this waypoint at all: skip it rather than stand in front of it.
+            if (navPatrolLoop)
+            {
+                navPatrolIndex = (navPatrolIndex + 1) % navPatrolWaypoints.size();
+                navTargetPos = navPatrolWaypoints.get(navPatrolIndex);
+                navNeedsRepath = true;
+                navRepathCooldownTicks = 0;
+                navRouteFailed = false;
+            }
+            else
+            {
+                stop();
+            }
+        }
+    }
 
-            BlockPos start = player.blockPosition();
-            BlockPos goal = BlockPos.containing(navTargetPos);
-            NavAStarPathfinder.Settings pathSettings = buildPathSettings(settings);
-            NavAStarPathfinder.Traversal traversal = isInWaterish() ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
-            NavAStarPathfinder.PathResult result = ASTAR.findPath((ServerLevel) player.level(), start, goal, traversal, pathSettings);
-            if (result == null || result.positions().isEmpty())
+    // ====== Routing and following, shared by every land mode ======
+
+    /**
+     * Finds a route towards {@link #navTargetPos} and walks it.
+     *
+     * @param stopWhenUnreachable whether a bot with no route at all gives up instead of retrying
+     * @return false when there is nothing to walk yet, which is while a search is still being searched
+     */
+    private boolean tickGround(Settings settings, BotNavMode effectiveMode, boolean stopWhenUnreachable)
+    {
+        ServerLevel level = (ServerLevel) player.level();
+        LevelWalkability view = view(level, settings);
+        BlockPos goal = goalNode(view);
+        if (goal == null)
+        {
+            if (stopWhenUnreachable)
             {
-                // Skip this waypoint.
-                if (navPatrolLoop)
-                {
-                    navPatrolIndex = (navPatrolIndex + 1) % navPatrolWaypoints.size();
-                    navTargetPos = navPatrolWaypoints.get(navPatrolIndex);
-                    navNeedsRepath = true;
-                }
-                else
-                {
-                    stop();
-                }
-                return;
+                stop();
+                pack.stopMovement();
             }
-            navNodes = result.positions();
-            navMoveTypes = result.moveTypes();
-            List<Vec3> waypoints = new ArrayList<>(navNodes.size());
-            for (BlockPos p : navNodes)
-            {
-                waypoints.add(new Vec3(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D));
-            }
-            navWaypoints = waypoints;
-            navWaypointIndex = 0;
-            navNoProgressTicks = 0;
-            navLastDistanceToNext = Double.POSITIVE_INFINITY;
+            return false;
         }
 
-        tickWaypointFollowing(BotNavMode.LAND, settings);
+        if (pack.isGlideEnabled())
+        {
+            pack.setGlideEnabled(false);
+        }
+
+        route(level, view, goal, settings);
+
+        if (navWaypoints == null || navWaypointIndex >= navWaypoints.size())
+        {
+            // Nothing to walk yet: a search is running or about to start, so the bot looks at the goal and waits
+            // rather than setting off in a direction nothing has been planned for.
+            lookAt(surface(view, goal), WAYPOINT_ANGLE);
+            if (!search.searching())
+            {
+                navNeedsRepath = navRepathCooldownTicks <= 0;
+            }
+            return false;
+        }
+
+        followPath(view, settings, effectiveMode);
+        return true;
     }
 
     /**
-     * Shared waypoint-following movement logic for follow/mine/patrol modes.
-     * Handles walking, sprinting, jumping, parkour, door-opening, etc.
+     * Puts something to walk: the shared field when a crowd chases one target, a straight line when the goal can
+     * be walked to, and otherwise a path, found as far as this tick's budget allows. While a search runs the path
+     * the bot already had stays in place, so it keeps moving.
      */
-    private void tickWaypointFollowing(BotNavMode effectiveMode, Settings settings)
+    private void route(ServerLevel level, LevelWalkability view, BlockPos goal, Settings settings)
     {
-        if (navWaypoints == null || navWaypointIndex >= navWaypoints.size())
-        {
-            return;
-        }
+        navAimAtTarget = false;
 
-        Vec3 next = navWaypoints.get(navWaypointIndex);
-        double dist = player.position().distanceTo(next);
-
-        if (dist <= 0.85D)
+        if (navMode == BotNavMode.CHASE && navChaseTarget != null && navFieldBypass <= 0
+                && ChaseFlowFields.isShared(navChaseTarget))
         {
-            navWaypointIndex++;
-            navNoProgressTicks = 0;
-            navLastDistanceToNext = Double.POSITIVE_INFINITY;
-            if (navWaterJumping)
+            navFlowField = true;
+            navAimAtTarget = navChaseInRange;
+            BlockPos at = feetNode(view);
+            if (at != null)
             {
-                player.setJumping(false);
-                navWaterJumping = false;
+                ChaseFlowFields.targetMoved(navChaseTarget, goal);
+                int direction = ChaseFlowFields.direction(level.getServer(), view, navChaseTarget, at,
+                        settings.searchBudgetTotal());
+                if (direction != FlowField.NO_ROUTE)
+                {
+                    int nx = at.getX() + FlowField.stepX(direction);
+                    int ny = at.getY() + FlowField.stepY(direction);
+                    int nz = at.getZ() + FlowField.stepZ(direction);
+                    if (view.canStand(nx, ny, nz))
+                    {
+                        installStep(view, nx, ny, nz, stepMove(direction));
+                        return;
+                    }
+                }
             }
+        }
+        navFlowField = false;
+
+        // Straight there, when the walk is clear. The walk is re-checked every few ticks, since anything can walk
+        // into it, and while it holds the bot keeps aiming at wherever the goal is now.
+        if (--navDirectSteerTicks <= 0 ? recheckDirectSteer(view, goal) : navDirectTarget != null)
+        {
+            if (navWaypoints == null)
+            {
+                startDirectSteer(view, goal);
+            }
+            navWaypoints.set(0, surface(view, goal));
             return;
         }
 
-        if (dist + 0.01D >= navLastDistanceToNext)
+        advanceSearch(level, view, goal, settings);
+    }
+
+    /**
+     * Whether the bot can still walk straight at the goal, dropping the straight line and asking for a path when
+     * something has got in the way of it.
+     */
+    private boolean recheckDirectSteer(LevelWalkability view, BlockPos goal)
+    {
+        navDirectSteerTicks = DIRECT_STEER_RECHECK;
+        BlockPos at = feetNode(view);
+        if (at != null && DirectSteer.canWalkLine(view, at.getX(), at.getY(), at.getZ(), goal.getX(),
+                goal.getY(), goal.getZ()))
         {
-            navNoProgressTicks++;
+            if (navDirectTarget == null)
+            {
+                startDirectSteer(view, goal);
+            }
+            return true;
+        }
+        if (navDirectTarget != null)
+        {
+            navDirectTarget = null;
+            clearPath();
+            navNeedsRepath = true;
+            navRepathCooldownTicks = 0;
+        }
+        return false;
+    }
+
+    private NavAStarPathfinder.MoveType stepMove(int direction)
+    {
+        int up = FlowField.stepY(direction);
+        if (up > 0) return NavAStarPathfinder.MoveType.JUMP;
+        if (up < 0) return NavAStarPathfinder.MoveType.FALL;
+        return NavAStarPathfinder.MoveType.WALK;
+    }
+
+    /** Steers straight at the goal, with no path, for as long as the straight walk stays clear. */
+    private void startDirectSteer(LevelWalkability view, BlockPos goal)
+    {
+        clearPath();
+        navWaypoints = new ArrayList<>(1);
+        navMoveTypes = new ArrayList<>(1);
+        navWaypoints.add(surface(view, goal));
+        navMoveTypes.add(NavAStarPathfinder.MoveType.WALK);
+        navWaypointIndex = 0;
+        navDirectTarget = navWaypoints.get(0);
+        navRouteFailed = false;
+        search.cancel();
+        navSearchGoal = null;
+        navNeedsRepath = false;
+        navRepathCooldownTicks = 0;
+    }
+
+    /**
+     * Starts a search if there is none, gives the one that is running this tick's slice of the budget, and takes up
+     * the path it produced. A search that comes back with nothing leaves {@link #navRouteFailed} set, which is what
+     * tells a mode with somewhere else to go that this waypoint is out of reach.
+     */
+    private void advanceSearch(ServerLevel level, LevelWalkability view, BlockPos goal, Settings settings)
+    {
+        if (!search.searching())
+        {
+            if (!navNeedsRepath || navRepathCooldownTicks > 0)
+            {
+                return;
+            }
+            navNeedsRepath = false;
+            navRepathCooldownTicks = 20;
+            navSearchGoal = goal;
+            NavAStarPathfinder.Traversal traversal = isInWaterish()
+                    ? NavAStarPathfinder.Traversal.WATER : NavAStarPathfinder.Traversal.AMPHIBIOUS;
+            search.begin(view, player.blockPosition(), goal, traversal, buildPathSettings(settings));
+        }
+
+        NavSearchBudget.run(level.getServer(), settings.searchBudget(), settings.searchBudgetTotal(),
+                searchRunner, search);
+        if (!search.done())
+        {
+            return;
+        }
+
+        NavAStarPathfinder.PathResult result = search.result();
+        navSearchGoal = null;
+        if (result == null || result.positions().isEmpty())
+        {
+            clearPath();
+            navRouteFailed = true;
+            navNeedsRepath = false;
+            return;
+        }
+        installPath(view, result);
+    }
+
+    /** Smooths a freshly found path into the few straight legs a player would walk, and adopts it. */
+    private void installPath(LevelWalkability view, NavAStarPathfinder.PathResult result)
+    {
+        List<BlockPos> positions = result.positions();
+        int count = positions.size();
+        if (smoothPath.length < count)
+        {
+            int size = Math.max(count, smoothPath.length * 2);
+            smoothPath = new long[size];
+            smoothMoves = new int[size];
+            smoothOut = new long[size];
+            smoothOutMoves = new int[size];
+        }
+        for (int i = 0; i < count; i++)
+        {
+            BlockPos pos = positions.get(i);
+            smoothPath[i] = NavPos.pack(pos.getX(), pos.getY(), pos.getZ());
+            smoothMoves[i] = result.moveTypes().get(i).ordinal();
+        }
+        int smoothed = PathSmoother.smooth(view, smoothPath, smoothMoves, count, smoothOut, smoothOutMoves);
+
+        navWaypoints = new ArrayList<>(smoothed);
+        navMoveTypes = new ArrayList<>(smoothed);
+        for (int i = 0; i < smoothed; i++)
+        {
+            navWaypoints.add(surface(view, NavPos.unpackX(smoothOut[i]), NavPos.unpackY(smoothOut[i]),
+                    NavPos.unpackZ(smoothOut[i])));
+            navMoveTypes.add(NavAStarPathfinder.MoveType.values()[smoothOutMoves[i]]);
+        }
+        navWaypointIndex = 0;
+        navDirectTarget = null;
+        navRouteFailed = false;
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        navRunUpTicks = 0;
+        navRepathCooldownTicks = 0;
+    }
+
+    /** Adopts a single cell as the whole route, which is how a shared flow field is followed one step at a time. */
+    private void installStep(LevelWalkability view, int x, int y, int z, NavAStarPathfinder.MoveType move)
+    {
+        Vec3 step = surface(view, x, y, z);
+        if (navWaypoints == null || navMoveTypes == null || navWaypoints.size() != 1)
+        {
+            navWaypoints = new ArrayList<>(1);
+            navMoveTypes = new ArrayList<>(1);
+            navWaypoints.add(step);
+            navMoveTypes.add(move);
         }
         else
         {
-            navNoProgressTicks = 0;
+            navWaypoints.set(0, step);
+            navMoveTypes.set(0, move);
         }
-        navLastDistanceToNext = dist;
+        navWaypointIndex = 0;
+        navDirectTarget = null;
+        navRouteFailed = false;
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        navRunUpTicks = 0;
+    }
+
+    /**
+     * Walks the current leg: opens what is in the way, mines or places what the move calls for, turns the way with
+     * the look controller, and steps or jumps as the move and the ground need.
+     */
+    private void followPath(LevelWalkability view, Settings settings, BotNavMode effectiveMode)
+    {
+        Vec3 next = navWaypoints.get(navWaypointIndex);
+        NavAStarPathfinder.MoveType move = navMoveTypes.get(navWaypointIndex);
+        Vec3 previous = navWaypointIndex == 0 ? start() : navWaypoints.get(navWaypointIndex - 1);
+        double distance = player.position().distanceTo(next);
+
+        if (move == NavAStarPathfinder.MoveType.CLIMB_UP || move == NavAStarPathfinder.MoveType.CLIMB_DOWN)
+        {
+            climb(view, next, move);
+            return;
+        }
+
+        if (reached(previous, next))
+        {
+            advanceWaypoint();
+            return;
+        }
+
+        if (distance + 0.01D < navLastDistanceToNext)
+        {
+            navNoProgressTicks = 0;
+            navStuckTicks = 0;
+        }
+        else
+        {
+            navNoProgressTicks++;
+            navStuckTicks++;
+        }
+        navLastDistanceToNext = distance;
+
+        if (navUnstickTicks > 0 && --navUnstickTicks == 0)
+        {
+            navStuckTicks = 0;
+        }
+        if (navUnstickTicks == 0 && navStuckTicks >= STUCK_TICKS)
+        {
+            startUnsticking(view, next);
+        }
+        if (navUnstickTicks > 0)
+        {
+            // Wedged: a bot that is neither reaching the waypoint nor getting any closer to it walks into
+            // whatever is in the way, so it leans on it and slides along towards the side with room.
+            pack.setSneaking(false);
+            pack.setSprinting(false);
+            pack.setForward(0.85F);
+            pack.setStrafing(navUnstickStrafe);
+            return;
+        }
 
         if (navNoProgressTicks > 60)
         {
             navNoProgressTicks = 0;
+            // A shared field says which cell to aim at, not how to get into it, so a bot that has stopped making
+            // headway on one stops following it for a while and searches a way of its own.
+            if (navFlowField)
+            {
+                navFieldBypass = FIELD_BYPASS_TICKS;
+                clearRoute();
+                return;
+            }
+            if (allowBreakBlocks(settings) && tryBreakBlockingAhead(settings))
+            {
+                navNeedsRepath = true;
+                return;
+            }
             navNeedsRepath = true;
+            navRepathCooldownTicks = 0;
             return;
         }
 
-        Vec2 rot2 = rotationsTowards(player.getEyePosition(1.0F), next);
-        pack.look(stepYaw(player.getYRot(), rot2.x, 40.0F), player.getXRot());
-
-        NavAStarPathfinder.MoveType moveType = NavAStarPathfinder.MoveType.WALK;
-        if (navMoveTypes != null && navWaypointIndex < navMoveTypes.size())
+        BlockPos nextFeet = BlockPos.containing(next);
+        if (!handleBlockInTheWay(settings, nextFeet, move, distance))
         {
-            moveType = navMoveTypes.get(navWaypointIndex);
+            return;
         }
 
-        boolean shouldSprint = allowSprint(settings) && (moveType == NavAStarPathfinder.MoveType.WALK
-                || moveType == NavAStarPathfinder.MoveType.PARKOUR);
+        boolean parkour = move == NavAStarPathfinder.MoveType.PARKOUR
+                || move == NavAStarPathfinder.MoveType.PARKOUR_RUNUP;
+        boolean onIce = view.onIce(player.blockPosition().getX(), Mth.floor(player.getY()),
+                player.blockPosition().getZ());
+        boolean sprint = allowSprint(settings) && !onIce && (move == NavAStarPathfinder.MoveType.WALK || parkour);
+
+        lookAt(navAimAtTarget ? navTargetPos : lookTarget(), WAYPOINT_ANGLE);
+
+        float forward = 1.0F;
+        float strafe = strafeTowards(next);
+        if (onIce && distance <= 3.0D)
+        {
+            // Slow down on ice so the bot does not slide past the waypoint it is aiming at.
+            forward = 0.4F;
+            strafe = 0.0F;
+        }
+
         pack.setSneaking(false);
-        pack.setSprinting(shouldSprint);
-        pack.setForward(1.0F);
-        pack.setStrafing(0.0F);
+        pack.setSprinting(sprint);
+        pack.setForward(forward);
+        pack.setStrafing(strafe);
+
+        if (effectiveMode == BotNavMode.WATER && isInWaterish())
+        {
+            swim(next, settings);
+            return;
+        }
 
         boolean wantUp = next.y > player.getY() + 0.2D;
-        boolean needsPlannedJump = false;
-        if (navNodes != null && navWaypointIndex < navNodes.size())
-        {
-            BlockPos cur = player.blockPosition();
-            BlockPos planned = navNodes.get(navWaypointIndex);
-            int ddx = Math.abs(planned.getX() - cur.getX());
-            int ddz = Math.abs(planned.getZ() - cur.getZ());
-            needsPlannedJump = (ddx + ddz) >= 2 && (ddx == 0 || ddz == 0);
-        }
-        if (moveType == NavAStarPathfinder.MoveType.PARKOUR)
-        {
-            needsPlannedJump = true;
-            pack.setSprinting(true);
-        }
+        jump(view, next, move, wantUp || (parkour && atLedge(view, next)));
+    }
 
-        boolean shouldJump = wantUp || (needsPlannedJump && dist <= 1.35D);
-        if (shouldJump && player.onGround() && navJumpCooldownTicks <= 0)
+    /**
+     * Doors to open and blocks to mine or place for the move being walked. Returns false when the bot spent this
+     * tick on the block instead of walking.
+     */
+    private boolean handleBlockInTheWay(Settings settings, BlockPos nextFeet, NavAStarPathfinder.MoveType move,
+            double distance)
+    {
+        BlockState nextBlockState = player.level().getBlockState(nextFeet);
+        if (nextBlockState.getBlock() instanceof DoorBlock door && allowOpenDoors(settings))
         {
-            BlockPos headAbove = player.blockPosition().above(2);
-            BlockState headAboveState = player.level().getBlockState(headAbove);
-            if (headAboveState.getCollisionShape(player.level(), headAbove).isEmpty())
+            if (!door.isOpen(nextBlockState))
             {
-                navJumpCooldownTicks = 8;
-                pack.start(ActionType.JUMP, Action.once());
+                door.setOpen(player, player.level(), nextBlockState, nextFeet, true);
             }
         }
+        if (nextBlockState.getBlock() instanceof FenceGateBlock && allowOpenFenceGates(settings))
+        {
+            if (!nextBlockState.getValue(FenceGateBlock.OPEN))
+            {
+                player.level().setBlock(nextFeet, nextBlockState.setValue(FenceGateBlock.OPEN, true), 2);
+            }
+        }
+
+        if (move == NavAStarPathfinder.MoveType.BREAK_THROUGH && allowBreakBlocks(settings) && distance <= 2.5D)
+        {
+            if (!nextBlockState.getCollisionShape(player.level(), nextFeet).isEmpty())
+            {
+                tryBreakBlock(nextFeet, Direction.UP, settings);
+                return false;
+            }
+            BlockState headAhead = player.level().getBlockState(nextFeet.above());
+            if (!headAhead.getCollisionShape(player.level(), nextFeet.above()).isEmpty())
+            {
+                tryBreakBlock(nextFeet.above(), Direction.UP, settings);
+                return false;
+            }
+        }
+
+        if (move == NavAStarPathfinder.MoveType.DESCEND_MINE && allowBreakBlocks(settings) && distance <= 1.5D)
+        {
+            BlockState belowState = player.level().getBlockState(nextFeet);
+            if (!belowState.getCollisionShape(player.level(), nextFeet).isEmpty())
+            {
+                tryBreakBlock(nextFeet, Direction.UP, settings);
+                return false;
+            }
+        }
+
+        if (move == NavAStarPathfinder.MoveType.PILLAR && allowPlaceBlocks(settings) && distance <= 1.5D)
+        {
+            if (tryPlaceBridgeBlock(player.blockPosition(), settings) && player.onGround() && navJumpCooldownTicks <= 0)
+            {
+                // Jump onto the block just placed.
+                navJumpCooldownTicks = 8;
+                pack.start(ActionType.JUMP, Action.once());
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the bot has got to this waypoint, or is far enough along the leg to have passed it. */
+    private boolean reached(Vec3 previous, Vec3 next)
+    {
+        double sideways = horizontalDistance(player.position(), next);
+        if (!carriesStraightOn()) return sideways <= CORNER_RADIUS;
+        if (sideways <= WAYPOINT_RADIUS) return true;
+        Vec3 leg = next.subtract(previous);
+        double length = leg.lengthSqr();
+        if (length < 1.0E-6D) return true;
+        return player.position().subtract(previous).dot(leg) / length >= WAYPOINT_PASSED;
+    }
+
+    /**
+     * True where the path carries on within about forty degrees of straight after this waypoint: there the view
+     * may lead the path round a bend, and there a waypoint can be passed by a comfortable margin. Anywhere else the
+     * bot comes to the point instead, because cutting a corner is what walks it into the wall the corner hugs.
+     */
+    private boolean carriesStraightOn()
+    {
+        if (navWaypointIndex + 1 >= navWaypoints.size()) return true;
+        Vec3 in = horizontal(navWaypoints.get(navWaypointIndex), player.position());
+        Vec3 out = horizontal(navWaypoints.get(navWaypointIndex), navWaypoints.get(navWaypointIndex + 1));
+        if (in.lengthSqr() < 1.0E-6D || out.lengthSqr() < 1.0E-6D) return true;
+        return in.normalize().dot(out.normalize()) >= CORNER_ANGLE;
+    }
+
+    private static Vec3 horizontal(Vec3 from, Vec3 to)
+    {
+        return new Vec3(to.x - from.x, 0.0D, to.z - from.z);
+    }
+
+    private void advanceWaypoint()
+    {
+        if (navDirectTarget != null)
+        {
+            // The straight line is a live target rather than a list of them: keep walking towards wherever the
+            // goal is now, and the mode's own arrival test decides when to stop.
+            return;
+        }
+        navWaypointIndex++;
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        navRunUpTicks = 0;
+        if (navWaterJumping)
+        {
+            player.setJumping(false);
+            navWaterJumping = false;
+        }
+        if (navWaypointIndex >= navWaypoints.size())
+        {
+            // End of the path: ask for another one, unless the bot is walking straight at the goal, where the
+            // direct-walk re-check decides whether to keep going or start searching.
+            navNeedsRepath = navDirectTarget == null;
+        }
+    }
+
+    /**
+     * Jumps when the bot has to get up onto something, or to clear a gap from the edge of it. A gap too wide for a
+     * standing jump is only taken with momentum: the bot keeps sprinting up to the edge and jumps once it is
+     * actually moving, which is what a player does.
+     */
+    private void jump(LevelWalkability view, Vec3 next, NavAStarPathfinder.MoveType move, boolean wanted)
+    {
+        if (!wanted || !player.onGround() || navJumpCooldownTicks > 0)
+        {
+            return;
+        }
+        if (move == NavAStarPathfinder.MoveType.PARKOUR_RUNUP && !hasMomentum() && navRunUpTicks < RUN_UP_TICKS)
+        {
+            navRunUpTicks++;
+            return;
+        }
+        BlockPos headAbove = player.blockPosition().above(2);
+        BlockState headAboveState = player.level().getBlockState(headAbove);
+        if (!headAboveState.getCollisionShape(player.level(), headAbove).isEmpty())
+        {
+            // Can't jump - ceiling too low; try to path around instead
+            navNeedsRepath = true;
+            return;
+        }
+        boolean parkour = move == NavAStarPathfinder.MoveType.PARKOUR
+                || move == NavAStarPathfinder.MoveType.PARKOUR_RUNUP;
+        navJumpCooldownTicks = parkour ? 10 : 8;
+        navRunUpTicks = 0;
+        pack.start(ActionType.JUMP, Action.once());
+    }
+
+    /** True when the bot is moving fast enough for a gap that needs momentum to be clearable. */
+    private boolean hasMomentum()
+    {
+        if (!player.isSprinting()) return false;
+        Vec3 delta = player.getDeltaMovement();
+        return Math.sqrt(delta.x * delta.x + delta.z * delta.z) >= SPRINT_SPEED;
+    }
+
+    /** True when the ground the bot is standing on ends right where it is heading. */
+    private boolean atLedge(LevelWalkability view, Vec3 next)
+    {
+        double dx = next.x - player.getX();
+        double dz = next.z - player.getZ();
+        int stepX = Math.abs(dx) >= Math.abs(dz) ? (int) Math.signum(dx) : 0;
+        int stepZ = stepX != 0 ? 0 : (int) Math.signum(dz);
+        if (stepX == 0 && stepZ == 0) return false;
+        return !view.canStand(player.blockPosition().getX() + stepX, Mth.floor(player.getY()),
+                player.blockPosition().getZ() + stepZ);
+    }
+
+    /**
+     * Picks the side with room and starts leaning on the wall towards it. A bot that has walked into a corner
+     * cannot get out by walking harder at the same waypoint, and this is what a player does instead: sidestep.
+     */
+    private void startUnsticking(LevelWalkability view, Vec3 aim)
+    {
+        int feetX = player.blockPosition().getX();
+        int feetY = Mth.floor(player.getY());
+        int feetZ = player.blockPosition().getZ();
+        double dx = aim.x - player.getX();
+        double dz = aim.z - player.getZ();
+        double length = Math.sqrt(dx * dx + dz * dz);
+        int sideX = length < 1.0E-3D ? 0 : (int) Math.round(-dz / length);
+        int sideZ = length < 1.0E-3D ? 0 : (int) Math.round(dx / length);
+        boolean right = view.canPass(feetX + sideX, feetY, feetZ + sideZ);
+        boolean left = view.canPass(feetX - sideX, feetY, feetZ - sideZ);
+        // The side vector is the one on the bot's right, and strafing left is positive.
+        navUnstickStrafe = right ? -1.0F : left ? 1.0F : 1.0F;
+        navUnstickTicks = UNSTICK_TICKS;
+        navStuckTicks = 0;
+        navNoProgressTicks = 0;
+    }
+
+    /** How far to walk sideways, which is what keeps the body on the line while the view is still turning. */
+    private float strafeTowards(Vec3 aim)
+    {
+        Vec2 rotation = rotationsTowards(player.getEyePosition(1.0F), aim);
+        return (float) Mth.clamp(-Mth.wrapDegrees(rotation.x - player.getYRot()) / STRAFE_GAIN, -1.0D, 1.0D);
+    }
+
+    /** Swimming: float at the surface by jumping, sink by sneaking, or swim in three dimensions when allowed. */
+    private void swim(Vec3 next, Settings settings)
+    {
+        boolean wantUp = next.y > player.getY() + 0.2D;
+        boolean wantDown = next.y < player.getY() - 0.4D;
+        if (!allowSwimming(settings))
+        {
+            player.setJumping(true);
+            navWaterJumping = true;
+            pack.setSneaking(false);
+            return;
+        }
+        if (wantUp)
+        {
+            player.setJumping(true);
+            navWaterJumping = true;
+            pack.setSneaking(false);
+        }
+        else if (wantDown)
+        {
+            player.setJumping(false);
+            navWaterJumping = false;
+            pack.setSneaking(true);
+        }
+        else
+        {
+            player.setJumping(false);
+            navWaterJumping = false;
+            pack.setSneaking(false);
+        }
+        if (allowSprint(settings))
+        {
+            pack.setSprinting(true);
+        }
+    }
+
+    /**
+     * Climbing a ladder, a vine or a scaffolding. The bot walks into the column first, then drives itself up or
+     * down it while holding station in the column, because a ladder holds nothing up on its own.
+     */
+    private void climb(LevelWalkability view, Vec3 next, NavAStarPathfinder.MoveType move)
+    {
+        int columnX = Mth.floor(next.x);
+        int columnZ = Mth.floor(next.z);
+        int feetY = Mth.floor(player.getY());
+        // Only the bot's own cell decides whether it is holding on: a climbable in the column it is heading for
+        // does not hold it up until it has walked in.
+        boolean inColumn = player.blockPosition().getX() == columnX && player.blockPosition().getZ() == columnZ;
+        boolean holding = inColumn && (view.climbable(columnX, feetY, columnZ)
+                || view.climbable(columnX, feetY + 1, columnZ));
+        Vec3 column = new Vec3(columnX + 0.5D, next.y, columnZ + 0.5D);
+
+        Direction facing = view.climbFacing(columnX, feetY, columnZ);
+        lookAt(facing == null ? column : column.add(facing.getStepX() * 4.0D, 0.0D, facing.getStepZ() * 4.0D),
+                WAYPOINT_ANGLE);
+
+        pack.setSneaking(false);
+        pack.setSprinting(false);
+        if (!holding)
+        {
+            // Not on it yet: walk into the column.
+            pack.setForward(1.0F);
+            pack.setStrafing(strafeTowards(column));
+            return;
+        }
+
+        pack.setForward(0.0F);
+        pack.setStrafing(strafeTowards(new Vec3(columnX + 0.5D, player.getY(), columnZ + 0.5D)));
+        player.setJumping(false);
+        navWaterJumping = false;
+
+        double rise = next.y - player.getY();
+        if ((move == NavAStarPathfinder.MoveType.CLIMB_UP && rise <= 0.35D)
+                || (move == NavAStarPathfinder.MoveType.CLIMB_DOWN && rise >= -0.35D))
+        {
+            advanceWaypoint();
+            return;
+        }
+
+        Vec3 delta = player.getDeltaMovement();
+        player.setDeltaMovement(delta.x,
+                move == NavAStarPathfinder.MoveType.CLIMB_UP ? CLIMB_UP_SPEED : CLIMB_DOWN_SPEED, delta.z);
+        player.resetFallDistance();
+        navLastDistanceToNext = player.position().distanceTo(next);
+    }
+
+    /** Where the view looks: at the waypoint being walked to, or a little further on when it is nearly there. */
+    private Vec3 lookTarget()
+    {
+        Vec3 next = navWaypoints.get(navWaypointIndex);
+        if (carriesStraightOn() && navWaypointIndex + 1 < navWaypoints.size()
+                && horizontalDistance(player.position(), next) < LOOK_LEAD_DISTANCE)
+        {
+            return navWaypoints.get(navWaypointIndex + 1);
+        }
+        return next;
+    }
+
+    /** Points the view at a place with the human turn of {@link LookController}, then applies it. */
+    private void lookAt(Vec3 aim, float radius)
+    {
+        Vec2 rotation = rotationsTowards(player.getEyePosition(1.0F), aim);
+        look.aimAt(rotation.x, rotation.y, radius);
+        look.tick();
+        pack.look(look.yaw(), look.pitch());
+    }
+
+    // ====== Small helpers ======
+
+    private void resetRoute()
+    {
+        clearRoute();
+        navNoProgressTicks = 0;
+        navLastDistanceToNext = Double.POSITIVE_INFINITY;
+        navDirectSteerTicks = 0;
+        search.cancel();
+        navSearchGoal = null;
+        look.reset(player.getYRot(), player.getXRot());
+    }
+
+    private void clearPath()
+    {
+        navWaypoints = null;
+        navMoveTypes = null;
+        navWaypointIndex = 0;
+        navRunUpTicks = 0;
+    }
+
+    /** Drops whatever route the bot was on, straight line or path, and asks for another one. */
+    private void clearRoute()
+    {
+        clearPath();
+        navDirectTarget = null;
+        navRouteFailed = false;
+        navNeedsRepath = true;
+        navRepathCooldownTicks = 0;
+    }
+
+    private void releaseChaseField()
+    {
+        if (navChaseTarget != null)
+        {
+            ChaseFlowFields.release(navChaseTarget);
+        }
+        navFlowField = false;
+    }
+
+    private LevelWalkability view(ServerLevel level, Settings settings)
+    {
+        if (view == null || view.level() != level)
+        {
+            view = new LevelWalkability(level);
+        }
+        view.hazards(avoidLava(settings), avoidFire(settings), avoidPowderSnow(settings), avoidCobwebs(settings));
+        return view;
+    }
+
+    /** The cell the bot is standing in, or null when it is nowhere navigation can work. */
+    private BlockPos feetNode(LevelWalkability view)
+    {
+        int y = Mth.floor(player.getY());
+        return view.canStand(player.blockPosition().getX(), y, player.blockPosition().getZ())
+                ? new BlockPos(player.blockPosition().getX(), y, player.blockPosition().getZ()) : null;
+    }
+
+    /** The nearest cell to the goal a player can stand in, which is where a path has to end. */
+    private BlockPos goalNode(LevelWalkability view)
+    {
+        if (navTargetPos == null) return null;
+        BlockPos around = BlockPos.containing(navTargetPos);
+        int y = view.standYNear(around.getX(), around.getY(), around.getZ(), 8);
+        return y == LevelWalkability.NO_STAND ? null : new BlockPos(around.getX(), y, around.getZ());
+    }
+
+    /** Where a player stands at this cell: the middle of it horizontally, on whatever is underfoot. */
+    private static Vec3 surface(LevelWalkability view, int x, int y, int z)
+    {
+        return new Vec3(x + 0.5D, view.surfaceY(x, y, z), z + 0.5D);
+    }
+
+    private static Vec3 surface(LevelWalkability view, BlockPos pos)
+    {
+        return surface(view, pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private Vec3 start()
+    {
+        return new Vec3(player.getX(), player.getY(), player.getZ());
+    }
+
+    private static double horizontalDistance(Vec3 from, Vec3 to)
+    {
+        double dx = to.x - from.x;
+        double dz = to.z - from.z;
+        return Math.sqrt(dx * dx + dz * dz);
     }
 
     /**
@@ -1724,6 +2050,7 @@ public final class NavController
                 base.pillarCost(),
                 allowParkour(settings),
                 base.maxParkourLength(),
+                base.parkourRunUpLength(),
                 allowDescendMine(settings),
                 base.descendMineCost(),
                 allowSprint(settings),
@@ -1762,15 +2089,8 @@ public final class NavController
         double dy = to.y - from.y;
         double dz = to.z - from.z;
         double distXZ = Math.sqrt(dx * dx + dz * dz);
-        float yaw = (float)(Mth.atan2(dz, dx) * (180.0D / Math.PI)) - 90.0F;
-        float pitch = (float)(-(Mth.atan2(dy, distXZ) * (180.0D / Math.PI)));
+        float yaw = (float) (Mth.atan2(dz, dx) * (180.0D / Math.PI)) - 90.0F;
+        float pitch = (float) (-(Mth.atan2(dy, distXZ) * (180.0D / Math.PI)));
         return new Vec2(yaw, pitch);
-    }
-
-    private static float stepYaw(float current, float target, float maxStep)
-    {
-        float delta = Mth.wrapDegrees(target - current);
-        float step = Mth.clamp(delta, -maxStep, maxStep);
-        return current + step;
     }
 }
