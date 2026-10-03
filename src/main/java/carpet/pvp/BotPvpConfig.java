@@ -212,6 +212,21 @@ public final class BotPvpConfig
     }
 
     /**
+     * The combat styles by the names {@code /bot spawn} takes, where the melee style is the sword, so that
+     * neither the command nor anything reading them has to list them.
+     */
+    public static String[] styles()
+    {
+        CombatStyle[] values = CombatStyle.values();
+        String[] names = new String[values.length];
+        for (int i = 0; i < values.length; i++)
+        {
+            names[i] = values[i] == CombatStyle.MELEE ? "sword" : values[i].name().toLowerCase(Locale.ROOT);
+        }
+        return names;
+    }
+
+    /**
      * Applies a named difficulty preset: the skill, the pace and the techniques of that preset
      * replace the current values, everything else is left alone.
      *

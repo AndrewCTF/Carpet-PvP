@@ -1,6 +1,7 @@
 package carpet.logic.program;
 
 import carpet.logic.program.ActionSchema.Params;
+import carpet.pvp.BotEvents;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -10,6 +11,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -99,6 +101,11 @@ public class ProgramExecutor
         String currentAction;
         String error;
         boolean warnedAboutBudget;
+        /** How many combat nodes this program has open; the brain owns the body while there is one. */
+        int combatNodes;
+        /** Whether this program is the one that turned the combat AI on, and so has to turn it off again. */
+        boolean combatStarted;
+        boolean warnedAboutCombat;
         double lastHealth;
 
         ProgramState(BotProgram program, UUID owner)
@@ -162,7 +169,8 @@ public class ProgramExecutor
         Bot bot = bots.apply(botName);
         if (bot != null)
         {
-            bot.stopAll();
+            // A program that was stopped mid-fight leaves its bot standing still, not fighting.
+            releaseBot(state, bot);
         }
         logListener.accept("INFO", "Stopped program on " + botName);
         return true;
@@ -224,14 +232,30 @@ public class ProgramExecutor
         state.status = Status.ERROR;
         state.error = message;
         state.wait = null;
-        bot.stopAll();
+        releaseBot(state, bot);
         LOG.warn("Program '{}' on bot '{}' stopped: {}", state.program.getName(), botName, message);
         logListener.accept("ERROR", "Program '" + state.program.getName() + "' on " + botName + " stopped: " + message);
     }
 
+    /**
+     * Gives the bot back to whoever is driving it: the inputs the program held are released, and a fight it
+     * started with a combat node is over. A program that never turned the combat AI on leaves it alone.
+     */
+    private void releaseBot(ProgramState state, Bot bot)
+    {
+        state.combatNodes = 0;
+        if (state.combatStarted)
+        {
+            state.combatStarted = false;
+            bot.stopCombat();
+        }
+        bot.stopAll();
+    }
+
     private void tickProgram(ProgramState state, Bot bot, String botName)
     {
-        fireEvents(state, bot, botName);
+        Set<BotEvents.Event> events = bot.combatEvents();
+        fireEvents(state, bot, botName, events);
         if (state.wait != null)
         {
             Wait wait = state.wait;
@@ -268,7 +292,7 @@ public class ProgramExecutor
             {
                 state.status = Status.COMPLETED;
                 state.currentAction = null;
-                bot.stopAll();
+                releaseBot(state, bot);
                 logListener.accept("INFO", "Program '" + state.program.getName() + "' completed");
                 return;
             }
@@ -293,7 +317,7 @@ public class ProgramExecutor
             }
             BotAction action = frame.actions.get(frame.index++);
             state.currentAction = action.getType();
-            execute(action, state, bot);
+            execute(action, state, bot, botName);
         }
     }
 
@@ -301,12 +325,14 @@ public class ProgramExecutor
      * Hands the tick to the handlers whose event has just become true. Each one that starts takes over from the
      * main sequence, which is put back the way it was when the handler's actions are done. An event that
      * happens again while its own handler is still running is ignored.
+     *
+     * @param events what the game told the bot about its fight since the last tick
      */
-    private void fireEvents(ProgramState state, Bot bot, String botName)
+    private void fireEvents(ProgramState state, Bot bot, String botName, Set<BotEvents.Event> events)
     {
         for (Handler handler : state.handlers)
         {
-            boolean holds = holds(handler, state, bot);
+            boolean holds = holds(handler, state, bot, events);
             boolean fired = holds && !handler.wasTrue;
             handler.wasTrue = holds;
             if (!fired || handler.running || handler.action.getChildren().isEmpty())
@@ -325,9 +351,10 @@ public class ProgramExecutor
 
     /**
      * Whether an event's condition holds now. Each one is written so that its rising edge is the event: the bot
-     * took damage, its health went below the given value, its target went away, or its target came into range.
+     * took damage, its health went below the given value, its target went away, its target came into range, or
+     * the game reported its target dead, its totem popping or a target coming into its hands.
      */
-    private boolean holds(Handler handler, ProgramState state, Bot bot)
+    private boolean holds(Handler handler, ProgramState state, Bot bot, Set<BotEvents.Event> events)
     {
         Params p = schema.params(handler.action, state.variables);
         String target = p.string("target");
@@ -338,12 +365,29 @@ public class ProgramExecutor
             case "when_health_below" -> bot.health() < value;
             case "when_target_lost" -> Double.isInfinite(bot.distanceToPlayer(target));
             case "when_target_in_range" -> bot.distanceToPlayer(target) <= value;
+            // a death and a totem are told by the game, so each of them holds for exactly one tick
+            case "when_kill" -> events.contains(BotEvents.Event.KILL);
+            case "when_totem_pop" -> events.contains(BotEvents.Event.TOTEM_POP);
+            // the brain picking a target is its own decision, so this is the edge of it having one
+            case "when_target_acquired" -> bot.hasTarget();
             default -> throw new IllegalStateException("No interpreter for event " + handler.event);
         };
     }
 
-    private void execute(BotAction action, ProgramState state, Bot bot)
+    private void execute(BotAction action, ProgramState state, Bot bot, String botName)
     {
+        if (state.combatNodes > 0 && schema.definition(action).drivesBody())
+        {
+            // The combat brain is driving the action pack, so a step of the program that would drive it too is
+            // left out. Its wait would be the wait of a fight, so the step does not happen at all this tick.
+            if (!state.warnedAboutCombat)
+            {
+                state.warnedAboutCombat = true;
+                logListener.accept("WARN", "Program '" + state.program.getName() + "' on " + botName + " wanted to " + action.getType()
+                        + " while a combat node owned " + botName + ", so it was skipped. The brain drives the body until the node ends.");
+            }
+            return;
+        }
         String requiredRule = schema.definition(action).requires();
         if (requiredRule != null)
         {
@@ -419,6 +463,30 @@ public class ProgramExecutor
                 bot.attack("once", 0, false);
                 hold(state, bot, p.integer("ticks"), null);
             }
+
+            case "COMBAT_START" -> startCombat(p, state, bot);
+            case "COMBAT_STOP" -> stopCombat(state, bot);
+            case "FIGHT" ->
+            {
+                startCombat(p, state, bot);
+                double range = p.number("range");
+                int rangeTicks = p.integer("rangeTicks");
+                int[] outOfRangeFor = {0};
+                Wait wait = new Wait();
+                wait.ticksLeft = p.integer("timeout");
+                wait.onEnd = b -> stopCombat(state, bot);
+                wait.done = b ->
+                {
+                    // The fight is over once the target or the bot is gone, or once the target has stayed
+                    // out of reach for as long as the node allows.
+                    if (!b.isAlive() || !b.hasTarget()) return true;
+                    outOfRangeFor[0] = b.targetDistance() <= range ? 0 : outOfRangeFor[0] + 1;
+                    return outOfRangeFor[0] >= rangeTicks;
+                };
+                state.wait = wait;
+            }
+            case "SET_COMBAT_OPTION" -> bot.combatOption(p.string("key"), p.string("value"));
+            case "GIVE_KIT" -> bot.giveKit(p.string("kit"));
 
             case "HOTBAR" -> bot.selectHotbar(p.integer("slot"));
             case "EQUIP_ARMOR" -> bot.equipArmor(p.string("armorSet"));
@@ -561,6 +629,27 @@ public class ProgramExecutor
         }
     }
 
+    // Turns the bot's combat AI on with the settings the node carries, and takes the body away from the program.
+    private void startCombat(Params p, ProgramState state, Bot bot)
+    {
+        bot.startCombat(p.string("style"), p.string("difficulty"), p.string("targets"), p.string("target"));
+        state.combatNodes++;
+        state.combatStarted = true;
+    }
+
+    // Closes one combat node. The AI stops once the last node that opened it is closed, so that a fight node
+    // inside a handler does not end the fight the sequence started. A stop with none open turns the AI off
+    // anyway, which is what a program that did not start the fight is asking for.
+    private void stopCombat(ProgramState state, Bot bot)
+    {
+        if (state.combatNodes > 0) state.combatNodes--;
+        if (state.combatNodes == 0)
+        {
+            state.combatStarted = false;
+            bot.stopCombat();
+        }
+    }
+
     // Makes the program wait the given ticks before its next action, then runs onEnd. No wait when ticks is 0.
     private static Wait hold(ProgramState state, Bot bot, int ticks, Consumer<Bot> onEnd)
     {
@@ -623,7 +712,7 @@ public class ProgramExecutor
         {
             state.lastHealth = bot.health();
         }
-        handler.wasTrue = holds(handler, state, bot);
+        handler.wasTrue = holds(handler, state, bot, Set.of());
         state.handlers.add(handler);
     }
 
@@ -643,6 +732,10 @@ public class ProgramExecutor
             case "CONDITION_IS_SNEAKING" -> bot.isSneaking();
             case "CONDITION_IS_SPRINTING" -> bot.isSprinting();
             case "CONDITION_IS_IN_WATER" -> bot.isInWater();
+            case "CONDITION_IS_FIGHTING" -> bot.isFighting();
+            case "CONDITION_HAS_TARGET" -> bot.hasTarget();
+            case "CONDITION_TARGET_DISTANCE" -> compare(bot.targetDistance(), p.string("operator"), p.number("value"));
+            case "CONDITION_TARGET_HEALTH" -> compare(bot.targetHealth(), p.string("operator"), p.number("value"));
             default -> throw new IllegalStateException("No interpreter for condition type " + condition.getType());
         };
     }

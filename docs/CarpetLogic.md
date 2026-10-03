@@ -136,6 +136,9 @@ Three more rules decide whether particular actions work:
 | `fakePlayerElytraGlide` | `false` | `GLIDE_START`, `GLIDE_GOTO`, `GLIDE_HEADING`, `GLIDE_SPEED`, `GLIDE_FREEZE`, `GLIDE_LAND` |
 | `swordBlockHitting` | `false` | `SWORD_BLOCK` |
 
+The combat nodes need none of them: turning the combat AI on and off is part of running a program, the same
+as the kit and option commands, which are behind `commandBot` rather than behind a rule.
+
 ## Programs
 
 ### How they are stored
@@ -220,6 +223,8 @@ Each action has:
 | `slots` | which of `children`, `elseChildren` and `condition` this type may carry |
 | `params` | the parameters it takes |
 | `requires` | the carpet rule that must be on for the action to work, or absent |
+| `drivesBody` | the action moves the bot or clicks for it; see [Who drives the bot](#who-drives-the-bot) |
+| `optionsFrom` | the allowed values come from the running server, under that name, rather than being written here |
 
 Each parameter has a `name`, a `type` (`int`, `number`, `bool`, `string`), a `default`, and
 optionally `min`/`max` or the `options` it may take. A missing parameter falls back to its default,
@@ -227,7 +232,18 @@ and a number outside `min`/`max` is clamped.
 
 A `ticks` parameter is how long the step lasts before the next one starts.
 
-The 63 nodes, in full:
+Two lists are generated from the combat AI rather than written down, so a style or a preset added to the
+bot appears in CarpetLogic without anyone editing this file:
+
+| `optionsFrom` | What it holds |
+|---|---|
+| `combatStyles` | every `BotPvpConfig.CombatStyle`, by the name `/bot spawn` takes (`sword` for the melee style) |
+| `difficulties` | the five `BotPvpConfig.Difficulty` presets |
+
+`GET /api/schema` is sent the file with those lists already filled in, so the editor builds its dropdowns
+from the very same values the interpreter checks a parameter against.
+
+The 72 nodes, in full:
 
 ### Movement
 
@@ -251,6 +267,33 @@ The 63 nodes, in full:
 | `Combat/SwordBlock` | `SWORD_BLOCK` | action | `swordBlockHitting` | `ticks` int = `40`, min `1`, max `6000` |
 | `Combat/ShieldBlock` | `SHIELD_BLOCK` | action |  | `ticks` int = `40`, min `1`, max `6000` |
 | `Combat/UseItem` | `USE` | action |  | `mode` string = `once` (`once`, `continuous`, `interval`); `interval` int = `10`, min `1`, max `200`; `ticks` int = `1`, min `1`, max `6000` |
+| `Combat/CombatStart` | `COMBAT_START` | action |  | `style` string = `sword` (every style `/bot spawn` takes); `difficulty` string = `average` (the five presets); `targets` string = `players` (`players`, `mobs`, `bots`, `all`, `none`); `target` string = `` |
+| `Combat/CombatStop` | `COMBAT_STOP` | action |  | none |
+| `Combat/Fight` | `FIGHT` | action |  | `style`, `difficulty`, `targets` and `target` as `COMBAT_START`; `timeout` int = `600`, min `1`, max `60000`; `range` number = `16`, min `1`, max `64`; `rangeTicks` int = `60`, min `1`, max `6000` |
+| `Combat/CombatOption` | `SET_COMBAT_OPTION` | action |  | `key` string = `difficulty` (any name `/bot option` takes); `value` string = `average` |
+| `Combat/GiveKit` | `GIVE_KIT` | action |  | `kit` string = `sword` (any kit this server has) |
+
+The five nodes at the bottom drive the bot's combat AI, the same one `/bot spawn` turns on:
+
+- `COMBAT_START` writes the style, the difficulty preset and what may be fought into the bot's own combat
+  settings, turns the AI on, and lets go of the action pack so that the AI has the bot's body to itself.
+  `targets` chooses which kinds of entity the AI may pick, and `target` names one: then only what that
+  entity is may be fought, and the range is widened to reach it. The AI takes the nearest one of that
+  kind, so name a target and it is the one fought while it is the closer of the two.
+- `COMBAT_STOP` turns the AI off and releases whatever the style left running — its clicks, its shield,
+  its navigation.
+- `SET_COMBAT_OPTION` passes one key and one value to `BotPvpConfig.apply`, which is what `/bot option`
+  and `/player <name> ai` use. Every setting they accept works here, the per-style options of
+  `StyleIndex.options()` included, so an option added to the bot needs nothing in CarpetLogic. A key or a
+  value the bot does not know stops the program with the message the command gives: `Unknown setting: X`,
+  `Invalid value for X: Y`, `Invalid number for X: Y` or `Unknown difficulty: X`.
+- `GIVE_KIT` puts a kit on the bot the way `/bot kit give` does: the inventory is cleared, what the bot
+  was carrying is remembered for `/bot kit restore`, and the weapon ends up in the main hand. A kit this
+  server does not have stops the program with "There is no kit called X. Kits: …".
+- `FIGHT` is `COMBAT_START`, a wait and `COMBAT_STOP` as one node. The fight is over when the target or
+  the bot is gone, when the target has been further away than `range` for `rangeTicks` ticks, or when
+  `timeout` ticks have passed; the program then carries on with the next node. A fight node with no
+  target in reach is over as soon as the AI has had its first tick to look for one.
 
 ### Equipment
 
@@ -329,13 +372,17 @@ The 63 nodes, in full:
 
 | Node | Type | Kind | Rule it needs | Parameters |
 |---|---|---|---|---|
-| `Events/OnEvent` | `ON_EVENT` | control (`children`) |  | `event` string = `when_hit` (`when_hit`, `when_health_below`, `when_target_lost`, `when_target_in_range`); `target` string = ``; `value` number = `5`, min `0`, max `1024` |
+| `Events/OnEvent` | `ON_EVENT` | control (`children`) |  | `event` string = `when_hit` (`when_hit`, `when_health_below`, `when_target_lost`, `when_target_in_range`, `when_kill`, `when_totem_pop`, `when_target_acquired`); `target` string = ``; `value` number = `5`, min `0`, max `1024` |
 
 ### Conditions
 
 | Node | Type | Kind | Rule it needs | Parameters |
 |---|---|---|---|---|
 | `Conditions/Health` | `CONDITION_HEALTH` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `10`, min `0`, max `1024` |
+| `Conditions/IsFighting` | `CONDITION_IS_FIGHTING` | condition |  | none |
+| `Conditions/HasTarget` | `CONDITION_HAS_TARGET` | condition |  | none |
+| `Conditions/TargetDistance` | `CONDITION_TARGET_DISTANCE` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `3`, min `0`, max `128` |
+| `Conditions/TargetHealth` | `CONDITION_TARGET_HEALTH` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `10`, min `0`, max `1024` |
 | `Conditions/Distance` | `CONDITION_DISTANCE` | condition |  | `target` string = ``; `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `5`, min `0`, max `1024` |
 | `Conditions/Food` | `CONDITION_FOOD` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `10`, min `0`, max `20` |
 | `Conditions/Armor` | `CONDITION_ARMOR` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `10`, min `0`, max `30` |
@@ -346,6 +393,18 @@ The 63 nodes, in full:
 | `Conditions/IsSneaking` | `CONDITION_IS_SNEAKING` | condition |  | none |
 | `Conditions/IsSprinting` | `CONDITION_IS_SPRINTING` | condition |  | none |
 | `Conditions/IsInWater` | `CONDITION_IS_IN_WATER` | condition |  | none |
+
+The four conditions at the top of that block read the bot's fight rather than the bot itself:
+
+| Condition | True when |
+|---|---|
+| `IsFighting` | the combat AI is on **and** it has a target it is engaging |
+| `HasTarget` | the combat AI has a target, fighting it or only looking at it |
+| `TargetDistance` | compared with the distance to that target, which is infinite while there is none — as `Distance` is for a player |
+| `TargetHealth` | compared with that target's health, which is infinite while there is none |
+
+They read what the AI already knows, so they cost nothing beyond the question: a target that is still in
+range, out of reach or nearly dead is the same fact the fight node is waiting on.
 
 ### Notes on the node list
 
@@ -359,6 +418,15 @@ The 63 nodes, in full:
   other player that is **not** a fake player, in the same dimension, is used.
 - `Equipment/EquipSlot`'s `item` is free text, an item id with or without the `minecraft:`
   namespace.
+- `Combat/CombatOption`'s `key` is free text too, and `value` is text whatever the setting takes: `true`
+  for a switch, `3.5` for a number. Both are free text so that a key or a value the bot does not know is
+  reported by the server, with the message `/bot option` gives, rather than quietly dropped by the editor.
+  The editor offers the names the server reports as suggestions.
+- `Combat/GiveKit`'s `kit` is free text for the same reason: the kits of the world's `carpet-kits` folder
+  are only known to the running server. The editor's dropdown holds the kits this server has.
+- `Combat/CombatStart`'s `target` names a player or any other living entity; leave it empty to take
+  whatever the AI may fight. See [Who drives the bot](#who-drives-the-bot) for what a named target means
+  for the AI's choice.
 - Number parameters also accept a variable reference, so `ticks` can be `"$wait"`. See below.
 
 ## Variables
@@ -395,9 +463,49 @@ starts. `ticks` of 0 means no wait at all — the action's cleanup, if it has on
 | `Navigation/FleeFrom` | when the bot is clear of the danger, retested every 10 ticks, or when `ticks` runs out |
 | `Elytra/GlideGoto` | when gliding stops or the goal is within `radius` |
 | `Control/WaitUntil` | when its condition holds, or after `timeout` ticks |
+| `Combat/Fight` | when the target or the bot is gone, when the target stays out of `range` for `rangeTicks`, or after `timeout` ticks |
 
 An event handler that interrupts the main sequence puts back the wait it interrupted, so the main
 sequence resumes exactly where it was.
+
+## Who drives the bot
+
+A program drives the bot's action pack directly. The combat AI drives the very same pack when it is on.
+Two drivers on one body means the program has to stand back for as long as the AI is fighting:
+
+> While a combat node is active, the brain owns the body. The program does not issue movement or click
+> actions of its own, and when the node ends the program gets the body back with the inputs released.
+
+What that means in practice:
+
+- `COMBAT_START` and `FIGHT` release what the program was holding down — its clicks, its shield, its
+  navigation — before the AI's first tick. From then on the AI has the body to itself.
+- While at least one combat node is open, the steps that drive the body are **skipped**, not queued and not
+  waited out: `MOVE`, `STRAFE`, `SPRINT`, `SNEAK`, `JUMP`, `MOUNT`, `DISMOUNT`, `STOP_MOVEMENT`, `ATTACK`,
+  `ATTACK_CRIT`, `SWORD_BLOCK`, `SHIELD_BLOCK`, `USE`, `PLACE_BLOCK`, `PLACE_CRYSTAL`,
+  `DETONATE_CRYSTAL`, every navigation node and every elytra node. Those are the steps the schema marks
+  `drivesBody`. A skipped step is not even asked for its carpet rule, so a fight is never stopped by a
+  navigation node that the fight itself made redundant. The program is told once per run, in the log and
+  the editor:
+
+  ```
+  Program 'My duel' on Bot1 wanted to MOVE while a combat node owned Bot1, so it was skipped. The brain drives the body until the node ends.
+  ```
+
+- Everything else still runs: waiting, variables, equipment, looking, event handlers, `IF_THEN_ELSE`, and
+  the combat nodes themselves. A `WAIT_UNTIL` on a combat condition between `COMBAT_START` and
+  `COMBAT_STOP` is the ordinary way to end a fight on a health threshold rather than a timeout.
+- `COMBAT_STOP`, or a fight node reaching its end, gives the body back with the inputs released: nothing
+  is held down, navigation is off, and the AI has let go of what its style was doing. A `COMBAT_STOP`
+  with no combat node open turns the AI off anyway, so a program can switch off a bot that `/bot spawn`
+  started fighting with.
+- Nested combat nodes count. A fight node inside an event handler may open and close its own fight while
+  the sequence's `COMBAT_START` is still open; the AI stops when the last one closes.
+- A program that ends, fails or is stopped while its bot is fighting leaves the bot **not** fighting, with
+  the inputs released. A program that never turned the AI on leaves it exactly as it found it — a bot
+  spawned with `/bot spawn` keeps fighting after an unrelated program ends.
+- Turning the AI on or off is not a carpet rule and needs no permission beyond running programs. What the
+  AI does with the bot afterwards is the bot's own business, the same as `/bot option combat true`.
 
 ## Events
 
@@ -419,6 +527,18 @@ carries on. From then on:
 | `when_health_below` | health is below `value` | `value` |
 | `when_target_lost` | the player in `target` is gone, or in another dimension | `target` |
 | `when_target_in_range` | the player in `target` is within `value` blocks | `target`, `value` |
+| `when_kill` | the entity the bot was fighting died | none |
+| `when_totem_pop` | a totem of undying saved the bot's own life | none |
+| `when_target_acquired` | the combat AI picked a target it did not have | none |
+
+The first four are watched every tick and fire on their rising edge. The last three are told once by the
+game or by the AI and are seen once each:
+
+- `when_kill` and `when_totem_pop` come from the game itself: the hook that reports a death is where the
+  game decides to call `die`, and the one that reports a totem is where it spends the totem. Nothing is
+  watched or polled for either, so a program sees each of them exactly once and never sees a stale one.
+- `when_target_acquired` is the AI's own decision — nothing in the game reports it — so it is the edge of
+  the bot having a target: it fires when it gets one, not while it keeps it.
 
 `when_hit` needs health tracking, which is only kept while a program has at least one handler.
 
@@ -484,7 +604,7 @@ reopening it in the editor shows the picture rather than a list.
 
 ### The built-in presets
 
-Seven programs ship in the mod jar. They appear in the editor's preset list and can be run with
+Ten programs ship in the mod jar. They appear in the editor's preset list and can be run with
 `/carpetlogic programs run <name> <bot>`; they cannot be overwritten.
 
 | Id | Name | What it does |
@@ -496,6 +616,14 @@ Seven programs ship in the mod jar. They appear in the editor's preset list and 
 | `preset_shieldbreak` | Shield Break | Switch to slot 2 and hit to break the shield, switch back to slot 1 and hit three times |
 | `preset_dummy` | Target Dummy | Equip diamond armour and stand still facing north |
 | `preset_combo` | Combo Practice | W-tap, strafe and crit attacks, then a sword block, combined |
+| `preset_patrol_fight` | Patrol and Fight | Take the sword kit, walk a patrol forever, and fight whatever hits the bot, then carry on patrolling |
+| `preset_duel_rekit` | Duel then Re-Kit | Fight the nearest bot until the duel is over, take a fresh kit, wait, and do it again |
+| `preset_retreat_low` | Retreat when Low | Fight; below six health break off, run 24 blocks away, eat, and go back in |
+
+The last three use the combat nodes, and are worth reading as examples: a `FIGHT` inside an event handler
+(`Patrol and Fight`), a `FIGHT` and a `GIVE_KIT` in a loop (`Duel then Re-Kit`), and a `COMBAT_START`, a
+`WAIT_UNTIL` on `Conditions/Health`, a `COMBAT_STOP` and then the program's own movement (`Retreat when
+Low`).
 
 ## The per-tick budget
 
@@ -512,6 +640,10 @@ Program 'W-Tap' on Bot1 ran 1000 steps in one tick and was paused until the next
 
 The fix is always the same: give the loop a `Control/Delay`, or a `ticks` on one of its steps. The
 self-test scenario `logic_forever_budget` covers exactly this case.
+
+The combat nodes have scenarios of their own, all of them on a real bot rather than a stub:
+`logic_combat_start_stop`, `logic_fight_node`, `logic_combat_option`, `logic_on_kill_event`,
+`logic_totem_pop_event` and `logic_stop_program_stops_fight`.
 
 ## The HTTP API
 
@@ -550,11 +682,24 @@ Response:
 
 ### `GET /api/settings`
 
-The rules CarpetLogic and the actions depend on, so the editor can grey out what is off.
+The rules CarpetLogic and the actions depend on, so the editor can grey out what is off, plus the lists the
+combat nodes need and the schema cannot know.
 
 Response keys: `commandCarpetLogic`, `carpetLogicPort`, `carpetLogicBindAddress`,
 `carpetLogicSessionHours`, `carpetLogicUpdateInterval`, `carpetLogicMaxPrograms`,
-`carpetLogicViewerMode`, `fakePlayerNavigation`, `fakePlayerElytraGlide`, `swordBlockHitting`.
+`carpetLogicViewerMode`, `fakePlayerNavigation`, `fakePlayerElytraGlide`, `swordBlockHitting`,
+`combatStyles`, `difficulties`, `kits`, `combatOptions`.
+
+| Key | What it holds |
+|---|---|
+| `combatStyles` | every combat style `/bot spawn` takes, `sword` for the melee style |
+| `difficulties` | `beginner`, `casual`, `average`, `skilled`, `expert` |
+| `kits` | every kit this server can give out: the five built-in ones and whatever is in the world's `carpet-kits` folder |
+| `combatOptions` | every setting name `/bot option` and `/player <name> ai` accept, the per-style options included |
+
+The style and difficulty lists are the same ones the schema carries in the resolved `options` of those
+parameters, generated from the bot's enums; the kits cannot be in the schema at all, because they depend on
+the world's folder.
 
 ### `GET /api/schema`
 

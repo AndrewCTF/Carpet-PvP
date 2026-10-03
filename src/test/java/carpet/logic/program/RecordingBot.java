@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A {@link Bot} that does nothing but write down what it was told to do and what it was asked, as
@@ -39,7 +40,11 @@ final class RecordingBot implements InvocationHandler
         {
             return answers.get(method.getName());
         }
-        return returns == boolean.class ? (Object) false : (Object) 0.0;
+        if (returns == boolean.class)
+        {
+            return Boolean.FALSE;
+        }
+        return Set.class.isAssignableFrom(returns) ? Set.of() : (Object) 0.0;
     }
 
     /**

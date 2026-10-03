@@ -63,6 +63,18 @@ public final class BotBrain
         return perception;
     }
 
+    /**
+     * The entity the bot is fighting right now, or null while it is not fighting one.
+     */
+    public LivingEntity target()
+    {
+        if (perceivedTarget == null)
+        {
+            return null;
+        }
+        return bot.level().getEntity(perceivedTarget) instanceof LivingEntity living ? living : null;
+    }
+
     /** True when the bot has a body and a style, which fighting needs. */
     public boolean ready()
     {

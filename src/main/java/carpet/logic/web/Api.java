@@ -11,6 +11,7 @@ import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotPvpConfig;
 import carpet.pvp.FactionManager;
 import carpet.pvp.MatchHistory;
+import carpet.pvp.kit.KitStore;
 import carpet.utils.CommandHelper;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -187,6 +188,12 @@ public class Api
         settings.addProperty("fakePlayerNavigation", CarpetSettings.fakePlayerNavigation);
         settings.addProperty("fakePlayerElytraGlide", CarpetSettings.fakePlayerElytraGlide);
         settings.addProperty("swordBlockHitting", CarpetSettings.swordBlockHitting);
+        // What the combat nodes offer: the styles /bot spawn takes, its difficulties, the kits this server has
+        // and every setting name /bot option accepts, so that none of it is written down in the editor.
+        settings.add("combatStyles", GSON.toJsonTree(List.of(BotPvpConfig.styles())));
+        settings.add("difficulties", GSON.toJsonTree(List.of(BotPvpConfig.difficulties())));
+        settings.add("kits", GSON.toJsonTree(KitStore.of(server).names()));
+        settings.add("combatOptions", GSON.toJsonTree(List.of(BotPvpConfig.keys())));
         return settings;
     }
 

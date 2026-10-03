@@ -25,5 +25,11 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("logic_combat_start_stop", CombatNodeScenarios::combatStartStop);
+        SCENARIOS.put("logic_fight_node", CombatNodeScenarios::fightNode);
+        SCENARIOS.put("logic_combat_option", CombatNodeScenarios::combatOption);
+        SCENARIOS.put("logic_on_kill_event", CombatNodeScenarios::onKillEvent);
+        SCENARIOS.put("logic_totem_pop_event", CombatNodeScenarios::totemPopEvent);
+        SCENARIOS.put("logic_stop_program_stops_fight", CombatNodeScenarios::stopProgramStopsFight);
     }
 }

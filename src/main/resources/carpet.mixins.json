@@ -171,6 +171,8 @@
                    "SummonCommand_lightningMixin",
                    "SculkSensorBlockEntityVibrationConfig_sculkSensorRangeMixin",
                    "WorldBorder_syncedWorldBorderMixin",
+                   "LivingEntity_deathEventMixin",
+                   "LivingEntity_totemEventMixin",
                    "Level_tickMixin"
                ],
     "client":  [

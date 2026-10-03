@@ -9,6 +9,11 @@ import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
+import carpet.pvp.BotEvents;
+import carpet.pvp.BotPvpConfig;
+import carpet.pvp.kit.Kit;
+import carpet.pvp.kit.KitInventory;
+import carpet.pvp.kit.KitStore;
 import carpet.pvp.nav.BotNavMode;
 import carpet.logic.program.Bot;
 import carpet.logic.program.BotActionException;
@@ -23,13 +28,18 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -41,10 +51,10 @@ public class BotController implements Bot
     private static final List<EquipmentSlot> EQUIPMENT_SLOTS = List.of(
             EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND, EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
 
-    private final ServerPlayer player;
+    private final EntityPlayerMPFake player;
     private final EntityPlayerActionPack actionPack;
 
-    public BotController(ServerPlayer player)
+    public BotController(EntityPlayerMPFake player)
     {
         this.player = player;
         this.actionPack = ((ServerPlayerInterface) player).getActionPack();
@@ -402,6 +412,109 @@ public class BotController implements Bot
         throw new BotActionException("The carpet rule '" + ruleName + "' is off. Turn it on with /carpet " + ruleName + " true");
     }
 
+    @Override
+    public void startCombat(String style, String difficulty, String targets, String target)
+    {
+        BotPvpConfig.CombatStyle kind = styleOf(style);
+        // Everything that can be refused is checked before anything of the bot is changed.
+        LivingEntity named = target.isEmpty() ? null : findEntity(target);
+        if (!target.isEmpty() && named == null)
+        {
+            throw new BotActionException("There is no entity named '" + target + "' to fight");
+        }
+        BotPvpConfig cfg = player.getPvpConfig();
+        cfg.combatStyle = kind;
+        String error = cfg.apply("difficulty", difficulty);
+        if (error != null)
+        {
+            throw new BotActionException(error);
+        }
+        // Which kinds of entity the AI may pick. Anything but players, mobs, bots and all means none of them,
+        // which is what the schema's "none" is for.
+        boolean all = targets.equals("all");
+        cfg.targetPlayers = all || targets.equals("players");
+        cfg.targetMobs = all || targets.equals("mobs");
+        cfg.targetBots = all || targets.equals("bots");
+        if (named != null)
+        {
+            // One named entity: only what it is may be fought, and the range has to reach it. The AI then takes
+            // the nearest one of that kind, which is the named one while it is the closer of the two.
+            cfg.targetPlayers = named instanceof ServerPlayer && !(named instanceof EntityPlayerMPFake);
+            cfg.targetMobs = named instanceof Mob;
+            cfg.targetBots = named instanceof EntityPlayerMPFake;
+            cfg.targetRange = Mth.clamp(player.distanceTo(named) + 1.0D, 2.0D, 64.0D);
+        }
+        cfg.autoTarget = true;
+        cfg.combat = true;
+        // The brain owns the body from here on, so the program lets go of what it was holding down.
+        actionPack.stopNavigation();
+        actionPack.stopAll();
+    }
+
+    private static BotPvpConfig.CombatStyle styleOf(String style)
+    {
+        try
+        {
+            return BotPvpConfig.styleOf(style);
+        }
+        catch (IllegalArgumentException e)
+        {
+            throw new BotActionException("Unknown combat style: " + style);
+        }
+    }
+
+    @Override
+    public void stopCombat()
+    {
+        player.getPvpConfig().combat = false;
+        // The brain lets go of what it was driving on its next tick; nothing of it may keep the bot moving.
+        actionPack.stopNavigation();
+        actionPack.stopAll();
+    }
+
+    @Override
+    public void combatOption(String key, String value)
+    {
+        String error = player.getPvpConfig().apply(key, value);
+        if (error != null)
+        {
+            throw new BotActionException(error);
+        }
+    }
+
+    @Override
+    public void giveKit(String kit)
+    {
+        MinecraftServer server = player.level().getServer();
+        KitStore store = KitStore.of(server);
+        Kit found = store.get(kit).orElse(null);
+        if (found == null)
+        {
+            throw new BotActionException("There is no kit called " + kit + ". Kits: " + String.join(", ", store.names()));
+        }
+        KitInventory.apply(player, found, server.registryAccess());
+    }
+
+    /**
+     * A living entity of this world by name: a player by the name it plays under, anything else by the name it
+     * goes by. Null when there is none, or when it is in another dimension.
+     */
+    private LivingEntity findEntity(String name)
+    {
+        MinecraftServer server = player.level().getServer();
+        ServerPlayer named = server.getPlayerList().getPlayerByName(name);
+        if (named != null)
+        {
+            return named != player && named.level() == player.level() ? named : null;
+        }
+        for (LivingEntity living : player.level().getEntities(EntityTypeTest.forClass(LivingEntity.class),
+                living1 -> living1 != player && living1.isAlive() && name.equalsIgnoreCase(living1.getName().getString())))
+        {
+            return living;
+        }
+        return null;
+    }
+
     /**
      * Runs a command as the player the program belongs to, with that player's permissions and never the console's.
      */
@@ -493,6 +606,50 @@ public class BotController implements Bot
     public boolean isInWater()
     {
         return player.isInWater();
+    }
+
+    @Override
+    public boolean isAlive()
+    {
+        return player.isAlive();
+    }
+
+    @Override
+    public boolean isFighting()
+    {
+        return player.getPvpConfig().combat && hasTarget();
+    }
+
+    @Override
+    public boolean hasTarget()
+    {
+        return target() != null;
+    }
+
+    @Override
+    public double targetDistance()
+    {
+        LivingEntity target = target();
+        return target == null ? Double.POSITIVE_INFINITY : player.distanceTo(target);
+    }
+
+    @Override
+    public double targetHealth()
+    {
+        LivingEntity target = target();
+        return target == null ? Double.POSITIVE_INFINITY : target.getHealth();
+    }
+
+    @Override
+    public Set<BotEvents.Event> combatEvents()
+    {
+        return BotEvents.drain(player);
+    }
+
+    /** The entity the bot's combat AI is fighting, or null while it is fighting none. */
+    private LivingEntity target()
+    {
+        return player.getBotBrain().target();
     }
 
     /**
