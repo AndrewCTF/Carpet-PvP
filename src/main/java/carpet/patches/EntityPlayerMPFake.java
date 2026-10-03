@@ -94,6 +94,12 @@ public class EntityPlayerMPFake extends ServerPlayer
     private BotBrain botBrain;
     /** UUID of the most recent attacker, used by the combat-AI revenge logic. */
     public UUID lastAttackerUUID;
+    /**
+     * The game tick this fake player last died on, or {@link Long#MIN_VALUE} while it never has. A fake
+     * player has no death screen and no dead flag, and it is put back a tick later, so this is what lets
+     * whoever was fighting it see afterwards that the fight ended.
+     */
+    private long diedTick = Long.MIN_VALUE;
     /** Game-time tick at which {@link #lastAttackerUUID} last dealt damage. */
     public long lastAttackerTick;
 
@@ -606,6 +612,7 @@ public class EntityPlayerMPFake extends ServerPlayer
         this.setDeltaMovement(0, 0, 0);
         this.setHealth(1.0F);
         this.setPose(Pose.STANDING);
+        this.diedTick = this.level().getGameTime();
 
         this.level().getScoreboard().forAllObjectives(ObjectiveCriteria.DEATH_COUNT, this, ScoreAccess::increment);
 
@@ -696,6 +703,12 @@ public class EntityPlayerMPFake extends ServerPlayer
         } catch (Exception e) {
             LOGGER.error("Error during respawn for fake player {}: {}", getName().getString(), e.getMessage(), e);
         }
+    }
+
+    /** The game tick this fake player last died on, or {@link Long#MIN_VALUE} while it never has. */
+    public long diedTick()
+    {
+        return diedTick;
     }
 
     /**

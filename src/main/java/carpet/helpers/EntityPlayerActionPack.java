@@ -577,6 +577,16 @@ public class EntityPlayerActionPack
         return this;
     }
 
+    /**
+     * Chases a target like {@link #setNavChase} but never attacks it: the caller decides when a click is
+     * worth throwing, and so nothing can hit from behind its back.
+     */
+    public EntityPlayerActionPack setNavApproach(UUID targetUUID, double stopRange)
+    {
+        nav.chase(targetUUID, false, stopRange, 0, false);
+        return this;
+    }
+
     public EntityPlayerActionPack setNavMine(List<Block> targets, int radius, int maxCount)
     {
         nav.mine(targets, radius, maxCount);

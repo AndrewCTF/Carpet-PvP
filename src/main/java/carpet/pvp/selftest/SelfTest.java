@@ -197,6 +197,8 @@ public final class SelfTest
                 conclude(server, false, "unknown scenario");
                 return;
             }
+            // Whatever this scenario changes in the rules goes back when it is over, pass or fail.
+            RuleGuard.enter();
             for (Bot bot : current.bots())
             {
                 run(server, "player " + bot.name() + " spawn at " + coords(bot.pos())
@@ -2046,7 +2048,11 @@ public final class SelfTest
 
     static void conclude(MinecraftServer server, boolean passed, String detail)
     {
-        Result result = new Result(names.get(results.size()), passed, ticks, detail);
+        // Whatever a scenario changed in the rules goes back now, so that one which failed or ran out of time
+        // cannot hand the next one a server the run was not written against.
+        String restored = RuleGuard.leave(server);
+        Result result = new Result(names.get(results.size()), passed, ticks,
+                restored.isEmpty() ? detail : detail + "; rules put back: " + restored);
         results.add(result);
         log(server, fmt("%s %s after %d ticks: %s", passed ? "PASS" : "FAIL", result.name(), result.ticks(), detail));
     }

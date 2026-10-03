@@ -25,5 +25,10 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("sword_damage_rate", SwordScenarios::damageRate);
+        SCENARIOS.put("sword_ladder", SwordScenarios::ladder);
+        SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);
+        SCENARIOS.put("sword_shield_play", SwordScenarios::shieldPlay);
+        SCENARIOS.put("sword_settings", SwordScenarios::swordSettings);
     }
 }
