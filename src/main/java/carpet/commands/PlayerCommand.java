@@ -703,8 +703,8 @@ public class PlayerCommand
         ap.setNavChase(targetPlayer.getUUID(), crit, distance, interval);
         String intervalStr = interval > 0 ? String.valueOf(interval) : "continuous";
         Messenger.m(context.getSource(), "g ", player.getName(), "g  is now chasing ", targetPlayer.getName(),
-            "w  mode=", "y ", modeLabel, "w  range=", String.format("y %.1f", distance),
-                "w  interval=", "y ", intervalStr);
+            "w  mode=", "y " + modeLabel, "w  range=", String.format("y %.1f", distance),
+                "w  interval=", "y " + intervalStr);
         return 1;
     }
 

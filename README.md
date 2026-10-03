@@ -20,13 +20,6 @@ Support this project: [Buy Me a Coffee](https://buymeacoffee.com/andrewyong)
 2. Place the `.jar` file in your `mods` folder
 3. Ensure you have [Fabric Loader](https://fabricmc.net/use/installer/) and [Fabric API](https://modrinth.com/mod/fabric-api) installed
 
-## Installation
-
-1. Download the latest release from the [Releases](https://github.com/AndrewCTF/Carpet-PvP/releases) page
-2. Place the `.jar` file in your `mods` folder
-3. Ensure you have Fabric Loader and Fabric API installed
-4. Supported: Minecraft 26.3 and 26.2
-
 ## Contributing
 
 Contribute to Carpet PvP so that we can improve and make this mod better.

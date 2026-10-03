@@ -1,9 +1,11 @@
 package carpet.pvp.selftest;
 
 import carpet.pvp.selftest.SelfTestReport.Result;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.RedstoneLampBlock;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -21,7 +23,7 @@ import java.util.function.Function;
  */
 public final class SelfTest
 {
-    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit");
+    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit", "script_run", "fill_updates");
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     private static final double SURFACE_Y = -60.0D;
@@ -143,6 +145,37 @@ public final class SelfTest
                     float health = player(server, b).getHealth();
                     return new Probe(health < 20.0F, fmt("%s has %.1f health", b, health));
                 });
+            case "script_run":
+                int[] computed = {-1};
+                return new Scenario(100, List.of(), List.of(), server ->
+                {
+                    if (computed[0] < 0) computed[0] = result(server, "script run 1+1");
+                    return new Probe(computed[0] > 0, fmt("script run 1+1 returned %d", computed[0]));
+                });
+            case "fill_updates":
+                // A lamp turns on as soon as a neighbour update reaches it, so a redstone block placed next to it
+                // lights it while the rule is on and leaves it dark while the rule is off.
+                BlockPos quietLamp = BlockPos.containing(origin);
+                BlockPos quietPower = quietLamp.east();
+                BlockPos liveLamp = quietLamp.east(4);
+                BlockPos livePower = liveLamp.east();
+                return new Scenario(100, List.of(), List.of(
+                        "forceload add " + quietLamp.getX() + " " + quietLamp.getZ(),
+                        "carpet fillUpdates false",
+                        setBlock(quietLamp, "minecraft:redstone_lamp"),
+                        setBlock(quietPower, "minecraft:redstone_block"),
+                        setBlock(liveLamp, "minecraft:redstone_lamp"),
+                        "carpet fillUpdates true",
+                        setBlock(livePower, "minecraft:redstone_block")), server ->
+                {
+                    boolean quietLit = lit(server, quietLamp);
+                    boolean liveLit = lit(server, liveLamp);
+                    // a few ticks of slack, in case an update ever arrives late
+                    boolean settled = ticks > 5;
+                    return new Probe(settled && !quietLit && liveLit, fmt(
+                            "after %d ticks the lamp placed with the rule off is %s and the one placed with it on is %s",
+                            ticks, quietLit ? "lit" : "dark", liveLit ? "lit" : "dark"));
+                });
             default:
                 return null;
         }
@@ -183,6 +216,30 @@ public final class SelfTest
     private static void run(MinecraftServer server, String command)
     {
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+    }
+
+    /** Issues a command and reads back its result, the way the console reports success. */
+    private static int result(MinecraftServer server, String command)
+    {
+        try
+        {
+            return server.getCommands().getDispatcher().execute(command, server.createCommandSourceStack());
+        }
+        catch (Exception e)
+        {
+            log(server, command + " threw " + e);
+            return 0;
+        }
+    }
+
+    private static String setBlock(BlockPos pos, String block)
+    {
+        return "setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + block;
+    }
+
+    private static boolean lit(MinecraftServer server, BlockPos pos)
+    {
+        return server.overworld().getBlockState(pos).getValue(RedstoneLampBlock.LIT);
     }
 
     private static void log(MinecraftServer server, String message)
