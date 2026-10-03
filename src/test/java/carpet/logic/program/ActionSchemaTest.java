@@ -3,6 +3,7 @@ package carpet.logic.program;
 import carpet.logic.program.ActionSchema.Definition;
 import carpet.logic.program.ActionSchema.Param;
 import carpet.logic.program.ActionSchema.Params;
+import carpet.logic.program.ActionSchema.Variables;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -141,6 +142,22 @@ class ActionSchemaTest
         assertThrows(IllegalStateException.class, () -> params.string("ticks"));
     }
 
+    @Test
+    void aNumberParameterTakesAVariableReference()
+    {
+        Variables variables = schema.variables();
+        assertEquals("$", variables.prefix());
+        assertTrue(variables.isName("counter"));
+        assertFalse(variables.isName("two words"));
+        assertTrue(variables.limit() > 0);
+
+        BotAction move = new BotAction("MOVE", Map.of("ticks", "$steps"));
+        schema.validate(List.of(move));
+        assertEquals(1, schema.params(move).integer("ticks"), "an unset variable reads as 0, clamped to the parameter's minimum");
+        assertEquals(42, schema.params(move, Map.of("steps", 42.0)).integer("ticks"));
+        assertEquals(7.5, schema.params(new BotAction("LOOK_AT", Map.of("x", "$x")), Map.of("x", 7.5)).number("x"));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
             "[{\"type\": \"TELEPORT\"}]",
@@ -148,6 +165,8 @@ class ActionSchemaTest
             "[null]",
             "[{\"type\": \"MOVE\", \"params\": {\"duration\": 40}}]",
             "[{\"type\": \"MOVE\", \"params\": {\"ticks\": \"40\"}}]",
+            "[{\"type\": \"MOVE\", \"params\": {\"ticks\": \"$two words\"}}]",
+            "[{\"type\": \"MOVE\", \"params\": {\"ticks\": \"$\"}}]",
             "[{\"type\": \"MOVE\", \"params\": {\"ticks\": null}}]",
             "[{\"type\": \"MOVE\", \"params\": {\"direction\": \"up\"}}]",
             "[{\"type\": \"SPRINT\", \"params\": {\"enabled\": \"false\"}}]",

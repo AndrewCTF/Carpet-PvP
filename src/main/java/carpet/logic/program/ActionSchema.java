@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * The action schema in carpetlogic/actions.json: which action types exist and which parameters each takes.
@@ -39,15 +40,35 @@ public final class ActionSchema
     }
 
     /**
+     * How a number parameter names a variable, and how many variables one program may hold. Written down in the
+     * schema, so the interpreter and the web editor agree on what a reference looks like.
+     *
+     * @param names what may follow the prefix
+     */
+    public record Variables(String prefix, Pattern names, int limit)
+    {
+        public boolean isReference(Object value)
+        {
+            return value instanceof String string && string.startsWith(prefix);
+        }
+
+        public boolean isName(String name)
+        {
+            return names.matcher(name).matches();
+        }
+    }
+
+    /**
      * @param options the only values a string parameter may take, or empty when it is free text
      */
     public record Param(String name, ParamType type, Object defaultValue, double min, double max, List<String> options)
     {
-        boolean accepts(Object value)
+        boolean accepts(Object value, Variables variables)
         {
             return switch (type)
             {
-                case INT, NUMBER -> value instanceof Number number && Double.isFinite(number.doubleValue());
+                case INT, NUMBER -> value instanceof Number number && Double.isFinite(number.doubleValue())
+                        || variables.isReference(value) && variables.isName(((String) value).substring(variables.prefix().length()));
                 case BOOL -> value instanceof Boolean;
                 case STRING -> value instanceof String string && string.length() <= MAX_STRING_LENGTH
                         && (options.isEmpty() || options.contains(string));
@@ -58,7 +79,7 @@ public final class ActionSchema
         {
             return switch (type)
             {
-                case INT, NUMBER -> "a number";
+                case INT, NUMBER -> "a number or a variable";
                 case BOOL -> "true or false";
                 case STRING -> options.isEmpty() ? "text" : "one of " + options;
             };
@@ -81,11 +102,15 @@ public final class ActionSchema
     {
         private final Definition definition;
         private final Map<String, Object> values;
+        private final Variables variables;
+        private final Map<String, Double> store;
 
-        private Params(Definition definition, Map<String, Object> values)
+        private Params(Definition definition, Map<String, Object> values, Variables variables, Map<String, Double> store)
         {
             this.definition = definition;
             this.values = values;
+            this.variables = variables;
+            this.store = store;
         }
 
         public int integer(String name)
@@ -108,13 +133,23 @@ public final class ActionSchema
         {
             Param param = declared(name, ParamType.STRING);
             Object value = values.get(name);
-            return param.accepts(value) ? (String) value : (String) param.defaultValue();
+            return param.accepts(value, variables) ? (String) value : (String) param.defaultValue();
         }
 
         private double clamped(Param param)
         {
             Object value = values.get(param.name());
-            double number = param.accepts(value) ? ((Number) value).doubleValue() : ((Number) param.defaultValue()).doubleValue();
+            double number;
+            if (variables.isReference(value))
+            {
+                // A variable that was never set reads as 0.
+                Double held = store.get(((String) value).substring(variables.prefix().length()));
+                number = held == null ? 0.0 : held;
+            }
+            else
+            {
+                number = param.accepts(value, variables) ? ((Number) value).doubleValue() : ((Number) param.defaultValue()).doubleValue();
+            }
             return Math.max(param.min(), Math.min(param.max(), number));
         }
 
@@ -130,6 +165,7 @@ public final class ActionSchema
     }
 
     private final JsonObject json;
+    private final Variables variables;
     private final Map<String, Definition> definitions = new LinkedHashMap<>();
 
     public static ActionSchema load()
@@ -156,6 +192,9 @@ public final class ActionSchema
     private ActionSchema(JsonObject json)
     {
         this.json = json;
+        JsonObject variables = json.getAsJsonObject("variables");
+        this.variables = new Variables(variables.get("referencePrefix").getAsString(),
+                Pattern.compile(variables.get("namePattern").getAsString()), variables.get("maxVariables").getAsInt());
         for (Map.Entry<String, JsonElement> entry : json.getAsJsonObject("actions").entrySet())
         {
             String type = entry.getKey();
@@ -181,7 +220,7 @@ public final class ActionSchema
         }
     }
 
-    private static Param readParam(String action, JsonObject json)
+    private Param readParam(String action, JsonObject json)
     {
         String name = json.get("name").getAsString();
         ParamType type = ParamType.valueOf(json.get("type").getAsString().toUpperCase(Locale.ROOT));
@@ -202,7 +241,7 @@ public final class ActionSchema
                 json.has("min") ? json.get("min").getAsDouble() : -Double.MAX_VALUE,
                 json.has("max") ? json.get("max").getAsDouble() : Double.MAX_VALUE,
                 List.copyOf(options));
-        if (!param.accepts(defaultValue))
+        if (!param.accepts(defaultValue, variables))
         {
             throw new IllegalStateException(action + "." + name + ": the default is not " + param.expectation());
         }
@@ -215,6 +254,11 @@ public final class ActionSchema
     public JsonObject json()
     {
         return json;
+    }
+
+    public Variables variables()
+    {
+        return variables;
     }
 
     public Collection<Definition> definitions()
@@ -237,7 +281,15 @@ public final class ActionSchema
 
     public Params params(BotAction action)
     {
-        return new Params(definition(action), action.getParams());
+        return params(action, Map.of());
+    }
+
+    /**
+     * @param store the variables the running program holds, for number parameters that name one
+     */
+    public Params params(BotAction action, Map<String, Double> store)
+    {
+        return new Params(definition(action), action.getParams(), variables, store);
     }
 
     /**
@@ -282,7 +334,7 @@ public final class ActionSchema
             {
                 throw new IllegalArgumentException(type + " has no parameter '" + entry.getKey() + "'");
             }
-            if (!param.accepts(entry.getValue()))
+            if (!param.accepts(entry.getValue(), variables))
             {
                 throw new IllegalArgumentException(type + "." + param.name() + " must be " + param.expectation());
             }

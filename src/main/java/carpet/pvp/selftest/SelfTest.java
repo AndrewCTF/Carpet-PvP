@@ -1,6 +1,12 @@
 package carpet.pvp.selftest;
 
+import carpet.logic.CarpetLogic;
+import carpet.logic.program.BotAction;
+import carpet.logic.program.BotProgram;
+import carpet.logic.program.ProgramExecutor.ProgramInfo;
 import carpet.pvp.selftest.SelfTestReport.Result;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,6 +18,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -21,18 +28,23 @@ import java.util.function.Function;
  */
 public final class SelfTest
 {
-    private static final List<String> SCENARIOS = List.of("spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit");
+    private static final List<String> SCENARIOS = List.of(
+            "spawn", "nav_goto", "nav_follow", "chase_attack", "chase_crit", "logic_program", "logic_forever_budget");
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     private static final double SURFACE_Y = -60.0D;
     private static final double SPACING = 256.0D;
+    private static final Gson GSON = new Gson();
 
     private record Bot(String name, Vec3 pos) {}
 
     private record Probe(boolean ok, String detail) {}
 
+    /** Scenarios that drive the bot with commands only. */
+    private static final Consumer<MinecraftServer> NOTHING = server -> {};
+
     /** The commands are issued once every bot has joined; the check is then polled every tick. */
-    private record Scenario(int timeout, List<Bot> bots, List<String> commands, Function<MinecraftServer, Probe> check) {}
+    private record Scenario(int timeout, List<Bot> bots, List<String> commands, Consumer<MinecraftServer> start, Function<MinecraftServer, Probe> check) {}
 
     private static final List<Result> results = new ArrayList<>();
     private static List<String> names;
@@ -96,6 +108,7 @@ public final class SelfTest
         if (!acting)
         {
             acting = true;
+            current.start().accept(server);
             current.commands().forEach(command -> run(server, command));
         }
         return current.check().apply(server);
@@ -110,14 +123,14 @@ public final class SelfTest
         switch (name)
         {
             case "spawn":
-                return new Scenario(200, List.of(new Bot(a, origin)), List.of(), server ->
+                return new Scenario(200, List.of(new Bot(a, origin)), List.of(), NOTHING, server ->
                 {
                     double off = player(server, a).position().distanceTo(origin);
                     return new Probe(off < 0.5D, fmt("%s is %.2f blocks from where it was spawned", a, off));
                 });
             case "nav_goto":
                 Vec3 goal = origin.add(12.0D, 0.0D, 0.0D);
-                return new Scenario(600, List.of(new Bot(a, origin)), List.of("player " + a + " nav goto " + coords(goal)), server ->
+                return new Scenario(600, List.of(new Bot(a, origin)), List.of("player " + a + " nav goto " + coords(goal)), NOTHING, server ->
                 {
                     double left = player(server, a).position().distanceTo(goal);
                     // 1 block is the default arrival radius of nav goto
@@ -126,7 +139,7 @@ public final class SelfTest
             case "nav_follow":
                 Vec3 behind = origin.add(0.0D, 0.0D, -2.0D);
                 return new Scenario(600, List.of(new Bot(a, behind), new Bot(b, origin)),
-                        List.of("player " + a + " nav follow " + b, "player " + b + " move forward"), server ->
+                        List.of("player " + a + " nav follow " + b, "player " + b + " move forward"), NOTHING, server ->
                 {
                     ServerPlayer leader = player(server, b);
                     double walked = leader.position().distanceTo(origin);
@@ -138,14 +151,58 @@ public final class SelfTest
                 String mode = name.substring("chase_".length());
                 Vec3 ahead = origin.add(0.0D, 0.0D, 6.0D);
                 return new Scenario(600, List.of(new Bot(a, origin), new Bot(b, ahead)),
-                        List.of("player " + a + " nav chase " + mode + " 2.5 0 " + b), server ->
+                        List.of("player " + a + " nav chase " + mode + " 2.5 0 " + b), NOTHING, server ->
                 {
                     float health = player(server, b).getHealth();
                     return new Probe(health < 20.0F, fmt("%s has %.1f health", b, health));
                 });
+            case "logic_program":
+                return new Scenario(600, List.of(new Bot(a, origin)), List.of(), server ->
+                {
+                    startProgram(server, a, "[{type: MOVE, params: {direction: forward, ticks: 40}}, {type: STOP_MOVEMENT}]");
+                }, server ->
+                {
+                    double walked = player(server, a).position().distanceTo(origin);
+                    String status = status(a);
+                    return new Probe(walked >= 3.0D && status.equals("COMPLETED"),
+                            fmt("%s walked %.1f blocks, its program is %s", a, walked, status));
+                });
+            case "logic_forever_budget":
+                return new Scenario(200, List.of(new Bot(a, origin)), List.of(), server ->
+                {
+                    startProgram(server, a, "[{type: FOREVER, children: [{type: SPRINT}]}]");
+                }, server ->
+                {
+                    // Reaching this many ticks at all says the loop left the server ticking; the program itself
+                    // has no end, so it must still be running.
+                    String status = status(a);
+                    return new Probe(ticks >= 40 && status.equals("RUNNING"),
+                            fmt("after %d ticks the program is %s", ticks, status));
+                });
             default:
                 return null;
         }
+    }
+
+    // A bot program started through the Java API, the way the web editor's execute endpoint starts one, and
+    // never as the console: a program started from a command has no player to run its commands as.
+    private static void startProgram(MinecraftServer server, String botName, String actions)
+    {
+        CarpetLogic logic = CarpetLogic.INSTANCE;
+        BotProgram program = new BotProgram("_selftest", "selftest", "");
+        program.setActions(GSON.fromJson(actions, new TypeToken<List<BotAction>>() {}.getType()));
+        logic.getSchema().validate(program.getActions());
+        String refused = logic.getProgramExecutor().startProgram(botName, program, null);
+        if (refused != null)
+        {
+            log(server, "could not start the program on " + botName + ": " + refused);
+        }
+    }
+
+    private static String status(String botName)
+    {
+        ProgramInfo info = CarpetLogic.INSTANCE.getProgramExecutor().getPrograms().get(botName);
+        return info == null ? "gone" : info.status();
     }
 
     private static void conclude(MinecraftServer server, boolean passed, String detail)

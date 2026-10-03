@@ -18,6 +18,8 @@ const NodeEditor = (() => {
         elytra:     { label: "Elytra Flight",  color: "#10b981", prefix: "Elytra" },
         crystal:    { label: "Crystal PvP",    color: "#ec4899", prefix: "Crystal" },
         condition:  { label: "Conditions",     color: "#0ea5e9", prefix: "Conditions" },
+        variables:   { label: "Variables",      color: "#eab308", prefix: "Variables" },
+        events:      { label: "Events",         color: "#d946ef", prefix: "Events" },
     };
 
     // ── Initialise ───────────────────────────────────────────

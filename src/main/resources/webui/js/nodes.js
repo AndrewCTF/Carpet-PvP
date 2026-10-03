@@ -18,6 +18,8 @@ const Nodes = (() => {
         Elytra:     { color: "#10b981", bg: "#202d28" },
         Crystal:    { color: "#ec4899", bg: "#2d2028" },
         Conditions: { color: "#0ea5e9", bg: "#202530" },
+        Variables:  { color: "#eab308", bg: "#2d2b1c" },
+        Events:     { color: "#d946ef", bg: "#2d2030" },
     };
 
     const FLOW_IN = [["in", "flow"]];
@@ -27,6 +29,8 @@ const Nodes = (() => {
     const NODES = {
         "Control/Start":           { title: "Start", desc: "Program entry point: execution begins here.", inputs: [] },
         "Control/Delay":           { title: "Delay", desc: "Wait for a number of ticks (20 ticks = 1 second)." },
+        "Control/WaitUntil":       { title: "Wait Until", desc: "Hold here until the condition is true, or the timeout runs out. Ticks is the timeout.",
+                                     inputs: [["in", "flow"], ["condition", "condition"]] },
         "Control/Repeat":          { title: "Repeat", desc: "Run the body a number of times, then continue.",
                                      outputs: [["body", "flow"], ["done", "flow"]] },
         "Control/Forever":         { title: "Forever", desc: "Run the body again and again until the program is stopped.",
@@ -37,6 +41,9 @@ const Nodes = (() => {
         "Control/Sequence":        { title: "Sequence", desc: "Run the outputs in order, 1 to 4.",
                                      outputs: [["1", "flow"], ["2", "flow"], ["3", "flow"], ["4", "flow"]] },
         "Control/ExecuteCommand":  { title: "Execute Command", desc: "Run a command as you, with your permissions." },
+
+        "Variables/Set":           { title: "Set Variable", desc: "Give a variable a number. Any number field takes one instead of a number." },
+        "Variables/Add":           { title: "Add To Variable", desc: "Add a number to a variable, or take it away.", },
 
         "Movement/Move":           { title: "Move", desc: "Walk in a direction for a number of ticks." },
         "Movement/Strafe":         { title: "Strafe", desc: "Step sideways for a number of ticks." },
@@ -87,10 +94,14 @@ const Nodes = (() => {
         "Crystal/DetonateCrystal": { title: "Detonate Crystal", desc: "Hit the end crystal the bot is looking at." },
         "Crystal/PlaceBlock":      { title: "Place Block", desc: "Right click with a block in hand." },
 
+        "Events/OnEvent":          { title: "On Event", desc: "Register a reaction, then carry on. Its body takes over from the sequence when the event happens, and the sequence resumes where it was. An event that happens again while the body is still running is ignored.",
+                                     outputs: [["body", "flow"], ["next", "flow"]] },
+
         "Conditions/Health":       { title: "Health Check", desc: "Compare the bot's health (0-20)." },
         "Conditions/Distance":     { title: "Distance Check", desc: "Compare the distance to a player. Leave the target empty for the nearest one." },
         "Conditions/Food":         { title: "Food Check", desc: "Compare the bot's food level (0-20)." },
         "Conditions/Armor":        { title: "Armor Check", desc: "Compare the bot's armor points." },
+        "Conditions/Variable":      { title: "Variable Check", desc: "Compare a variable with a number. A variable that was never set is 0." },
         "Conditions/Random":       { title: "Random Chance", desc: "True with the given probability." },
         "Conditions/HasItem":      { title: "Has Item", desc: "True when the bot carries the item." },
         "Conditions/IsFlying":     { title: "Is Flying", desc: "True while the bot is gliding." },
@@ -133,12 +144,9 @@ const Nodes = (() => {
             node.addWidget("toggle", label, p.default, p.name);
         } else if (p.options) {
             node.addWidget("combo", label, p.default, p.name, { values: p.options });
-        } else if (p.type === "string") {
-            node.addWidget("text", label, p.default, p.name);
         } else {
-            const whole = p.type === "int";
-            node.addWidget("number", label, p.default, p.name,
-                { min: p.min, max: p.max, step: whole ? 10 : 1, precision: whole ? 0 : 1 });
+            // A number is text too, so that a variable reference can be typed where a number goes.
+            node.addWidget("text", label, p.default, p.name);
         }
     }
 

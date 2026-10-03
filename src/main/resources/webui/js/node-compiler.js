@@ -10,6 +10,8 @@ const NodeCompiler = (() => {
 
     let schema = null;
     let actionByNode = {};      // editor node type → action type
+    let variablePrefix = "";    // what a number parameter holds when it names a variable
+    let variableName = /.*/;    // what may follow the prefix
 
     function setSchema(newSchema) {
         schema = newSchema;
@@ -17,6 +19,8 @@ const NodeCompiler = (() => {
         for (const [type, def] of Object.entries(schema.actions)) {
             actionByNode[def.node] = type;
         }
+        variablePrefix = schema.variables.referencePrefix;
+        variableName = new RegExp(schema.variables.namePattern);
     }
 
     // ── Parameters ───────────────────────────────────────────
@@ -30,6 +34,10 @@ const NodeCompiler = (() => {
                 return param.options && !param.options.includes(text) ? param.default : text;
             }
             default: {
+                // A number parameter may name a variable instead of holding one.
+                if (typeof value === "string" && value.startsWith(variablePrefix)) {
+                    return variableName.test(value.slice(variablePrefix.length)) ? value : param.default;
+                }
                 let number = value === "" || value === null ? NaN : Number(value);
                 if (!Number.isFinite(number)) number = param.default;
                 if (param.type === "int") number = Math.round(number);
@@ -66,7 +74,11 @@ const NodeCompiler = (() => {
         "Control/If-Else": 2,       // then, else, done
         "Control/Forever": null,
         "Control/Sequence": null,
+        "Events/OnEvent": 1,        // body, next
     };
+
+    // The nodes that are handed a condition: it arrives on their last input, as nodes.js declares the sockets.
+    const WITH_CONDITION = new Set(["Control/If-Else", "Control/WaitUntil"]);
 
     function compile(graph) {
         if (!schema) throw new Error("The action schema has not been loaded");
@@ -110,20 +122,23 @@ const NodeCompiler = (() => {
         if (!type) throw new Error("Node '" + node.type + "' cannot be compiled");
         const action = make(type, pick(schema.actions[type], props));
 
+        if (WITH_CONDITION.has(node.type)) {
+            const condition = source(graph, node, node.inputs.length - 1);
+            if (!condition) throw new Error("A " + node.title + " node has no condition connected");
+            action.condition = compileNode(graph, condition, visited);
+        }
+
         switch (node.type) {
             case "Control/Repeat":
             case "Control/Forever":
+            case "Events/OnEvent":
                 action.children = branch(graph, node, 0, visited);
                 break;
 
-            case "Control/If-Else": {
-                const condition = source(graph, node, 1);
-                if (!condition) throw new Error("An If / Else node has no condition connected");
-                action.condition = compileNode(graph, condition, visited);
+            case "Control/If-Else":
                 action.children = branch(graph, node, 0, visited);
                 action.elseChildren = branch(graph, node, 1, visited);
                 break;
-            }
 
             case "Control/Sequence":
                 action.children = [];

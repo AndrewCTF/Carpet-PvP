@@ -56,6 +56,8 @@ public class ProgramExecutor
         // How many more times the list runs, this time included; FOREVER when it never stops.
         int runsLeft;
         int index;
+        // The reaction this list belongs to, or null for the program's own sequence.
+        Handler handler;
 
         Frame(List<BotAction> actions, int runs)
         {
@@ -66,16 +68,38 @@ public class ProgramExecutor
 
     private static final int FOREVER = -1;
 
+    /**
+     * A program's reaction to one event. Its actions take over from the main sequence, which resumes where it
+     * was once they are done. An event that happens while its own handler is running is ignored.
+     */
+    private static class Handler
+    {
+        // The ON_EVENT node this reaction came from, and the event it watches for.
+        final BotAction action;
+        String event;
+        boolean wasTrue;
+        boolean running;
+        Wait interrupted;
+
+        Handler(BotAction action)
+        {
+            this.action = action;
+        }
+    }
+
     private static class ProgramState
     {
         final BotProgram program;
         final UUID owner;
         final Deque<Frame> stack = new ArrayDeque<>();
+        final Map<String, Double> variables = new LinkedHashMap<>();
+        final List<Handler> handlers = new ArrayList<>();
         Status status = Status.RUNNING;
         Wait wait;
         String currentAction;
         String error;
         boolean warnedAboutBudget;
+        double lastHealth;
 
         ProgramState(BotProgram program, UUID owner)
         {
@@ -111,7 +135,8 @@ public class ProgramExecutor
      */
     public String startProgram(String botName, BotProgram program, UUID owner)
     {
-        if (bots.apply(botName) == null)
+        Bot bot = bots.apply(botName);
+        if (bot == null)
         {
             return "There is no bot named '" + botName + "'";
         }
@@ -174,6 +199,11 @@ public class ProgramExecutor
             try
             {
                 tickProgram(state, bot, botName);
+                // Only a program that watches for being hit needs to know how the bot was doing.
+                if (!state.handlers.isEmpty())
+                {
+                    state.lastHealth = bot.health();
+                }
             }
             catch (BotActionException e)
             {
@@ -201,6 +231,7 @@ public class ProgramExecutor
 
     private void tickProgram(ProgramState state, Bot bot, String botName)
     {
+        fireEvents(state, bot, botName);
         if (state.wait != null)
         {
             Wait wait = state.wait;
@@ -251,6 +282,12 @@ public class ProgramExecutor
                 else
                 {
                     state.stack.pop();
+                    if (frame.handler != null)
+                    {
+                        // The main sequence takes over again, and waits out what it was waiting for.
+                        frame.handler.running = false;
+                        state.wait = frame.handler.interrupted;
+                    }
                 }
                 continue;
             }
@@ -260,6 +297,51 @@ public class ProgramExecutor
         }
     }
 
+    /**
+     * Hands the tick to the handlers whose event has just become true. Each one that starts takes over from the
+     * main sequence, which is put back the way it was when the handler's actions are done. An event that
+     * happens again while its own handler is still running is ignored.
+     */
+    private void fireEvents(ProgramState state, Bot bot, String botName)
+    {
+        for (Handler handler : state.handlers)
+        {
+            boolean holds = holds(handler, state, bot);
+            boolean fired = holds && !handler.wasTrue;
+            handler.wasTrue = holds;
+            if (!fired || handler.running || handler.action.getChildren().isEmpty())
+            {
+                continue;
+            }
+            handler.interrupted = state.wait;
+            state.wait = null;
+            handler.running = true;
+            Frame frame = new Frame(handler.action.getChildren(), 1);
+            frame.handler = handler;
+            state.stack.push(frame);
+            logListener.accept("INFO", "Program '" + state.program.getName() + "' on " + botName + " is running its " + handler.event + " handler");
+        }
+    }
+
+    /**
+     * Whether an event's condition holds now. Each one is written so that its rising edge is the event: the bot
+     * took damage, its health went below the given value, its target went away, or its target came into range.
+     */
+    private boolean holds(Handler handler, ProgramState state, Bot bot)
+    {
+        Params p = schema.params(handler.action, state.variables);
+        String target = p.string("target");
+        double value = p.number("value");
+        return switch (handler.event)
+        {
+            case "when_hit" -> bot.health() < state.lastHealth;
+            case "when_health_below" -> bot.health() < value;
+            case "when_target_lost" -> Double.isInfinite(bot.distanceToPlayer(target));
+            case "when_target_in_range" -> bot.distanceToPlayer(target) <= value;
+            default -> throw new IllegalStateException("No interpreter for event " + handler.event);
+        };
+    }
+
     private void execute(BotAction action, ProgramState state, Bot bot)
     {
         String requiredRule = schema.definition(action).requires();
@@ -267,7 +349,7 @@ public class ProgramExecutor
         {
             bot.requireRule(requiredRule, state.owner);
         }
-        Params p = schema.params(action);
+        Params p = schema.params(action, state.variables);
         switch (action.getType())
         {
             case "MOVE" ->
@@ -447,6 +529,20 @@ public class ProgramExecutor
             case "GLIDE_LAND" -> bot.glideLand();
 
             case "DELAY" -> hold(state, bot, p.integer("ticks"), null);
+            case "WAIT_UNTIL" ->
+            {
+                BotAction condition = action.getCondition();
+                Wait wait = new Wait();
+                wait.ticksLeft = p.integer("timeout");
+                wait.done = b -> test(condition, b, state);
+                if (!wait.done.test(bot))
+                {
+                    state.wait = wait;
+                }
+            }
+            case "SET_VARIABLE" -> setVariable(state, p.string("name"), p.number("value"));
+            case "ADD_VARIABLE" -> setVariable(state, p.string("name"), variable(state, p.string("name")) + p.number("amount"));
+            case "ON_EVENT" -> addHandler(action, state, bot);
             case "EXECUTE_COMMAND" -> bot.executeCommand(p.string("command"), state.owner);
             case "SEQUENCE" -> pushFrame(state, action.getChildren(), 1);
             case "LOOP" -> pushFrame(state, action.getChildren(), p.integer("count"));
@@ -459,7 +555,7 @@ public class ProgramExecutor
                 }
                 pushFrame(state, action.getChildren(), FOREVER);
             }
-            case "IF_THEN_ELSE" -> pushFrame(state, test(action.getCondition(), bot) ? action.getChildren() : action.getElseChildren(), 1);
+            case "IF_THEN_ELSE" -> pushFrame(state, test(action.getCondition(), bot, state) ? action.getChildren() : action.getElseChildren(), 1);
 
             default -> throw new IllegalStateException("No interpreter for action type " + action.getType());
         }
@@ -491,15 +587,56 @@ public class ProgramExecutor
         }
     }
 
-    private boolean test(BotAction condition, Bot bot)
+    /** What a number parameter naming a variable reads as: 0 for a variable the program never set. */
+    private static double variable(ProgramState state, String name)
     {
-        Params p = schema.params(condition);
+        Double value = state.variables.get(name);
+        return value == null ? 0.0 : value;
+    }
+
+    private void setVariable(ProgramState state, String name, double value)
+    {
+        if (!schema.variables().isName(name))
+        {
+            throw new BotActionException("'" + name + "' is not a variable name: it must match " + schema.variables().names().pattern());
+        }
+        if (!state.variables.containsKey(name) && state.variables.size() >= schema.variables().limit())
+        {
+            throw new BotActionException("A program may hold at most " + schema.variables().limit() + " variables");
+        }
+        state.variables.put(name, value);
+    }
+
+    /**
+     * Registers a reaction, once, however often the sequence comes back to it. Whether its event already holds
+     * is remembered now, so that the handler only ever fires on the edge that comes later.
+     */
+    private void addHandler(BotAction event, ProgramState state, Bot bot)
+    {
+        if (state.handlers.stream().anyMatch(handler -> handler.action == event))
+        {
+            return;
+        }
+        Handler handler = new Handler(event);
+        handler.event = schema.params(event, state.variables).string("event");
+        if (state.handlers.isEmpty())
+        {
+            state.lastHealth = bot.health();
+        }
+        handler.wasTrue = holds(handler, state, bot);
+        state.handlers.add(handler);
+    }
+
+    private boolean test(BotAction condition, Bot bot, ProgramState state)
+    {
+        Params p = schema.params(condition, state.variables);
         return switch (condition.getType())
         {
             case "CONDITION_HEALTH" -> compare(bot.health(), p.string("operator"), p.number("value"));
             case "CONDITION_FOOD" -> compare(bot.food(), p.string("operator"), p.number("value"));
             case "CONDITION_ARMOR" -> compare(bot.armor(), p.string("operator"), p.number("value"));
             case "CONDITION_DISTANCE" -> compare(bot.distanceToPlayer(p.string("target")), p.string("operator"), p.number("value"));
+            case "CONDITION_VARIABLE" -> compare(variable(state, p.string("name")), p.string("operator"), p.number("value"));
             case "CONDITION_RANDOM" -> Math.random() * 100 < p.number("chance");
             case "CONDITION_HAS_ITEM" -> bot.hasItem(p.string("item"));
             case "CONDITION_IS_FLYING" -> bot.isFlying();

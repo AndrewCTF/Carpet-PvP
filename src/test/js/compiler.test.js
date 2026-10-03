@@ -224,7 +224,133 @@ test("macro nodes expand to actions the schema declares", () => {
     ]);
 });
 
+test("a variable reference survives being saved and reopened", () => {
+    const { graph, add, wire, start } = newGraph();
+    const set = add("Variables/Set", { name: "steps", value: 3 });
+    const move = add("Movement/Move", { ticks: "$steps" });
+    const event = add("Events/OnEvent", { event: "when_hit" });
+    wire(start, 0, set);
+    wire(set, 0, move);
+    wire(move, 0, event);
+    wire(event, 0, add("Combat/Attack", { mode: "continuous" }));
+
+    const reopened = new LGraph();
+    reopened.configure(JSON.parse(JSON.stringify(graph.serialize())));
+    assert.deepEqual(NodeCompiler.compile(reopened), NodeCompiler.compile(graph));
+});
+
 test("make refuses a parameter name the schema does not declare", () => {
     assert.throws(() => NodeCompiler.make("MOVE", { duration: 40 }), /no parameter 'duration'/);
     assert.throws(() => NodeCompiler.make("TELEPORT", {}), /Unknown action type/);
+});
+
+test("a number field may hold a variable instead of a number", () => {
+    const { graph, add, wire, start } = newGraph();
+    const set = add("Variables/Set", { name: "steps", value: 3 });
+    const add2 = add("Variables/Add", { name: "steps", amount: 2 });
+    const move = add("Movement/Move", { ticks: "$steps" });
+    const check = add("Conditions/Variable", { name: "steps", operator: "<", value: 9 });
+    const branch = add("Control/If-Else");
+    wire(start, 0, set);
+    wire(set, 0, add2);
+    wire(add2, 0, move);
+    wire(move, 0, branch);
+    wire(check, 0, branch, 1);
+
+    assert.deepEqual(NodeCompiler.compile(graph), [
+        { type: "SET_VARIABLE", params: { name: "steps", value: 3 } },
+        { type: "ADD_VARIABLE", params: { name: "steps", amount: 2 } },
+        { type: "MOVE", params: { direction: "forward", ticks: "$steps" } },
+        {
+            type: "IF_THEN_ELSE",
+            condition: { type: "CONDITION_VARIABLE", params: { name: "steps", operator: "<", value: 9 } },
+            children: [],
+            elseChildren: [],
+        },
+    ]);
+});
+
+test("a variable the schema does not name that way falls back to the default", () => {
+    assert.deepEqual(NodeCompiler.make("MOVE", { ticks: "$two words" }),
+        { type: "MOVE", params: { direction: "forward", ticks: 20 } });
+    assert.deepEqual(NodeCompiler.make("MOVE", { ticks: "$" }),
+        { type: "MOVE", params: { direction: "forward", ticks: 20 } });
+    assert.deepEqual(NodeCompiler.make("LOOK_AT", { x: "$x" }),
+        { type: "LOOK_AT", params: { x: "$x", y: 64, z: 0 } });
+});
+
+test("the variable prefix is the one the schema declares, not one written into the compiler", () => {
+    const other = JSON.parse(JSON.stringify(schema));
+    other.variables.referencePrefix = "%";
+    NodeCompiler.setSchema(other);
+    try {
+        assert.equal(NodeCompiler.make("MOVE", { ticks: "$steps" }).params.ticks, 20);
+        assert.equal(NodeCompiler.make("MOVE", { ticks: "%steps" }).params.ticks, "%steps");
+    } finally {
+        NodeCompiler.setSchema(schema);
+    }
+});
+
+test("WaitUntil holds the sequence until its condition holds or its timeout runs out", () => {
+    const { graph, add, wire, start } = newGraph();
+    const wait = add("Control/WaitUntil", { timeout: 40 });
+    const move = add("Movement/Move");
+    wire(start, 0, wait);
+    wire(add("Conditions/Health", { operator: "<", value: 6 }), 0, wait, 1);
+    wire(wait, 0, move);
+
+    assert.deepEqual(NodeCompiler.compile(graph), [
+        {
+            type: "WAIT_UNTIL",
+            params: { timeout: 40 },
+            condition: { type: "CONDITION_HEALTH", params: { operator: "<", value: 6 } },
+        },
+        { type: "MOVE", params: { direction: "forward", ticks: 20 } },
+    ]);
+});
+
+test("WaitUntil without a condition is a compile error", () => {
+    const { graph, add, wire, start } = newGraph();
+    const wait = add("Control/WaitUntil");
+    wire(start, 0, wait);
+    wire(wait, 0, add("Movement/Jump"));
+
+    assert.throws(() => NodeCompiler.compile(graph), /no condition/);
+});
+
+test("OnEvent registers a reaction, and the sequence carries on from next", () => {
+    const { graph, add, wire, start } = newGraph();
+    const event = add("Events/OnEvent", { event: "when_health_below", target: "Steve", value: 8 });
+    const reaction = add("Combat/Attack", { mode: "continuous", ticks: 10 });
+    const after = add("Equipment/SwapHands");
+    wire(start, 0, event);
+    wire(event, 0, reaction);
+    wire(event, 1, after);
+
+    assert.deepEqual(NodeCompiler.compile(graph), [
+        {
+            type: "ON_EVENT",
+            params: { event: "when_health_below", target: "Steve", value: 8 },
+            children: [{ type: "ATTACK", params: { mode: "continuous", interval: 10, ticks: 10 } }],
+        },
+        { type: "SWAP_HANDS" },
+    ]);
+});
+
+test("an OnEvent body may hold a whole reaction of its own", () => {
+    const { graph, add, wire, start } = newGraph();
+    const event = add("Events/OnEvent", { event: "when_hit" });
+    const loop = add("Control/Repeat", { count: 2 });
+    const stop = add("Navigation/NavStop");
+    wire(start, 0, event);
+    wire(event, 0, loop);
+    wire(loop, 0, stop);
+    wire(event, 1, add("Movement/StopMovement"));
+
+    const [onEvent, ...rest] = NodeCompiler.compile(graph);
+    assert.equal(onEvent.type, "ON_EVENT");
+    assert.deepEqual(onEvent.children, [{
+        type: "LOOP", params: { count: 2 }, children: [{ type: "NAV_STOP" }],
+    }]);
+    assert.deepEqual(types(rest), ["STOP_MOVEMENT"]);
 });

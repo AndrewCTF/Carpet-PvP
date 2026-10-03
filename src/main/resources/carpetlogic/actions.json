@@ -3,12 +3,23 @@
     "The single definition of every bot action and its parameters.",
     "The interpreter reads parameters only through this file (carpet.logic.program.ActionSchema), and the web",
     "editor builds its node widgets from it and compiles graphs against it (webui/js/node-compiler.js).",
-    "kind: action (a step), control (holds other actions in the listed slots) or condition (tested by IF_THEN_ELSE).",
+    "kind: action (a step), control (holds other actions in the listed slots) or condition (tested by IF_THEN_ELSE",
+    "and by WAIT_UNTIL).",
     "node: the editor node this action is compiled from.",
     "params: name, type (int, number, bool, string), default, and optionally min/max or the allowed options.",
+    "An int or number parameter may also hold a variable: the referencePrefix followed by a name, for example",
+    "'$counter'. A variable that was never set reads as 0.",
     "requires: the boolean carpet rule that must be on for the action to work.",
-    "A 'ticks' parameter is how long the step lasts before the next one starts."
+    "A 'ticks' parameter is how long the step lasts before the next one starts.",
+    "ON_EVENT registers a reaction and then carries on with the sequence: its children run when the event happens,",
+    "taking over from the main sequence, which resumes where it was once they are done. Every event fires on its",
+    "rising edge only, and an event that fires while its own handler is still running is ignored."
   ],
+  "variables": {
+    "referencePrefix": "$",
+    "namePattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+    "maxVariables": 64
+  },
   "actions": {
     "MOVE": {"kind": "action", "node": "Movement/Move", "params": [
       {"name": "direction", "type": "string", "default": "forward", "options": ["forward", "backward", "left", "right"]},
@@ -169,6 +180,22 @@
     "DELAY": {"kind": "action", "node": "Control/Delay", "params": [
       {"name": "ticks", "type": "int", "default": 20, "min": 1, "max": 6000}
     ]},
+    "WAIT_UNTIL": {"kind": "control", "node": "Control/WaitUntil", "slots": ["condition"], "params": [
+      {"name": "timeout", "type": "int", "default": 100, "min": 1, "max": 60000}
+    ]},
+    "SET_VARIABLE": {"kind": "action", "node": "Variables/Set", "params": [
+      {"name": "name", "type": "string", "default": "counter"},
+      {"name": "value", "type": "number", "default": 0}
+    ]},
+    "ADD_VARIABLE": {"kind": "action", "node": "Variables/Add", "params": [
+      {"name": "name", "type": "string", "default": "counter"},
+      {"name": "amount", "type": "number", "default": 1}
+    ]},
+    "ON_EVENT": {"kind": "control", "node": "Events/OnEvent", "slots": ["children"], "params": [
+      {"name": "event", "type": "string", "default": "when_hit", "options": ["when_hit", "when_health_below", "when_target_lost", "when_target_in_range"]},
+      {"name": "target", "type": "string", "default": ""},
+      {"name": "value", "type": "number", "default": 5, "min": 0, "max": 1024}
+    ]},
     "EXECUTE_COMMAND": {"kind": "action", "node": "Control/ExecuteCommand", "params": [
       {"name": "command", "type": "string", "default": "say Hello"}
     ]},
@@ -195,6 +222,11 @@
     "CONDITION_ARMOR": {"kind": "condition", "node": "Conditions/Armor", "params": [
       {"name": "operator", "type": "string", "default": "<", "options": ["<", "<=", ">", ">=", "==", "!="]},
       {"name": "value", "type": "number", "default": 10, "min": 0, "max": 30}
+    ]},
+    "CONDITION_VARIABLE": {"kind": "condition", "node": "Conditions/Variable", "params": [
+      {"name": "name", "type": "string", "default": "counter"},
+      {"name": "operator", "type": "string", "default": "==", "options": ["<", "<=", ">", ">=", "==", "!="]},
+      {"name": "value", "type": "number", "default": 0}
     ]},
     "CONDITION_RANDOM": {"kind": "condition", "node": "Conditions/Random", "params": [
       {"name": "chance", "type": "number", "default": 50, "min": 0, "max": 100}

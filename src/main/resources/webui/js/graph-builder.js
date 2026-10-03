@@ -12,7 +12,7 @@ const GraphBuilder = (() => {
     const GAP = 50;         // vertical space between a row and the bodies laid out under it
 
     // Output a node's chain continues from: the mirror of the compiler's table.
-    const CONTINUES_FROM = { LOOP: 1, IF_THEN_ELSE: 2, FOREVER: null };
+    const CONTINUES_FROM = { LOOP: 1, IF_THEN_ELSE: 2, FOREVER: null, ON_EVENT: 1 };
 
     /** Fills the graph with a Start node followed by nodes for the actions. */
     function build(graph, schema, actions) {

@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -34,6 +36,11 @@ class ProgramExecutorTest
 
     private void run(String json)
     {
+        run(json, null);
+    }
+
+    private void run(String json, UUID owner)
+    {
         BotProgram program = new BotProgram("test", "test", "");
         program.setActions(parse(json));
         executor.setLogListener((level, message) ->
@@ -43,7 +50,7 @@ class ProgramExecutorTest
                 warnings.add(message);
             }
         });
-        assertNull(executor.startProgram("bot", program, null));
+        assertNull(executor.startProgram("bot", program, owner));
     }
 
     private void tick(int times)
@@ -419,5 +426,221 @@ class ProgramExecutorTest
 
         ProgramExecutor none = new ProgramExecutor(schema, name -> recorder.bot, () -> 0);
         assertTrue(none.startProgram("bot", program, null).contains("carpetLogicMaxPrograms"));
+    }
+
+    @Test
+    void aCommandInAProgramRunsAsWhoeverStartedIt()
+    {
+        UUID steve = UUID.randomUUID();
+        run("[{type: EXECUTE_COMMAND, params: {command: \"say hi\"}}]", steve);
+        tick(1);
+        assertEquals(List.of("executeCommand[say hi, " + steve + "]", "stopAll[]"), recorder.calls);
+
+        // Started from the console there is no player, so the program gets no owner to run commands as.
+        executor.stopProgram("bot");
+        recorder.calls.clear();
+        run("[{type: EXECUTE_COMMAND, params: {command: \"say hi\"}}]");
+        tick(1);
+        assertEquals(List.of("executeCommand[say hi, null]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void variablesAreSetChangedAndComparedWithANumber()
+    {
+        run("""
+                [{type: SET_VARIABLE, params: {name: count, value: 4}},
+                 {type: DELAY, params: {ticks: 2}},
+                 {type: ADD_VARIABLE, params: {name: count, amount: 3}},
+                 {type: IF_THEN_ELSE, condition: {type: CONDITION_VARIABLE, params: {name: count, operator: ">", value: 6}},
+                  children: [{type: MOVE, params: {direction: backward, ticks: 5}}]}]""");
+        tick(2);
+        assertEquals(List.of(), recorder.calls);
+        tick(1);
+        assertEquals(List.of("move[-1.0, 0.0]"), recorder.calls, "count is 7 by the time the condition is tested");
+        tick(6);
+        assertEquals(List.of("move[-1.0, 0.0]", "stopMoving[]", "stopAll[]"), recorder.calls);
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void aVariableStandsInForANumberWhereverOneIsTaken()
+    {
+        run("[{type: SET_VARIABLE, params: {name: steps, value: 3}}, {type: MOVE, params: {ticks: \"$steps\"}}, {type: JUMP}]");
+        tick(3);
+        assertEquals(List.of("move[1.0, 0.0]"), recorder.calls);
+        tick(1);
+        assertEquals(List.of("move[1.0, 0.0]", "stopMoving[]", "jump[]"), recorder.calls);
+    }
+
+    @Test
+    void aVariableThatWasNeverSetIsZero()
+    {
+        run("""
+                [{type: IF_THEN_ELSE, condition: {type: CONDITION_VARIABLE, params: {name: nothing, operator: "==", value: 0}},
+                  children: [{type: JUMP}]},
+                 {type: MOVE, params: {ticks: "$missing"}}]""");
+        tick(3);
+        assertEquals(List.of("jump[]", "move[1.0, 0.0]", "stopMoving[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void aNameTheSchemaDoesNotAcceptStopsTheProgram()
+    {
+        run("[{type: SET_VARIABLE, params: {name: \"two words\", value: 1}}]");
+        tick(1);
+        assertEquals(List.of("stopAll[]"), recorder.calls);
+        assertEquals("ERROR", status());
+        assertTrue(executor.getPrograms().get("bot").error().contains("not a variable name"), executor.getPrograms().get("bot").error());
+    }
+
+    @Test
+    void aProgramIsNotAllowedMoreVariablesThanTheSchemaAllows()
+    {
+        int allowed = schema.variables().limit();
+        List<BotAction> sets = new ArrayList<>();
+        for (int i = 0; i <= allowed; i++)
+        {
+            sets.add(new BotAction("SET_VARIABLE", Map.of("name", "v" + i, "value", 1.0)));
+        }
+        run(new Gson().toJson(sets));
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("A program may hold at most " + allowed + " variables", executor.getPrograms().get("bot").error());
+    }
+
+    @Test
+    void waitUntilCarriesOnAsSoonAsItsConditionHolds()
+    {
+        recorder.answers.put("isInWater", false);
+        run("[{type: WAIT_UNTIL, condition: {type: CONDITION_IS_IN_WATER}, params: {timeout: 100}}, {type: JUMP}]");
+        tick(5);
+        assertEquals(List.of(), recorder.calls);
+
+        recorder.answers.put("isInWater", true);
+        tick(2);
+        assertEquals(List.of("jump[]", "stopAll[]"), recorder.calls);
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void waitUntilCarriesOnWhenItsTimeoutRunsOut()
+    {
+        run("[{type: WAIT_UNTIL, condition: {type: CONDITION_IS_SPRINTING}, params: {timeout: 3}}, {type: JUMP}]");
+        tick(3);
+        assertEquals(List.of(), recorder.calls);
+        tick(1);
+        assertEquals(List.of("jump[]"), recorder.calls);
+        tick(1);
+        assertEquals(List.of("jump[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void waitUntilWithAConditionThatAlreadyHoldsDoesNotWaitAtAll()
+    {
+        recorder.answers.put("isSneaking", true);
+        run("[{type: WAIT_UNTIL, condition: {type: CONDITION_IS_SNEAKING}, params: {timeout: 100}}, {type: JUMP}]");
+        tick(1);
+        assertEquals(List.of("jump[]"), recorder.calls);
+    }
+
+    @Test
+    void anEventTakesOverFromTheSequenceWhichResumesWhereItWas()
+    {
+        recorder.answers.put("distanceToPlayer", 12.0);
+        run("""
+                [{type: ON_EVENT, params: {event: when_target_in_range, value: 4}, children: [{type: JUMP}]},
+                 {type: MOVE, params: {direction: backward, ticks: 6}},
+                 {type: SWAP_HANDS}]""");
+        tick(2);
+        assertEquals(List.of("move[-1.0, 0.0]"), recorder.calls);
+
+        recorder.answers.put("distanceToPlayer", 2.0);
+        tick(1);
+        assertEquals(List.of("move[-1.0, 0.0]", "jump[]"), recorder.calls, "the handler runs before the sequence carries on");
+
+        tick(20);
+        assertEquals(List.of("move[-1.0, 0.0]", "jump[]", "stopMoving[]", "swapHands[]", "stopAll[]"), recorder.calls);
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void anEventThatComesAgainWhileItsHandlerIsRunningIsIgnored()
+    {
+        recorder.answers.put("health", 20.0);
+        run("""
+                [{type: ON_EVENT, params: {event: when_health_below, value: 10}, children: [
+                    {type: DELAY, params: {ticks: 4}}, {type: JUMP}]},
+                 {type: LOOP, params: {count: 4}, children: [{type: DELAY, params: {ticks: 2}}, {type: SNEAK}]}]""");
+        tick(1);
+        recorder.answers.put("health", 5.0);
+        tick(1);
+        assertEquals(List.of(), recorder.calls, "the handler is waiting out its delay");
+        recorder.answers.put("health", 20.0);
+        tick(1);
+        recorder.answers.put("health", 5.0);
+        tick(20);
+        assertEquals(1, recorder.count("jump"), recorder.calls.toString());
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void beingHitFiresTheHandlerOnceTheHealthGoesDown()
+    {
+        recorder.answers.put("health", 20.0);
+        run("""
+                [{type: ON_EVENT, params: {event: when_hit}, children: [{type: SNEAK}]},
+                 {type: LOOP, params: {count: 4}, children: [{type: DELAY, params: {ticks: 2}}]}]""");
+        tick(1);
+        recorder.answers.put("health", 16.0);
+        tick(2);
+        assertEquals(List.of("setSneaking[true]"), recorder.calls);
+        tick(20);
+        assertEquals(1, recorder.count("setSneaking"), recorder.calls.toString());
+    }
+
+    @Test
+    void losingItsTargetFiresTheHandler()
+    {
+        recorder.answers.put("distanceToPlayer", 6.0);
+        run("""
+                [{type: ON_EVENT, params: {event: when_target_lost}, children: [{type: SWAP_HANDS}]},
+                 {type: LOOP, params: {count: 4}, children: [{type: DELAY, params: {ticks: 2}}]}]""");
+        tick(1);
+        assertEquals(List.of(), recorder.calls, "there is still a target");
+        recorder.answers.put("distanceToPlayer", Double.POSITIVE_INFINITY);
+        tick(2);
+        assertEquals(List.of("swapHands[]"), recorder.calls);
+    }
+
+    @Test
+    void aHandlerRunsUnderTheSameStepBudgetAsTheSequence()
+    {
+        recorder.answers.put("health", 20.0);
+        run("""
+                [{type: ON_EVENT, params: {event: when_health_below, value: 10}, children: [
+                    {type: FOREVER, children: [{type: SNEAK}]}]},
+                 {type: LOOP, params: {count: 6}, children: [{type: DELAY, params: {ticks: 1}}]}]""");
+        tick(2);
+        recorder.answers.put("health", 5.0);
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> tick(1));
+        long inOneTick = recorder.count("setSneaking");
+        assertTrue(inOneTick > 0 && inOneTick <= ProgramExecutor.MAX_STEPS_PER_TICK, "the handler's steps in one tick: " + inOneTick);
+        assertEquals(1, warnings.size(), "the author is told once: " + warnings);
+        assertEquals("RUNNING", status());
+    }
+
+    @Test
+    void aHandlerIsOnlyRegisteredOnceHoweverOftenItsNodeIsPassed()
+    {
+        recorder.answers.put("health", 20.0);
+        run("""
+                [{type: LOOP, params: {count: 6}, children: [
+                    {type: ON_EVENT, params: {event: when_health_below, value: 10}, children: [
+                        {type: DELAY, params: {ticks: 1}}, {type: SNEAK}]},
+                    {type: DELAY, params: {ticks: 1}}]}]""");
+        tick(4);
+        recorder.answers.put("health", 5.0);
+        tick(2);
+        assertEquals(List.of("setSneaking[true]"), recorder.calls, "one reaction, not one per pass of the loop");
     }
 }
