@@ -1,109 +1,184 @@
-# Carpet PvP Commands
+# Commands
 
-This page documents the in-game commands provided by Carpet PvP. Syntax shown uses Brigadier-style notation.
+Every command this mod registers, with the page that covers it in detail. The syntax is Brigadier's:
+`<required>`, `[optional]`, `a|b` alternatives.
 
-Legend:
-- <> required, [] optional, | alternatives
-- Permission: required op level
+Two things to know before the list:
 
-## /info
-- Permission: any
-- Summary: Display basic server and Carpet info.
-- Usage:
-  - /info
+- Most commands are behind a rule. Where the rule is off, the command is not registered at all and
+  reads as unknown. `/carpet` lists which rules you can change; see [Rules.md](Rules.md) for the
+  fork's own rules.
+- A rule set to `ops` means op level. `true` means everyone, `false` means nobody, and `0` to `4` is
+  an explicit level.
 
-## /log
-- Permission: op
-- Summary: Subscribe/unsubscribe to Carpet loggers and view events.
-- Usage:
-  - /log <logger> [add|remove|clear] [player]
-  - /log list
+## Fake players and bots
 
-## /profile
-- Permission: op
-- Summary: Simple tick profiler of server operations.
-- Usage:
-  - /profile [start|stop|dump]
+| Command | Permission | What it does | Details |
+|---|---|---|---|
+| `/player <name> spawn ...` | `commandPlayer` | Spawns a fake player, with optional position, facing, dimension and game mode. | [FakePlayers.md](FakePlayers.md#spawning) |
+| `/player <target> <action>` | `commandPlayer` | Drives a player: `move`, `sneak`, `sprint`, `jump`, `use`, `attack`, `swing`, `animate`, `look`, `turn`, `hotbar`, `drop`, `dropStack`, `swapHands`, `mount`, `dismount`, `equip`, `unequip`, `equipment`, `itemCd`, `kill`, `disconnect`, `shadow`, `stop`. | [FakePlayers.md](FakePlayers.md) |
+| `/player <target> nav ...` | `commandPlayer` and `fakePlayerNavigation` | Navigates a fake player: `goto`, `follow`, `chase`, `come`, `mine`, `patrol`, `options`, `status`, `stop`. | [FakePlayers.md](FakePlayers.md#navigation) |
+| `/player <target> glide ...` | `commandPlayer` and `fakePlayerElytraGlide` | Elytra controls for a fake player: `start`, `stop`, `freeze`, `arrival`, `launch`, `speed`, `rates`, `usePitch`, `input`, `heading`, `goto`, `freezeAtTarget`, `status`. | [FakePlayers.md](FakePlayers.md#elytra-gliding) |
+| `/player <target> ai ...` | `commandPlayer` | Reads and changes a fake player's combat AI configuration. | [FakePlayers.md](FakePlayers.md#combat-ai-ai) |
+| `/player <target> faction ...` | `commandPlayer` | Creates, joins, leaves, allies and inspects factions. | [FakePlayers.md](FakePlayers.md#factions) |
+| `/spawnplayer <name> [...]` | `commandPlayer` | Alias for `/player <name> spawn`, forwarding any trailing arguments. | [FakePlayers.md](FakePlayers.md#spawning) |
+| `/bot kit ...` | `commandBot` | `list`, `give`, `save`, `delete`, `restore`. Hands out, saves and restores PvP loadouts. | [Kits.md](Kits.md) |
+| `/carpetlogic ...` | `commandCarpetLogic` | `status`, `open`, `programs`, `programs run`, `programs stop`, `bots`. Runs bot programs and opens the web editor. | [CarpetLogic.md](CarpetLogic.md) |
+| `/schedule ...` | `commandPlayer` | `command <ticks> <command>`, `list`, `clear`. Runs a command after a delay in ticks. | below |
 
-## /player
-- Permission: op
-- Summary: Spawn/manage fake players for testing, combat automation, nav/glide control, item cooldown control, and animation control. See also: [FakePlayers.md](FakePlayers.md)
-- Usage:
-  - /player <target> spawn [at <x> <y> <z>] [facing <yaw> <pitch>]
-  - /player <target> kill
-  - /player <target> move <forward|backward|left|right> [for <ticks>] [sneaking|sprinting]
-  - /player <target> attack [crit] [once|continuous|interval <ticks>]
-  - /player <target> swing [once|continuous|interval <ticks>]
-  - /player <target> animate <attack|use|continuous|interval <ticks>>
-  - /player <target> nav stop|status
-  - /player <target> nav goto [land|water|air [land|drop]] <x> <y> <z> [arrivalRadius]
-  - /player <target> nav follow <playerName> [radius]
-  - /player <target> nav come [arrivalRadius]
-  - /player <target> nav mine <block> [count] [radius]
-  - /player <target> nav patrol <pos1> <pos2> [pos3] [pos4] [loop|once]
-  - /player <target> nav options [reset|<name> <value>]
-  - /player <target> glide ...
-  - /player <target> itemCd [<item> [reset|set [ticks]]]
-  - /player <target> <action...>
-  - target supports player selectors like @s, @p, @r, @a[tag=bot]
-  - execute-context example: /execute as @a[tag=bot] run player @s attack continuous
+## Settings
 
-## /spawnplayer
-- Permission: op
-- Summary: Dedicated fake-player spawn alias for /player <name> spawn.
-- Usage:
-  - /spawnplayer <name>
-  - /spawnplayer <name> at <x> <y> <z>
-  - /spawnplayer <name> at <x> <y> <z> facing <yaw> <pitch>
-  - /spawnplayer <name> at <x> <y> <z> facing <yaw> <pitch> in <dimension>
-  - /spawnplayer <name> at <x> <y> <z> facing <yaw> <pitch> in <dimension> in <gamemode>
+| Command | Permission | What it does | Details |
+|---|---|---|---|
+| `/carpet` | `carpetCommandPermissionLevel` | Lists and changes rules: `/carpet <rule> <value>`, `/carpet <rule>`, `/carpet list [tag]`, `/carpet defaults`, `/carpet setDefault <rule> <value>`, `/carpet removeDefault <rule>`. | [Rules.md](Rules.md) |
 
-## /counter
-- Permission: any (requires rule hopperCounters)
-- Summary: Query/reset wool counters.
-- Usage:
-  - /counter [<color>] [reset]
+## World and block information
 
-## /distance
-- Permission: any (requires rule commandDistance)
-- Summary: Measure distance between points and return integer result for execute-store scoreboard usage.
-- Usage:
-  - /distance from [<x> <y> <z>]
-  - /distance from <x1> <y1> <z1> to [<x2> <y2> <z2>]
-  - /distance to [<x> <y> <z>]
+| Command | Permission | What it does | Details |
+|---|---|---|---|
+| `/info block <pos> [grep <regexp>]` | `commandInfo` | Prints the block state, tile entity and neighbours at a position. `grep` filters the output to matching lines. | below |
+| `/distance from [<pos>] [to [<pos>]]`, `/distance to [<pos>]` | `commandDistance` | Measures the in-game distance between points and returns a number, for `execute store`. | below |
+| `/perimeterinfo [<pos>] [<mob>]` | `commandPerimeterInfo` | Counts potential spawn spots around a position, optionally for one mob type. | below |
+| `/spawn ...` | `commandSpawn` | Mob spawn simulation: `list <pos>`, `tracking [start [from to] | stop | <type>]`, `test [<ticks> [<colour>]]`, `mocking <bool>`, `rates [reset | <type> <rounds>]`, `mobcaps [set <cap> | <dimension>]`, `entities [<type> [all]]`. | below |
+| `/draw <shape> ...` | `commandDraw` | Draws a shape out of blocks: `sphere`, `ball`, `diamond`, `pyramid`, `cone`, `cylinder`, `cuboid`, each with `<block> [replace <filter>]`. | below |
+| `/counter [<colour>] [reset\|realtime]`, `/counter reset` | `hopperCounters` | Reads and resets the sixteen hopper counters, by wool colour. | below |
+| `/track <mob type> <aspect>` | `commandTrackAI` | Tracks a mob type's AI, or `clear`s the tracking. | below |
 
-## /schedule
-- Permission: op (uses commandPlayer permission gate)
-- Summary: Run commands after a delay in ticks.
-- Usage:
-  - /schedule command <ticks> <command...>
-  - /schedule list
-  - /schedule clear
+## Diagnostics
 
-## /draw
-- Permission: any (requires rule commandDraw)
-- Summary: Draw shapes via scarpet app.
-- Usage:
-  - /draw <tool|shape> [...]
+| Command | Permission | What it does | Details |
+|---|---|---|---|
+| `/log [<logger> [<option>] [<player>]]`, `/log clear [<player>]` | `commandLog` | Subscribes players to a logger and configures it. `/log` alone lists them. | below |
+| `/profile [health|entities] [<ticks>]` | `commandProfile` | Reports on server performance over the next `ticks` ticks (20 to 24000, default 100). | below |
+| `/perf` | `perfPermissionLevel` | Vanilla's server performance report. Registered only on a non-dedicated server, so in singleplayer. | — |
+| `/testcarpet ...` | dev builds only | `dump [category]` prints the rules to stdout; anything else prints a message. Registered only in a development environment. | — |
 
-## /mobai
-- Permission: op
-- Summary: Toggle and inspect mob AI.
-- Usage:
-  - /mobai <enable|disable|status> [@e selector]
+## Scripting
 
-## /perimeterinfo
-- Permission: any
-- Summary: Show mobcap and spawnable areas around you.
-- Usage:
-  - /perimeterinfo
+| Command | Permission | What it does | Details |
+|---|---|---|---|
+| `/script ...` | `commandScript` | The Scarpet language: `globals`, `resume`, `stop`, `run`, `invoke`, `invokepoint`, `invokearea`, `scan`, `fill`, `outline`, `load`, `unload`, `event`, `download`, `remove`, and the same set under `/script in <app>`. | [docs/scarpet](scarpet/Documentation.md) |
 
-## /spawn
-- Permission: any
-- Summary: Mob spawn simulation utilities.
-- Usage:
-  - /spawn [help|attempts|...]
+## Notes on the individual commands
 
-Notes
-- Some commands are enabled only if their corresponding rules are set (see Carpet rules in-game: /carpet, or the docs site).
-- For exhaustive options and examples, run the command without args or use tab-completion.
+### `/schedule`
+
+```
+/schedule command <ticks> <command...>
+/schedule list
+/schedule clear
+```
+
+The scheduled command keeps the source and permissions of whoever scheduled it, so
+`/execute as <player> run schedule command 1 ...` runs it as that player. `list` prints each entry
+with its remaining ticks and who scheduled it. `clear` drops everything, and the list is also dropped
+when the server stops. A scheduled command that throws is logged and does not stop the server.
+
+### `/info block`
+
+Needs `commandInfo`. Below op level 2 it refuses to read a position whose chunk is not loaded or that
+is out of world bounds. The output is a list of lines: the header, the block state, then anything
+interesting about the tile entity and the neighbours. `grep <regexp>` prints only the lines that
+match, which is how you pick one field out of a busy block.
+
+### `/distance`
+
+Returns the distance as an integer, so it works with `execute store result score ... run distance`.
+`from` sets the start point, defaulting to your own position, and `to` finishes the measurement;
+`/distance to` sets an end point to compare against later. The rules that read the stored values —
+`carpets` and `commandInfo` for placing carpets — are upstream's.
+
+### `/perimeterinfo`
+
+Counts the positions around a block where the game thinks a mob could spawn: how many are in liquid,
+how many are on solid ground, and, if you name a mob, how many that specific mob could use and where.
+A few sample positions are printed.
+
+### `/spawn`
+
+Runs the game's own spawn logic in a sandbox so you can see what would happen and why.
+
+| Subcommand | What it does |
+|---|---|
+| `list <pos>` | which mobs could spawn at a position |
+| `tracking` | the tracking report; `start [from to]` begins it over an area, `stop` ends it |
+| `tracking <type>` | the recent spawns of one mob category |
+| `test [<ticks> [<colour>]]` | runs the spawn cycle and counts what it produced, optionally into a hopper counter |
+| `mocking <bool>` | turn mob mocking on or off |
+| `rates [reset]` | current spawn rates; `rates <type> <rounds>` sets one |
+| `mobcaps [set <cap>]` | the mob cap, per dimension or overridden |
+| `entities [<type> [all]]` | the entity list the spawner works from |
+
+### `/draw`
+
+Every shape takes a centre, a radius and, for the shapes with a height, a height and an orientation.
+`pyramid` and `cone` also take `up` or `down`. Shapes are drawn with `<block>`, and
+`replace <filter>` first removes the blocks that match a predicate, so you can draw through terrain.
+
+### `/counter`
+
+Needs `hopperCounters`. Hoppers pointing into a block of dyed wool count what passes through them, one
+stack per tick per hopper, in sixteen channels.
+
+```
+/counter                       every counter
+/counter <colour>              one counter
+/counter <colour> realtime     one counter, as items per real second
+/counter <colour> reset        zero one counter
+/counter reset                 zero every counter
+```
+
+In survival you can do the same by placing carpet on the wool instead of using the command.
+
+### `/track`
+
+```
+/track <mob type> clear
+/track <mob type> <aspect>
+```
+
+The mob type comes from the entity registry and the aspect is one of the tracking types the mod knows
+about. There are only two aspects today, and both apply to villagers: `iron_golem_spawning` and
+`breeding`. Tab completion tells you which apply to the mob type you typed. Tracking is global, not
+per player.
+
+### `/log`
+
+```
+/log                                  list the loggers
+/log <logger> [clear]                 subscribe yourself, or unsubscribe
+/log <logger> <option> [player]       subscribe with an option set
+/log clear [player]                   unsubscribe from everything
+```
+
+| Logger | Options |
+|---|---|
+| `tps` | none, it is a HUD |
+| `packets` | none, it is a HUD |
+| `mobcaps` | `dynamic`, `overworld`, `nether`, `end` |
+| `counter` | one per dye colour, `white` by default |
+| `pathfinding` | `2`, `5`, `10` — how many entities per mob type |
+| `tnt` | `brief`, `full` |
+| `projectiles` | `brief`, `full` |
+| `fallingBlocks` | `brief`, `full` |
+| `explosions` | `brief`, `full` |
+
+The last five print to chat; the first four are overlays, and only work with the mod on the client.
+A logger with no options refuses the option form, and you subscribe another player by naming them
+last.
+
+### `/profile`
+
+`/profile` and `/profile health [ticks]` report on the server tick itself; `/profile entities
+[ticks]` on the entity count. The report is printed to whoever asked for it when the ticks are up.
+
+## Related pages
+
+- [Rules.md](Rules.md) — the rules these commands are gated on
+- [FakePlayers.md](FakePlayers.md) — `/player` in full
+- [Kits.md](Kits.md) — `/bot kit`
+- [CarpetLogic.md](CarpetLogic.md) — `/carpetlogic`
+- [SwordBlocking.md](SwordBlocking.md) — `swordBlockHitting`
+- [Building.md](Building.md) — building the mod
+- [SelfTest.md](SelfTest.md) — the self-test scenarios
+- [docs/scarpet](scarpet/Documentation.md) — the Scarpet language
