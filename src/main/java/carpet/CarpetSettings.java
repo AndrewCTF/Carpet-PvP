@@ -229,9 +229,6 @@ public class CarpetSettings
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
 
-    @Rule(desc = "Dropping entire stacks works also from on the crafting UI result slot", category = {BUGFIX, SURVIVAL})
-    public static boolean ctrlQCraftingFix = false;
-
     @Rule(desc = "Parrots don't get of your shoulders until you receive proper damage", category = {SURVIVAL, FEATURE})
     public static boolean persistentParrots = false;
 
@@ -487,9 +484,6 @@ public class CarpetSettings
     @Rule(desc = "Enables /spawn command for spawn tracking", category = COMMAND)
     public static String commandSpawn = "ops";
 
-    @Rule(desc = "Enables /tick command to control game clocks", category = COMMAND)
-    public static String commandTick = "ops";
-
     @Rule(
             desc = "Enables /profile command to monitor game performance",
             extra = "subset of /tick command capabilities",
@@ -698,13 +692,6 @@ public class CarpetSettings
     @Rule(desc = "Disables breaking of blocks caused by flowing liquids", category = CREATIVE)
     public static boolean liquidDamageDisabled = false;
 
-
-    @Rule(
-            desc = "Smooth client animations with low tps settings",
-            extra = "Works only in SP, and will slow down players",
-            category = {CREATIVE, SURVIVAL, CLIENT}
-    )
-    public static boolean smoothClientAnimations = false;
 
     private static class PushLimitLimits extends Validator<Integer> {
         @Override public Integer validate(CommandSourceStack source, CarpetRule<Integer> currentRule, Integer newValue, String string) {

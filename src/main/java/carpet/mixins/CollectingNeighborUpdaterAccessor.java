@@ -7,6 +7,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(CollectingNeighborUpdater.class)
 public interface CollectingNeighborUpdaterAccessor {
     @Accessor("count")
+    int getCount();
+    @Accessor("count")
     void setCount(int count);
     @Accessor("maxChainedNeighborUpdates")
     int getMaxChainedNeighborUpdates();
