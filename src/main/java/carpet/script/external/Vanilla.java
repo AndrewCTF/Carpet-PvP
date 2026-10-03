@@ -2,6 +2,9 @@ package carpet.script.external;
 
 import carpet.CarpetSettings;
 import carpet.fakes.MinecraftServerInterface;
+import carpet.mixins.Objective_scarpetMixin;
+import carpet.mixins.PoiRecord_scarpetMixin;
+import carpet.mixins.Scoreboard_scarpetMixin;
 import carpet.fakes.ServerPlayerInteractionManagerInterface;
 import carpet.fakes.ServerWorldInterface;
 import carpet.fakes.SpawnHelperInnerInterface;
@@ -106,13 +109,12 @@ public class Vanilla
 
     public static void Objective_setCriterion(Objective objective, ObjectiveCriteria criterion)
     {
-        // Stub - objective.setCriterion not accessible in 26.1
+        ((Objective_scarpetMixin) objective).setCriterion(criterion);
     }
 
     public static Map<ObjectiveCriteria, List<Objective>> Scoreboard_getObjectivesByCriterion(Scoreboard scoreboard)
     {
-        // Stub - scoreboard.getObjectivesByCriterion not accessible in 26.1
-        return Map.of();
+        return ((Scoreboard_scarpetMixin) scoreboard).getObjectivesByCriterion();
     }
 
     public static ServerLevelData ServerLevel_getWorldProperties(ServerLevel world)
@@ -331,15 +333,12 @@ public class Vanilla
 
     public static int PoiRecord_getFreeTickets(PoiRecord record)
     {
-        // PoiRecord_scarpetMixin is in carpet.mixins package - not accessible here
-        // Stub - POI ticket access not available without mixin
-        return 0;
+        return ((PoiRecord_scarpetMixin) record).getFreeTickets();
     }
 
     public static void PoiRecord_callAcquireTicket(PoiRecord record)
     {
-        // PoiRecord_scarpetMixin is in carpet.mixins package - not accessible here
-        // Stub - POI ticket acquisition not available without mixin
+        ((PoiRecord_scarpetMixin) record).callAcquireTicket();
     }
 
     public record BlockPredicatePayload(BlockState state, TagKey<Block> tagKey, Map<Value, Value> properties, CompoundTag tag) {

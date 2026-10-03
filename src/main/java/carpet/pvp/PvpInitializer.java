@@ -1,15 +1,33 @@
 package carpet.pvp;
 
+import carpet.CarpetSettings;
 import net.fabricmc.api.ModInitializer;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 
-public final class PvpInitializer implements ModInitializer {
-    private static final Logger LOGGER = LogManager.getLogger("CarpetPvp");
-
+public final class PvpInitializer implements ModInitializer
+{
     @Override
-    public void onInitialize() {
-        // Stub initializer to satisfy Fabric entrypoint during migration.
-        LOGGER.info("Carpet PVP main initializer loaded (stub). PvP hooks are not yet wired for 26.1.2.");
+    public void onInitialize()
+    {
+        // rule punishWrongToolHits: hitting a block that needs a tool without one hurts the hitter
+        AttackBlockCallback.EVENT.register((player, level, hand, pos, direction) ->
+        {
+            if (!CarpetSettings.punishWrongToolHits || level.isClientSide() || player.isSpectator() || player.isCreative())
+                return InteractionResult.PASS;
+            BlockState state = level.getBlockState(pos);
+            if (!state.requiresCorrectToolForDrops())
+                return InteractionResult.PASS;
+            ItemStack held = player.getItemInHand(hand);
+            if (!held.isEmpty() && held.isCorrectToolForDrops(state))
+                return InteractionResult.PASS;
+            if (level instanceof ServerLevel serverLevel && player instanceof LivingEntity living)
+                living.hurtServer(serverLevel, serverLevel.damageSources().generic(), 1.0F);
+            return InteractionResult.SUCCESS;
+        });
     }
 }

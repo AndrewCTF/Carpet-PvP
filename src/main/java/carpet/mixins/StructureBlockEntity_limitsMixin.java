@@ -1,16 +1,17 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.StructureBlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 
-/**
- * 1.21.8: Keep only size limit patches; the ignored-block injection no longer matches at bootstrap time.
- * The "ignored block" behavior will be revisited against new saveStructure/fillFromWorld pipeline.
- */
+import java.util.List;
+import java.util.stream.Stream;
+
 @Mixin(StructureBlockEntity.class)
 public abstract class StructureBlockEntity_limitsMixin
 {
@@ -28,5 +29,19 @@ public abstract class StructureBlockEntity_limitsMixin
     )
     private int negativeLimit(int original) {
         return -CarpetSettings.structureBlockLimit;
+    }
+
+    @ModifyArg(
+            method = "saveStructure(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/resources/Identifier;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Vec3i;ZLjava/lang/String;ZLjava/util/List;)Z",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate;fillFromWorld(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Vec3i;ZLjava/util/List;)V"
+            ),
+            index = 4
+    )
+    private static List<Block> ignoredBlock(List<Block> original) {
+        if (original.contains(CarpetSettings.structureBlockIgnoredBlock))
+            return original;
+        return Stream.concat(original.stream(), Stream.of(CarpetSettings.structureBlockIgnoredBlock)).toList();
     }
 }
