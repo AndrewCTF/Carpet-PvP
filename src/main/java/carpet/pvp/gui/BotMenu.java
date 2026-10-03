@@ -7,6 +7,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
+//~ if <26.1 'ContainerInput' -> 'ClickType' {
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
@@ -117,6 +118,7 @@ public abstract class BotMenu extends ChestMenu
         // A button that opened another screen has already left this one, and that screen paints itself.
         if (!closed) repaint();
     }
+//~}
 
     @Override
     public ItemStack quickMoveStack(Player player, int index)

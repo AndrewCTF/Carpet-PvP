@@ -1,7 +1,9 @@
 package carpet.mixins;
 
+//? if >=26.1 {
 import carpet.fakes.MinecraftServerInterface;
 import carpet.script.CarpetScriptServer;
+//?}
 import carpet.CarpetServer;
 import carpet.utils.CarpetProfiler;
 import net.minecraft.server.MinecraftServer;
@@ -15,7 +17,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.function.BooleanSupplier;
 
 @Mixin(MinecraftServer.class)
+//? if >=26.1 {
 public abstract class MinecraftServer_coreMixin implements MinecraftServerInterface
+//?} else {
+/*public abstract class MinecraftServer_coreMixin
+*///?}
 {
     //to inject right before
     // this.tickWorlds(booleanSupplier_1);
@@ -60,6 +66,7 @@ public abstract class MinecraftServer_coreMixin implements MinecraftServerInterf
 
     @Shadow
     public abstract ServerLevel overworld();
+//? if >=26.1 {
 
     // Implementation of MinecraftServerInterface
     private CarpetScriptServer scriptServer;
@@ -79,4 +86,5 @@ public abstract class MinecraftServer_coreMixin implements MinecraftServerInterf
         // Placeholder - would need proper implementation
         return null;
     }
+//?}
 }

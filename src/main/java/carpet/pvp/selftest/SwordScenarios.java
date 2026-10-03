@@ -266,8 +266,8 @@ final class SwordScenarios
                 // The same fight with shield play switched off: the shield is still in the off hand, the bot
                 // simply never brings it up.
                 SelfTest.run(server, "bot option " + a + " shieldplay false");
-                SelfTest.run(server, "player " + a + " heal 20");
-                SelfTest.run(server, "player " + b + " heal 20");
+                SelfTest.player(server, a).setHealth(20.0F);
+                SelfTest.player(server, b).setHealth(20.0F);
                 SelfTest.run(server, "bot duel " + a + " " + b);
                 return SelfTest.pending("shield play off, the same duel restarts");
             }

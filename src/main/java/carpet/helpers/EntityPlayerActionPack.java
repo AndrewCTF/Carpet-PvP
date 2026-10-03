@@ -1226,12 +1226,27 @@ public class EntityPlayerActionPack
                                     && !(horse instanceof SkeletonHorse);
                             //?}
                             Vec3 relativeHitPos = entityHit.getLocation().subtract(entity.getX(), entity.getY(), entity.getZ());
-                            // interactAt signature changed in 26.1 - use interact instead
+//? if <26.1 {
+/*                            if (entity.interactAt(player, relativeHitPos, hand).consumesAction())
+                            {
+                                ap.itemUseCooldown = 3;
+                                return true;
+                            }
+                            // fix for SS itemframe always returns CONSUME even if no action is performed
+                            if (player.interactOn(entity, hand).consumesAction() && !(handWasEmpty && itemFrameEmpty))
+                            {
+                                ap.itemUseCooldown = 3;
+                                return true;
+                            }
+                            break;
+*///?}
+                            //? if >=26.1 {
                             if (entity.interact(player, hand, relativeHitPos).consumesAction()/*? if >=26.3 {*/ || isFeedingHorse/*?}*/)
                             {
                                 ap.itemUseCooldown = 3;
                                 return true;
                             }
+                            //?}
                         }
                     }
                     ItemStack handItem = player.getItemInHand(hand);

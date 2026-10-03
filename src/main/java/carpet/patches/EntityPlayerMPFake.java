@@ -2,6 +2,7 @@ package carpet.patches;
 
 import carpet.CarpetSettings;
 import com.mojang.authlib.GameProfile;
+//~ if >=26.1 'advancements.CriteriaTriggers' -> 'advancements.triggers.CriteriaTriggers'
 import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
@@ -863,11 +864,22 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     // A blocked hit knocks no fake player back (see blockedByItem), so the blocking item is disabled
     // here instead: with the vanilla duration of the weapon that hit, or with the bot's own duration.
+//? if <26.1 {
+/*    @Override
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity)
+    {
+*///?} else {
     @Override
-    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/) {
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/)
+    {
+//?}
         if (!this.hasDisableBlockingForSecondsOverride())
         {
+//? if <26.1 {
+/*            super.blockUsingItem(serverLevel, livingEntity);
+*///?} else {
             super.blockUsingItem(serverLevel, livingEntity, damageSource, f/*? if >=26.3 {*/, fullyBlocked/*?}*/);
+//?}
             return;
         }
         ItemStack blocking = this.getItemBlockingWith();
@@ -885,6 +897,11 @@ public class EntityPlayerMPFake extends ServerPlayer
     // A blocked hit used to knock the fake player forward when it held a raised shield, which is not
     // what a client sees. Only the knockback is dropped: blockUsingItem still disables blocking.
     @Override
+//? if <26.1 {
+/*    protected void blockedByItem(LivingEntity livingEntity) {
+    }
+*///?} else {
     protected void blockedByItem(LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/) {
     }
+//?}
 }

@@ -508,7 +508,11 @@ public class CarpetEventServer
             public void onChunkEvent(ServerLevel world, ChunkPos chPos, boolean generated)
             {
                 handler.call(
+//? if >=26.1 {
                         () -> Arrays.asList(new NumericValue(chPos.x() << 4), new NumericValue(chPos.z() << 4)),
+//?} else {
+/*                        () -> Arrays.asList(new NumericValue(chPos.x << 4), new NumericValue(chPos.z << 4)),
+*///?}
                         () -> world.getServer().createCommandSourceStack().withLevel(world)
                 );
             }
@@ -519,7 +523,11 @@ public class CarpetEventServer
             public void onChunkEvent(ServerLevel world, ChunkPos chPos, boolean generated)
             {
                 handler.call(
+//? if >=26.1 {
                         () -> Arrays.asList(new NumericValue(chPos.x() << 4), new NumericValue(chPos.z() << 4)),
+//?} else {
+/*                        () -> Arrays.asList(new NumericValue(chPos.x << 4), new NumericValue(chPos.z << 4)),
+*///?}
                         () -> world.getServer().createCommandSourceStack().withLevel(world)
                 );
             }
@@ -531,7 +539,11 @@ public class CarpetEventServer
             public void onChunkEvent(ServerLevel world, ChunkPos chPos, boolean generated)
             {
                 handler.call(
+//? if >=26.1 {
                         () -> Arrays.asList(new NumericValue(chPos.x() << 4), new NumericValue(chPos.z() << 4)),
+//?} else {
+/*                        () -> Arrays.asList(new NumericValue(chPos.x << 4), new NumericValue(chPos.z << 4)),
+*///?}
                         () -> world.getServer().createCommandSourceStack().withLevel(world)
                 );
             }

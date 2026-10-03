@@ -53,6 +53,7 @@ import net.minecraft.server.level.TicketType;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -456,10 +457,42 @@ public class WorldAccess
             }
 
             Value weather = lv.get(0);
+//? if >=26.1 {
             // ServerLevelData methods getClearWeatherTime, getRainTime, getThunderTime
             // and ServerLevel.setWeatherParameters - these may not exist in 26.1
             // Stub - weather control not available
             throw new InternalExpressionException("Weather control not available in 26.1");
+//?} else {
+/*            ServerLevelData worldProperties = Vanilla.ServerLevel_getWorldProperties(world);
+            if (lv.size() == 1)
+            {
+                return new NumericValue(switch (weather.getString().toLowerCase(Locale.ROOT))
+                {
+                    case "clear" -> worldProperties.getClearWeatherTime();
+                    case "rain" -> world.isRaining() ? worldProperties.getRainTime() : 0;//cos if not it gives 1 for some reason
+                    case "thunder" -> world.isThundering() ? worldProperties.getThunderTime() : 0;//same dealio here
+                    default -> throw new InternalExpressionException("Weather can only be 'clear', 'rain' or 'thunder'");
+                });
+            }
+            if (lv.size() == 2)
+            {
+                int ticks = NumericValue.asNumber(lv.get(1), "tick_time in 'weather'").getInt();
+                switch (weather.getString().toLowerCase(Locale.ROOT))
+                {
+                    case "clear" -> world.setWeatherParameters(ticks, 0, false, false);
+                    case "rain" -> world.setWeatherParameters(0, ticks, true, false);
+                    case "thunder" -> world.setWeatherParameters(
+                            0,
+                            ticks,//this is used to set thunder time, idk why...
+                            true,
+                            true
+                    );
+                    default -> throw new InternalExpressionException("Weather can only be 'clear', 'rain' or 'thunder'");
+                }
+                return NumericValue.of(ticks);
+            }
+            throw new InternalExpressionException("'weather' requires 0, 1 or 2 arguments");
+*///?}
         });
 
         expression.addUnaryFunction("pos", v ->
@@ -558,9 +591,17 @@ public class WorldAccess
         expression.addContextFunction("in_slime_chunk", -1, (c, t, lv) ->
         {
             BlockPos pos = BlockArgument.findIn((CarpetContext) c, lv, 0).block.getPos();
+//? if >=26.1 {
             ChunkPos chunkPos = new ChunkPos(pos.getX(), pos.getZ());
+//?} else {
+/*            ChunkPos chunkPos = new ChunkPos(pos);
+*///?}
             return BooleanValue.of(WorldgenRandom.seedSlimeChunk(
+//? if >=26.1 {
                     chunkPos.x(), chunkPos.z(),
+//?} else {
+/*                    chunkPos.x, chunkPos.z,
+*///?}
                     ((CarpetContext) c).level().getSeed(),
                     987234911L
             ).nextInt(10) == 0);
@@ -616,7 +657,11 @@ public class WorldAccess
             {
                 force = lv.get(locator.offset).getBoolean();
             }
+//? if >=26.1 {
             return BooleanValue.of(canHasChunk(((CarpetContext) c).level(), new ChunkPos(pos.getX(), pos.getZ()), null, force));
+//?} else {
+/*            return BooleanValue.of(canHasChunk(((CarpetContext) c).level(), new ChunkPos(pos), null, force));
+*///?}
         });
 
         expression.addContextFunction("generation_status", -1, (c, t, lv) ->
@@ -643,14 +688,23 @@ public class WorldAccess
             {
                 for (long key : levelTickets.keySet())
                 {
+//? if >=26.1 {
                     ChunkPos chpos = new ChunkPos((int) key, (int) (key >> 32));
+//?} else {
+/*                    ChunkPos chpos = new ChunkPos(key);
+*///?}
                     for (Ticket ticket : levelTickets.get(key))
                     {
                         res.add(ListValue.of(
                                 new StringValue(ticket.getType().toString()),
                                 new NumericValue(33 - ticket.getTicketLevel()),
+//? if >=26.1 {
                                 new NumericValue(chpos.x()),
                                 new NumericValue(chpos.z())
+//?} else {
+/*                                new NumericValue(chpos.x),
+                                new NumericValue(chpos.z)
+*///?}
                         ));
                     }
                 }
@@ -659,7 +713,11 @@ public class WorldAccess
             {
                 BlockArgument blockArgument = BlockArgument.findIn((CarpetContext) c, lv, 0);
                 BlockPos pos = blockArgument.block.getPos();
+//? if >=26.1 {
                 List<Ticket> tickets = levelTickets.get(pos.asLong());
+//?} else {
+/*                List<Ticket> tickets = levelTickets.get(new ChunkPos(pos).toLong());
+*///?}
                 if (tickets != null)
                 {
                     for (Ticket ticket : tickets)
@@ -695,7 +753,11 @@ public class WorldAccess
                 booleanStateTest(c, "block_tick", lv, (s, p) ->
                 {
                     ServerLevel w = ((CarpetContext) c).level();
+//? if <26.1 {
+/*                    s.randomTick(w, p, w.random);
+*///?} else {
                     s.randomTick(w, p, w.getRandom());
+//?}
                     return true;
                 }));
 
@@ -705,7 +767,11 @@ public class WorldAccess
                     ServerLevel w = ((CarpetContext) c).level();
                     if (s.isRandomlyTicking() || s.getFluidState().isRandomlyTicking())
                     {
+//? if <26.1 {
+/*                        s.randomTick(w, p, w.random);
+*///?} else {
                         s.randomTick(w, p, w.getRandom());
+//?}
                     }
                     return true;
                 }));
@@ -933,6 +999,7 @@ public class WorldAccess
                     }
                     if (DUMMY_ENTITY == null)
                     {
+                        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                         DUMMY_ENTITY = new FallingBlockEntity(EntityTypes.FALLING_BLOCK, null);
                     }
                     Block.dropResources(state, world, where, be, DUMMY_ENTITY, tool);
@@ -1564,12 +1631,20 @@ public class WorldAccess
                             ChunkPos chpos = new ChunkPos(chx, chz);
                             // getting a chunk will convert it to full, allowing to modify references
                             Map<Structure, LongSet> references =
+//? if >=26.1 {
                                     world.getChunk(new BlockPos(chpos.x() << 4, 0, chpos.z() << 4)).getAllReferences();
+//?} else {
+/*                                    world.getChunk(chpos.getWorldPosition()).getAllReferences();
+*///?}
                             if (references.containsKey(configuredStructure) && references.get(configuredStructure) != null)
                             {
+//? if >=26.1 {
                                 // In 26.1, ChunkPos.toLong() may not be accessible - compute manually
                                 long posLong = ((long) structureChunkPos.x() & 0xFFFFFFFFL) | ((long) structureChunkPos.z() << 32);
                                 references.get(configuredStructure).remove(posLong);
+//?} else {
+/*                                references.get(configuredStructure).remove(structureChunkPos.toLong());
+*///?}
                             }
                         }
                     }
@@ -1690,7 +1765,11 @@ public class WorldAccess
                 throw new InternalExpressionException("Ticket radius should be between 1 and 32 chunks");
             }
             // due to types we will wing it:
+//? if >=26.1 {
             ChunkPos target = new ChunkPos(pos.getX(), pos.getZ());
+//?} else {
+/*            ChunkPos target = new ChunkPos(pos);
+*///?}
             if (ticket == TicketType.PORTAL) // portal
             {
                 cc.level().getChunkSource().addTicketWithRadius(TicketType.PORTAL, target, radius);

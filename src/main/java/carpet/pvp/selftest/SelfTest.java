@@ -1033,10 +1033,24 @@ public final class SelfTest
                 Vec3 smoothGoal = new Vec3(x0 + 40.0D, SURFACE_Y, z0 + 40.0D);
                 double[] last = {x0 + 0.5D, SURFACE_Y, z0 + 0.5D};
                 double[] walked = {0.0D};
-                return new Scenario(900, List.of(new Bot(a, start)), List.of(),
-                        server -> run(server, "player " + a + " nav goto " + coords(smoothGoal)), server ->
+                boolean[] walkAsked = {false};
+                return new Scenario(900, List.of(new Bot(a, start)), List.of(), server ->
                 {
                     ServerPlayer bot = player(server, a);
+                    if (!walkAsked[0])
+                    {
+                        // A sprinting server does not wait for chunks, and a goal in a chunk that has not loaded
+                        // reads as solid: the walk is only asked for once the ground along it is there.
+                        for (int step = 0; step <= 40; step += 8)
+                        {
+                            if (!bot.level().hasChunk((x0 + step) >> 4, (z0 + step) >> 4))
+                            {
+                                return new Probe(false, "waiting for the chunks along the walk to load");
+                            }
+                        }
+                        run(server, "player " + a + " nav goto " + coords(smoothGoal));
+                        walkAsked[0] = true;
+                    }
                     walked[0] += bot.position().distanceTo(new Vec3(last[0], last[1], last[2]));
                     last[0] = bot.getX();
                     last[1] = bot.getY();

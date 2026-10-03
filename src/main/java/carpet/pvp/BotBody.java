@@ -532,7 +532,11 @@ public final class BotBody
     private boolean inReach(LivingEntity target)
     {
         return target != null && target.isAlive()
+//? if <26.1 {
+/*                && bot.isWithinAttackRange(target.getBoundingBox(), 0.0);
+*///?} else {
                 && bot.isWithinAttackRange(bot.getWeaponItem(), target.getBoundingBox(), 0.0);
+//?}
     }
 
     /**

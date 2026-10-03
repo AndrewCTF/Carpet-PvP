@@ -1,5 +1,6 @@
 package carpet.utils;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
@@ -24,8 +25,8 @@ class MessengerTest
     {
         assertEquals("Navigation: enabled ", Messenger.c("g Navigation: enabled ").getString());
         assertEquals("Navigation: SelfA1", Messenger.c("g Navigation: ", Messenger.s("SelfA1")).getString());
-        assertEquals(TextColor.GRAY, style(Messenger.c("g Navigation: enabled ")).getColor());
-        assertEquals(TextColor.WHITE, style(Messenger.c("w Navigation: enabled ")).getColor());
+        assertEquals(color(ChatFormatting.GRAY), style(Messenger.c("g Navigation: enabled ")).getColor());
+        assertEquals(color(ChatFormatting.WHITE), style(Messenger.c("w Navigation: enabled ")).getColor());
     }
 
     @Test
@@ -56,7 +57,7 @@ class MessengerTest
         List<Component> parts = line.getSiblings();
         // "mode=", the empty yellow style marker, "goto", " radius=", "1.50"
         assertEquals(5, parts.size());
-        assertEquals(TextColor.YELLOW, parts.get(2).getStyle().getColor());
+        assertEquals(color(ChatFormatting.YELLOW), parts.get(2).getStyle().getColor());
     }
 
     @Test
@@ -104,5 +105,11 @@ class MessengerTest
     private static Style style(Component line)
     {
         return line.getSiblings().isEmpty() ? line.getStyle() : line.getSiblings().get(0).getStyle();
+    }
+
+    /** TextColor only grew its named constants later; fromLegacyFormat names the same colour on every version. */
+    private static TextColor color(ChatFormatting format)
+    {
+        return TextColor.fromLegacyFormat(format);
     }
 }

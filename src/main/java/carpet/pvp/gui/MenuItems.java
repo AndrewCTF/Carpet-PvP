@@ -21,6 +21,7 @@ final class MenuItems
     static final String CHOSEN = BotOptionLayout.CHONEN;
 
     /** What the kit editor marks its empty slots with. Never an item of the kit being edited. */
+    //~ if <26.1 'STAINED_GLASS_PANE.gray()' -> 'GRAY_STAINED_GLASS_PANE'
     private static final Item MARKER = Blocks.STAINED_GLASS_PANE.gray().asItem();
 
     private MenuItems() {}
@@ -49,12 +50,14 @@ final class MenuItems
     /** A button that stands for a switch being on. */
     static ItemStack on(String name, String... lore)
     {
+        //~ if <26.1 'STAINED_GLASS_PANE.lime()' -> 'LIME_STAINED_GLASS_PANE'
         return button(Blocks.STAINED_GLASS_PANE.lime().asItem(), ChatFormatting.GREEN, name, lore);
     }
 
     /** A button that stands for a switch being off. */
     static ItemStack off(String name, String... lore)
     {
+        //~ if <26.1 'STAINED_GLASS_PANE.red()' -> 'RED_STAINED_GLASS_PANE'
         return button(Blocks.STAINED_GLASS_PANE.red().asItem(), ChatFormatting.RED, name, lore);
     }
 

@@ -18,6 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
@@ -440,6 +441,7 @@ public class SpawnReporter
                         {
                             float f = x + 0.5F;
                             float f1 = z + 0.5F;
+//~ if >=26.1 'random' -> 'getRandom()'
                             mob.snapTo(f, y, f1, worldIn.getRandom().nextFloat() * 360.0F, 0.0F);
                             fits = worldIn.noCollision(mob);
                             EntityType<?> etype = mob.getType();
@@ -447,12 +449,14 @@ public class SpawnReporter
                             for (int i = 0; i < 20; ++i)
                             {
                                 if (
+//~ if >=26.1 'random' -> 'getRandom()'
                                         SpawnPlacements.checkSpawnRules(etype,worldIn, EntitySpawnReason.NATURAL, pos, worldIn.getRandom()) &&
                                         SpawnPlacements.isSpawnPositionOk(etype, worldIn, pos) &&
                                         mob.checkSpawnRules(worldIn, EntitySpawnReason.NATURAL)
                                     // && mob.canSpawn(worldIn) // entity collisions // mostly - except ocelots
                                 )
                                 {
+                                    //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                                     if (etype == EntityTypes.OCELOT)
                                     {
                                         BlockState blockState = worldIn.getBlockState(pos.below());

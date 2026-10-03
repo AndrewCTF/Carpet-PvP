@@ -235,6 +235,11 @@ public class CarpetSettings
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
 
+//? if <26.1 {
+/*    @Rule(desc = "Dropping entire stacks works also from on the crafting UI result slot", category = {BUGFIX, SURVIVAL})
+    public static boolean ctrlQCraftingFix = false;
+*///?}
+
     @Rule(desc = "Parrots don't get of your shoulders until you receive proper damage", category = {SURVIVAL, FEATURE})
     public static boolean persistentParrots = false;
 
@@ -701,6 +706,15 @@ public class CarpetSettings
 
     @Rule(desc = "Disables breaking of blocks caused by flowing liquids", category = CREATIVE)
     public static boolean liquidDamageDisabled = false;
+
+//? if <26.1 {
+/*    @Rule(
+            desc = "Smooth client animations with low tps settings",
+            extra = "Works only in SP, and will slow down players",
+            category = {CREATIVE, SURVIVAL, CLIENT}
+    )
+    public static boolean smoothClientAnimations = false;
+*///?}
 
 
     private static class PushLimitLimits extends Validator<Integer> {

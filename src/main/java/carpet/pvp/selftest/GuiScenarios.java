@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+//~ if <26.1 'ContainerInput' -> 'ClickType'
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -68,6 +69,7 @@ final class GuiScenarios
     private static final int[] CLICKS = {0, 1};
 
     /** What the kit editor marks an empty slot of a layout with. */
+    //~ if <26.1 'STAINED_GLASS_PANE.gray()' -> 'GRAY_STAINED_GLASS_PANE'
     private static final Item MARKER = Blocks.STAINED_GLASS_PANE.gray().asItem();
 
     private GuiScenarios() {}
@@ -95,6 +97,7 @@ final class GuiScenarios
                     if (openPage(server, bot, Page.BOT, bot) == null) return new Probe(false, a + " could not open its page");
                     ItemStack before = menu(bot).getSlot(slot).getItem();
                     if (!name(before).endsWith(": on")) return new Probe(false, SelfTest.fmt("the toggle reads %s", name(before)));
+//~ if <26.1 'ContainerInput' -> 'ClickType' {
                     click(bot, slot, ContainerInput.PICKUP);
                     if (cfg.critical) return new Probe(false, "the click did not turn criticals off");
                     ItemStack after = menu(bot).getSlot(slot).getItem();
@@ -453,6 +456,7 @@ final class GuiScenarios
         }
         return viewer.containerMenu instanceof BotMenu ? viewer.containerMenu : null;
     }
+//~}
 
     private static AbstractContainerMenu menu(ServerPlayer viewer)
     {

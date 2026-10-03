@@ -13,10 +13,12 @@ public class StructurePiece_scarpetPlopMixin
 {
     @Redirect(method = "placeBlock", at = @At(
             value = "INVOKE",
+//~ if >=26.1 'ChunkAccess;markPosForPostprocessing' -> 'ChunkAccess;markPosForPostProcessing'
             target = "Lnet/minecraft/world/level/chunk/ChunkAccess;markPosForPostProcessing(Lnet/minecraft/core/BlockPos;)V"
     ))
     private void markOrNot(ChunkAccess chunk, BlockPos pos)
     {
+//~ if >=26.1 'markPosForPostprocessing' -> 'markPosForPostProcessing'
         if (!CarpetSettings.skipGenerationChecks.get()) chunk.markPosForPostProcessing(pos);
     }
 }
