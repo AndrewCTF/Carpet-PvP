@@ -1165,11 +1165,11 @@ public class CarpetSettings
     public static boolean botRevenge = true;
 
     @Rule(desc = "Default target acquisition range in blocks", category = PVP,
-            options = {"8.0", "16.0", "24.0", "32.0"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static double botTargetRange = 16.0D;
 
     @Rule(desc = "Bots break off combat when health drops to this value (0 = never)", category = PVP,
-            options = {"0", "4", "6", "8"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static int botRetreatHealth = 0;
 
     @Rule(desc = "Bots keep a Totem of Undying in the offhand", category = PVP)
@@ -1213,23 +1213,23 @@ public class CarpetSettings
     public static boolean botBhop = false;
 
     @Rule(desc = "Default melee engagement range in blocks", category = PVP,
-            options = {"2.5", "3.0", "4.0"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static double botMeleeRange = 3.0D;
 
     @Rule(desc = "Default ticks between bot attacks (0 = as fast as cooldown allows)", category = PVP,
-            options = {"0", "10", "20"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static int botAttackCooldown = 0;
 
     @Rule(desc = "Default chance (0-100%) for a bot to deliberately miss a swing", category = PVP,
-            options = {"0", "10", "25", "50"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static int botMissChance = 0;
 
     @Rule(desc = "Default chance (0-100%) for a bot to make a targeting mistake (planned)", category = PVP,
-            options = {"0", "10", "25"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static int botMistakeChance = 0;
 
     @Rule(desc = "Default reaction delay in ticks before a bot engages a new target", category = PVP,
-            options = {"0", "2", "5", "10"}, validate = Validators.NonNegativeNumber.class)
+            validate = Validators.NonNegativeNumber.class)
     public static int botReactionDelay = 0;
 
     @Rule(

@@ -2926,6 +2926,14 @@ public class EntityPlayerActionPack
                     case ENTITY: {
                         EntityHitResult entityHit = (EntityHitResult) hit;
 
+                        // PvP combat-AI realism: deliberately miss a fraction of swings
+                        // (also covers the ray-trace attack path, not just the chase path).
+                        if (ap.botMissChancePercent > 0
+                                && player.getRandom().nextInt(100) < ap.botMissChancePercent)
+                        {
+                            return false;
+                        }
+
                         if (!CarpetSettings.spamClickCombat)
                         {
                             // Prevent constant weak hits when spamming attacks in modern combat
