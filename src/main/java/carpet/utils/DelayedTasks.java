@@ -4,7 +4,6 @@ import carpet.CarpetSettings;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -35,12 +34,16 @@ public final class DelayedTasks
         if (TASKS.isEmpty()) return;
 
         long currentTick = server.getTickCount();
-        Iterator<Entry> it = TASKS.iterator();
-        while (it.hasNext())
+        // A task may schedule the next one, which an iterator over the live list would not survive, so
+        // the due tasks are taken out first and run afterwards.
+        List<Entry> due = new ArrayList<>();
+        TASKS.removeIf(entry -> {
+            if (currentTick < entry.dueTick()) return false;
+            due.add(entry);
+            return true;
+        });
+        for (Entry entry : due)
         {
-            Entry entry = it.next();
-            if (currentTick < entry.dueTick()) continue;
-            it.remove();
             try
             {
                 entry.task().run();

@@ -22,7 +22,7 @@ Two things to know before the list:
 | `/player <target> ai ...` | `commandPlayer` | Reads and changes a fake player's combat AI configuration. | [FakePlayers.md](FakePlayers.md#combat-ai-ai) |
 | `/player <target> faction ...` | `commandPlayer` | Creates, joins, leaves, allies and inspects factions. | [FakePlayers.md](FakePlayers.md#factions) |
 | `/spawnplayer <name> [...]` | `commandPlayer` | Alias for `/player <name> spawn`, forwarding any trailing arguments. | [FakePlayers.md](FakePlayers.md#spawning) |
-| `/bot kit ...` | `commandBot` | `list`, `give`, `save`, `delete`, `restore`. Hands out, saves and restores PvP loadouts. | [Kits.md](Kits.md) |
+| `/bot kit ...` | `commandBot` | `list`, `reload`, `give`, `save`, `delete`, `restore`. Hands out, saves and restores PvP loadouts. | [Kits.md](Kits.md) |
 | `/carpetlogic ...` | `commandCarpetLogic` | `status`, `open`, `programs`, `programs run`, `programs stop`, `bots`. Runs bot programs and opens the web editor. | [CarpetLogic.md](CarpetLogic.md) |
 | `/schedule ...` | `commandPlayer` | `command <ticks> <command>`, `list`, `clear`. Runs a command after a delay in ticks. | below |
 

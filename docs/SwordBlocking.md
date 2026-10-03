@@ -27,13 +27,14 @@ multiplier to `1.0` and the window to `0` gives an animation with no effect.
 ### Opening the window
 
 The window opens when the server sees a use-item packet from a player holding a sword. There are
-three ways in, and all three end in the same place:
+four ways in, and all four end in the same place:
 
 | Trigger | Who |
 |---|---|
 | A `ServerboundUseItemPacket` — pressing use | any player, vanilla client included |
 | A `ServerboundUseItemOnPacket` — using the sword on a block | any player |
 | `carpet:sword_block_request` — the mod client's own request packet | a client with the mod |
+| The `use` action of a fake player | a fake player, once the sword is in use |
 
 For any of them the server:
 
@@ -42,6 +43,9 @@ For any of them the server:
 3. starts the player using the item if they were not already,
 4. tells the clients within 64 blocks that this player is now blocking, with the number of ticks left.
 
+Step 4 only happens when the window was closed before, so topping the window up while a sword stays
+raised does not repeat the packet every tick.
+
 A sword is also made usable at all by this rule: `ItemStack.use` on a sword starts using it and
 returns `CONSUME`, and its use duration becomes 72000 ticks instead of nothing. So right-clicking
 with a sword raises it and it stays raised until you let go — no client mod needed for that.
@@ -49,7 +53,10 @@ with a sword raises it and it stays raised until you let go — no client mod ne
 ### The window ticking down
 
 The counter is ticked in `Player.tick`. When it reaches zero the server clears it and sends a
-`carpet:sword_block` packet with zero ticks, so the clients stop drawing the block pose.
+`carpet:sword_block` packet with zero ticks, so the clients stop drawing the block pose. That is what
+`swordBlockWindowTicks` is for: it is how long the block lasts after the use key comes up. A fake
+player's `use` action tops the window back up every tick the sword is in use, so its block ends
+`swordBlockWindowTicks` after the use stops, the same as a client's.
 
 ### Damage
 
@@ -63,9 +70,17 @@ damage type is untouched.
 
 ### Knockback
 
-`LivingEntity.getKnockback` is replaced with the same calculation the game already does — the attack
-knockback attribute, modified by the weapon's knockback enchantments — and the result is multiplied by
-`swordBlockKnockbackMultiplier` when the **victim** is inside a block window.
+The knockback a hit deals is scaled by `swordBlockKnockbackMultiplier` when the **victim** is inside a
+block window.
+
+There are two paths the game takes and both are covered:
+
+- a melee, projectile or explosion hit is pushed by `LivingEntity.dealDefaultKnockback`, which works
+  out its own 0.4 and calls `knockback` with it. The multiplier is applied to that strength, so this
+  is what a sword hit from another player uses.
+- `LivingEntity.getKnockback` — the attack knockback attribute, modified by the weapon's knockback
+  enchantments — is scaled the same way. Since 26.x the attack knockback attribute is 0 for players,
+  so this path is what a mace's stab and a mob's ram use, and nothing else.
 
 ## What a client sees
 
@@ -100,7 +115,7 @@ What it does not have is the mod's rendering:
   item pose in the hand.
 - The first-person sword is not rolled.
 - The `carpet:sword_block` packet is ignored, so a **fake** player holding a sword up never looks like
-  it is blocking to a vanilla client, even though the damage reduction applies to it.
+  it is blocking to a vanilla client, even though the damage and knockback reduction both apply to it.
 
 So: put the mod on the clients that need to *see* blocking. Gameplay does not need it.
 
@@ -111,18 +126,16 @@ So: put the mod on the clients that need to *see* blocking. Gameplay does not ne
 /player Bot1 use continuous
 ```
 
-A fake player holding a sword with `use` running is `isUsingItem()`, so it gets the damage reduction.
-This is what the self-test scenario `sword_block` checks: with the rule on, the blocking player loses
-`swordBlockDamageMultiplier` of a fixed 4-health hit; with the rule off, they lose all of it, and an
-idle player loses all of it either way.
+A fake player holding a sword with `use` running gets the whole thing: the `USE` action opens the
+block window exactly as the use-item packet a client sends does, and keeps it open for as long as the
+item stays in use. That gives it the damage reduction, the knockback reduction and the
+`carpet:sword_block` broadcast, so it blocks in front of a real player the same way a real player
+does. The self-test scenario `sword_block` checks this: with the rule on, the blocking player loses
+`swordBlockDamageMultiplier` of a fixed 4-health hit and is pushed by half of what an idle player is
+pushed by, and with the rule off they lose all of the damage and are pushed as far as anyone.
 
-Two things a fake player does **not** get, because the block window is only ever opened by a packet a
-real client can send:
-
-- the knockback reduction, which is keyed on the window rather than on `isUsingItem()`,
-- the animation, since nobody is told about it.
-
-To see the full behaviour in-game, use a real client with the mod.
+The one thing a fake player still cannot do is *let go* of a block mid-window the way a client can:
+releasing use closes the window after `swordBlockWindowTicks`, exactly as a real player's does.
 
 CarpetLogic has a node for this too: `Combat/SwordBlock`, which needs `swordBlockHitting` to be on.
 

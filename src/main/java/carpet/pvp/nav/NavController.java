@@ -627,6 +627,12 @@ public final class NavController
             navWaterJumping = false;
         }
 
+        // Let go of the inputs navigation was driving, so the bot stands still instead of walking on.
+        pack.setForward(0.0F);
+        pack.setStrafing(0.0F);
+        pack.setSprinting(false);
+        player.setJumping(false);
+
         // If we were navigating via elytra, this also stops that controller.
         pack.setGlideEnabled(false);
     }

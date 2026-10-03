@@ -6,6 +6,7 @@ import carpet.helpers.EntityPlayerActionPack.ActionType;
 import carpet.pvp.nav.ElytraAStarPathfinder;
 import carpet.pvp.nav.BotNavMode;
 import carpet.CarpetSettings;
+import carpet.fakes.ItemCooldownsInterface;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotPvpConfig;
@@ -52,6 +53,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemCooldowns;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -94,7 +96,7 @@ public class PlayerCommand
             .then(makeActionCommand("swing", ActionType.SWING))
             .then(literal("animate")
                 .then(literal("attack").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
-                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING_OFF_HAND, Action.once()))))
                 .then(literal("continuous").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.continuous()))))
                 .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
                     .executes(c -> manipulate(c, ap -> ap.start(ActionType.SWING, Action.interval(IntegerArgumentType.getInteger(c, "ticks"))))))))
@@ -1741,10 +1743,14 @@ public class PlayerCommand
     {
         if (cantManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
-        // Reset cooldowns by setting zero-tick cooldown on a fresh instance (ItemCooldowns has no removeAll).
-        // This effectively tells the player the cooldown system on the player, which ticks down to 0 immediately.
-        Messenger.m(context.getSource(), "g Item cooldowns will clear on next tick for ", player.getName());
-        return 1;
+        ItemCooldowns cooldowns = player.getCooldowns();
+        // ItemCooldowns has no removeAll and only knows how to forget one group at a time, so the
+        // groups it holds are collected first and then each dropped, which also tells the client.
+        List<Identifier> groups = new ArrayList<>(((ItemCooldownsInterface) cooldowns).carpet$getCooldowns().keySet());
+        for (Identifier group : groups) cooldowns.removeCooldown(group);
+        Messenger.m(context.getSource(), "g Cleared ", String.valueOf(groups.size()),
+                groups.size() == 1 ? "g  item cooldown for " : "g  item cooldowns for ", player.getName());
+        return groups.size();
     }
 
     private static int itemCdQuery(CommandContext<CommandSourceStack> context)

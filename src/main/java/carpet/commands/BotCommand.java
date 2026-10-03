@@ -37,6 +37,7 @@ public class BotCommand
         LiteralArgumentBuilder<CommandSourceStack> command = literal("bot")
                 .then(literal("kit")
                         .then(literal("list").executes(BotCommand::list))
+                        .then(literal("reload").executes(BotCommand::reload))
                         .then(literal("give")
                                 .then(argument("players", EntityArgument.players())
                                         .then(argument("kit", StringArgumentType.word())
@@ -63,6 +64,21 @@ public class BotCommand
 
         KitStore store = store(context);
         Messenger.m(context.getSource(), "g Kits: ", "y ", String.join(", ", store.names()));
+        for (Map.Entry<String, String> problem : store.problems().entrySet())
+        {
+            Messenger.m(context.getSource(), "r Kit ", "rb " + problem.getKey(), "r  cannot be used: ", "y ", problem.getValue());
+        }
+        return store.problems().isEmpty() ? 1 : 0;
+    }
+
+    private static int reload(CommandContext<CommandSourceStack> context)
+    {
+        if (cantUse(context)) return 0;
+
+        KitStore store = store(context);
+        store.reload();
+        Messenger.m(context.getSource(), "g Reloaded the kits in the world's kit folder, ", "y ",
+                String.valueOf(store.customNames().size()), "g  of them are custom");
         for (Map.Entry<String, String> problem : store.problems().entrySet())
         {
             Messenger.m(context.getSource(), "r Kit ", "rb " + problem.getKey(), "r  cannot be used: ", "y ", problem.getValue());

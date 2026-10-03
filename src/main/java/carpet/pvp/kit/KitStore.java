@@ -29,9 +29,10 @@ import java.util.WeakHashMap;
  * Where kits live: the ones shipped with the mod, read from {@code assets/carpet/kits}, and the
  * ones a server made itself, read from {@code carpet-kits} in the world folder.
  *
- * <p>Built-in kits are read as plain item descriptions (see {@link Kit#fromJson}). A kit a player
- * saved keeps the finished item stacks instead, so that custom names, damage and any other data
- * component survive the round trip through JSON.</p>
+ * <p>A kit is read as plain item descriptions (see {@link Kit#fromJson}) or as the finished item
+ * stacks a saved kit keeps, so that custom names, damage and any other data component survive the
+ * round trip through JSON. The two are told apart by their shape, so both are accepted in the world's
+ * kit folder as well as in the mod's.</p>
  */
 public final class KitStore
 {
@@ -122,6 +123,7 @@ public final class KitStore
     public void reload()
     {
         custom.clear();
+        problems.keySet().removeIf(name -> !BUILT_IN.contains(name));
         readCustom();
     }
 
@@ -186,6 +188,18 @@ public final class KitStore
 
     private Kit readCustomKit(String json, String name)
     {
+        return readCustomKit(registries, json, name);
+    }
+
+    /**
+     * Reads a kit file from the world's kit folder. An entry that carries a {@code stack} is a saved kit and
+     * keeps the finished stack it was written with; any other entry is read as a hand written item
+     * description, the same shape the built-in kits use.
+     *
+     * @param registries only needed for the saved shape, since an item description names its items as text
+     */
+    static Kit readCustomKit(RegistryAccess registries, String json, String name)
+    {
         JsonElement root = JsonParser.parseString(json);
         if (!root.isJsonObject()) throw new IllegalArgumentException("a kit must be a JSON object");
         JsonObject object = root.getAsJsonObject();
@@ -195,13 +209,14 @@ public final class KitStore
         List<KitEntry> entries = new ArrayList<>();
         for (JsonElement element : items.getAsJsonArray())
         {
+            if (!element.isJsonObject()) throw new IllegalArgumentException("a kit entry must be a JSON object");
             JsonObject item = element.getAsJsonObject();
-            entries.add(KitEntry.ofStack(
-                    KitSlot.of(item.get("slot")),
-                    decode(name, item.get("stack"))));
+            entries.add(item.has("stack")
+                    ? KitEntry.ofStack(KitSlot.of(item.get("slot")), decode(registries, name, item.get("stack")))
+                    : KitEntry.fromJson(item));
         }
         JsonElement kitName = object.get("name");
-        return new Kit(kitName == null ? name : kitName.getAsString(), entries);
+        return new Kit(kitName == null || kitName.isJsonNull() ? name : kitName.getAsString(), entries);
     }
 
     private JsonElement encode(String kitName, ItemStack stack)
@@ -211,10 +226,10 @@ public final class KitStore
                 .getOrThrow(message -> new IllegalArgumentException("cannot write " + kitName + ": " + message));
     }
 
-    private ItemStack decode(String kitName, JsonElement json)
+    private static ItemStack decode(RegistryAccess registries, String kitName, JsonElement json)
     {
         if (json == null) throw new IllegalArgumentException("a kit entry needs a 'stack'");
-        return ItemStack.CODEC.parse(ops(), json)
+        return ItemStack.CODEC.parse(registries.createSerializationContext(JsonOps.INSTANCE), json)
                 .getOrThrow(message -> new IllegalArgumentException("cannot read " + kitName + ": " + message));
     }
 

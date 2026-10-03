@@ -70,7 +70,7 @@
       {"name": "slot", "type": "int", "default": 1, "min": 1, "max": 9}
     ]},
     "EQUIP_ARMOR": {"kind": "action", "node": "Equipment/EquipArmor", "params": [
-      {"name": "armorSet", "type": "string", "default": "diamond", "options": ["leather", "chainmail", "iron", "golden", "diamond", "netherite"]}
+      {"name": "armorSet", "type": "string", "default": "diamond", "options": ["leather", "chainmail", "iron", "golden", "gold", "diamond", "netherite"]}
     ]},
     "EQUIP_SLOT": {"kind": "action", "node": "Equipment/EquipSlot", "params": [
       {"name": "slot", "type": "string", "default": "mainhand", "options": ["mainhand", "offhand", "head", "chest", "legs", "feet"]},
