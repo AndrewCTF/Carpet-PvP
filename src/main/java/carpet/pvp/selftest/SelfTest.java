@@ -84,7 +84,7 @@ public final class SelfTest
             "nav_tick_budget", "nav_smooth");
 
     /** What every built-in kit has to put on the player it is given to. */
-    private record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
+    record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
 
     private static final List<KitExpectation> KIT_EXPECTATIONS = List.of(
             new KitExpectation("sword", "diamond_sword", "diamond_chestplate", "minecraft:protection", 4, "golden_apple", 4),
@@ -94,7 +94,7 @@ public final class SelfTest
             new KitExpectation("crystal", "netherite_sword", "netherite_chestplate", "minecraft:blast_protection", 4, "end_crystal", 8));
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
-    private static final double SURFACE_Y = -60.0D;
+    static final double SURFACE_Y = -60.0D;
     private static final double SPACING = 256.0D;
     private static final Gson GSON = new Gson();
     /** How long the server thread gets to stop, and then how long its worker threads get to finish. */
@@ -102,18 +102,18 @@ public final class SelfTest
     private static volatile MinecraftServer stoppingServer;
     private static final float SWORD_BLOCK_HIT = 4.0F;
 
-    private record Bot(String name, Vec3 pos, String gamemode)
+    record Bot(String name, Vec3 pos, String gamemode)
     {
         Bot(String name, Vec3 pos) { this(name, pos, "survival"); }
     }
 
-    private record Probe(boolean ok, String detail) {}
+    record Probe(boolean ok, String detail) {}
 
     /** Scenarios that drive the bot with commands only. */
-    private static final Consumer<MinecraftServer> NOTHING = server -> {};
+    static final Consumer<MinecraftServer> NOTHING = server -> {};
 
     /** The commands are issued once every bot has joined; the check is then polled every tick. */
-    private record Scenario(int timeout, List<Bot> bots, List<String> commands, Consumer<MinecraftServer> start, Function<MinecraftServer, Probe> check)
+    record Scenario(int timeout, List<Bot> bots, List<String> commands, Consumer<MinecraftServer> start, Function<MinecraftServer, Probe> check)
     {
         Scenario(int timeout, List<Bot> bots, List<String> commands, Function<MinecraftServer, Probe> check)
         {
@@ -138,7 +138,9 @@ public final class SelfTest
         if (REQUESTED == null || finished) return;
         if (names == null)
         {
-            names = SelfTestReport.parseNames(REQUESTED, SCENARIOS);
+            List<String> all = new ArrayList<>(SCENARIOS);
+            all.addAll(ScenarioIndex.SCENARIOS.keySet());
+            names = SelfTestReport.parseNames(REQUESTED, all);
             run(server, "carpet fakePlayerNavigation true");
             // Sprinting only removes the wait between ticks; the scenarios take the same ticks either way.
             run(server, "tick sprint 1d");
@@ -177,7 +179,7 @@ public final class SelfTest
         }
     }
 
-    private static Probe probe(MinecraftServer server)
+    static Probe probe(MinecraftServer server)
     {
         for (Bot bot : current.bots())
         {
@@ -192,7 +194,7 @@ public final class SelfTest
         return current.check().apply(server);
     }
 
-    private static Scenario scenario(String name, int index)
+    static Scenario scenario(String name, int index)
     {
         // a is the bot under test, b the second player it follows or fights. Everyone spawns looking along +z.
         String a = "SelfA" + index;
@@ -806,13 +808,14 @@ public final class SelfTest
                 });
             }
             default:
-                return null;
+                ScenarioIndex.Factory factory = ScenarioIndex.SCENARIOS.get(name);
+                return factory == null ? null : factory.create(a, b, c, origin);
         }
     }
 
     // A bot program started through the Java API, the way the web editor's execute endpoint starts one, and
     // never as the console: a program started from a command has no player to run its commands as.
-    private static void startProgram(MinecraftServer server, String botName, String actions)
+    static void startProgram(MinecraftServer server, String botName, String actions)
     {
         CarpetLogic logic = CarpetLogic.INSTANCE;
         BotProgram program = new BotProgram("_selftest", "selftest", "");
@@ -825,14 +828,14 @@ public final class SelfTest
         }
     }
 
-    private static String status(String botName)
+    static String status(String botName)
     {
         ProgramInfo info = CarpetLogic.INSTANCE.getProgramExecutor().getPrograms().get(botName);
         return info == null ? "gone" : info.status();
     }
 
     /** The first slot where the two lists differ, or null when they hold the same things. */
-    private static String sameInventory(List<ItemStack> expected, List<ItemStack> actual)
+    static String sameInventory(List<ItemStack> expected, List<ItemStack> actual)
     {
         if (expected.size() != actual.size()) return fmt("there are %d slots, not %d", actual.size(), expected.size());
         for (int i = 0; i < expected.size(); i++)
@@ -845,7 +848,7 @@ public final class SelfTest
         return null;
     }
 
-    private static Probe kitsGiven(MinecraftServer server, List<String> bots)
+    static Probe kitsGiven(MinecraftServer server, List<String> bots)
     {
         KitStore store = KitStore.of(server);
         if (!store.problems().isEmpty()) return new Probe(false, "kits did not load: " + store.problems());
@@ -877,7 +880,7 @@ public final class SelfTest
         return new Probe(true, fmt("%s each gave their weapon, chestplate and stack", String.join(", ", given)));
     }
 
-    private static String checkKit(ServerPlayer bot, KitExpectation expected, MinecraftServer server)
+    static String checkKit(ServerPlayer bot, KitExpectation expected, MinecraftServer server)
     {
         if (!holds(bot.getMainHandItem(), expected.mainHand()))
             return "holds " + describe(bot.getMainHandItem()) + " instead of " + expected.mainHand();
@@ -900,7 +903,7 @@ public final class SelfTest
     }
 
     /** Every slot a kit can touch: the hotbar and inventory, the armour and the offhand. */
-    private static List<ItemStack> slots(ServerPlayer player)
+    static List<ItemStack> slots(ServerPlayer player)
     {
         List<ItemStack> slots = new ArrayList<>();
         for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) slots.add(player.getInventory().getItem(i).copy());
@@ -911,13 +914,13 @@ public final class SelfTest
         return slots;
     }
 
-    private static boolean holds(ItemStack stack, String item)
+    static boolean holds(ItemStack stack, String item)
     {
         Identifier key = Identifier.withDefaultNamespace(item);
         return !stack.isEmpty() && BuiltInRegistries.ITEM.containsKey(key) && stack.getItem() == BuiltInRegistries.ITEM.getValue(key);
     }
 
-    private static String describe(ItemStack stack)
+    static String describe(ItemStack stack)
     {
         return stack.isEmpty() ? "nothing" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
@@ -929,7 +932,7 @@ public final class SelfTest
      * throughout, so both blasts go through the optimized path, and each scenario waits for the primed tnt to be
      * gone before it looks at the blocks.
      */
-    private static Scenario explosionRules(String a, Vec3 origin)
+    static Scenario explosionRules(String a, Vec3 origin)
     {
         BlockPos spared = BlockPos.containing(origin);
         BlockPos doomed = spared.east(16);
@@ -967,7 +970,7 @@ public final class SelfTest
      * rule xpFromExplosions (mixin Explosion_xpFromBlocksMixin): an ore block blown up only drops experience while
      * the rule is on.
      */
-    private static Scenario xpExplosions(String a, Vec3 origin)
+    static Scenario xpExplosions(String a, Vec3 origin)
     {
         BlockPos dryOre = BlockPos.containing(origin);
         BlockPos wetOre = dryOre.east(16);
@@ -1011,7 +1014,7 @@ public final class SelfTest
      * scarpet event __on_player_takes_damage only reaches a script once an app with a handler is loaded, and hits
      * fifteen ticks apart only both land while damageTickOverrides is off.
      */
-    private static Scenario scarpetEvents(String b, Vec3 origin)
+    static Scenario scarpetEvents(String b, Vec3 origin)
     {
         int[] unhandled = {-1};
         int[] second = {-1};
@@ -1061,7 +1064,7 @@ public final class SelfTest
     }
 
     /** mixin Explosion_scarpetEventMixin: __on_explosion_outcome fires for a plain tnt explosion. */
-    private static Scenario scarpetExplosion(String a, Vec3 origin)
+    static Scenario scarpetExplosion(String a, Vec3 origin)
     {
         BlockPos spot = BlockPos.containing(origin);
         return new Scenario(600, List.of(new Bot(a, origin.add(0.0D, 0.0D, 6.0D))), List.of(
@@ -1096,7 +1099,7 @@ public final class SelfTest
      * telling a barrier that has an unpowered activator rail above it that the block changed makes it schedule a tick
      * and lower the neighbour updater budget, while the same change with the rule off does neither.
      */
-    private static Scenario updateSuppressionBlock(Vec3 origin)
+    static Scenario updateSuppressionBlock(Vec3 origin)
     {
         BlockPos quietBarrier = BlockPos.containing(origin);
         BlockPos liveBarrier = quietBarrier.east(4);
@@ -1123,7 +1126,7 @@ public final class SelfTest
      * rule stackableShulkerBoxes (mixin ItemStack_stackableShulkerBoxesMixin): an empty shulker box may stack up to
      * the configured size while the rule is on, and any other block item is left alone.
      */
-    private static Scenario stackableShulkerBoxes(Vec3 origin)
+    static Scenario stackableShulkerBoxes(Vec3 origin)
     {
         int[] off = {-1, -1};
         int[] on = {-1, -1};
@@ -1154,7 +1157,7 @@ public final class SelfTest
      * configured block joins the list of blocks a structure block leaves out, so a saved structure drops it from the
      * palette once the rule names it.
      */
-    private static Scenario structureBlockIgnored(Vec3 origin)
+    static Scenario structureBlockIgnored(Vec3 origin)
     {
         BlockPos corner = BlockPos.containing(origin).above();
         return new Scenario(100, List.of(), List.of(
@@ -1179,7 +1182,7 @@ public final class SelfTest
      * rule persistentParrots (mixins Player_parrotMixin and ServerPlayer_parrotMixin): what sits on the shoulder
      * survives damage while the rule is on and is dropped while it is off.
      */
-    private static Scenario persistentParrots(String a, String b, String c, Vec3 origin)
+    static Scenario persistentParrots(String a, String b, String c, Vec3 origin)
     {
         int[] phase = {0};
         return new Scenario(200, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, 3.0D)), new Bot(c, origin.add(0.0D, 0.0D, 6.0D))), List.of(), server ->
@@ -1229,7 +1232,7 @@ public final class SelfTest
      * all while LevelInterface has no implementation. Spawning is mocked, so the reporter counts the attempts
      * without putting mobs into the world.
      */
-    private static Scenario lagFreeSpawning(String a, String b, Vec3 origin)
+    static Scenario lagFreeSpawning(String a, String b, Vec3 origin)
     {
         BlockPos area = BlockPos.containing(origin);
         long[] attempts = {-1};
@@ -1252,14 +1255,14 @@ public final class SelfTest
         });
     }
 
-    private static void conclude(MinecraftServer server, boolean passed, String detail)
+    static void conclude(MinecraftServer server, boolean passed, String detail)
     {
         Result result = new Result(names.get(results.size()), passed, ticks, detail);
         results.add(result);
         log(server, fmt("%s %s after %d ticks: %s", passed ? "PASS" : "FAIL", result.name(), result.ticks(), detail));
     }
 
-    private static void finish(MinecraftServer server)
+    static void finish(MinecraftServer server)
     {
         finished = true;
         boolean passed = SelfTestReport.allPassed(results);
@@ -1293,7 +1296,7 @@ public final class SelfTest
      * Waits for the server thread to end, then reports the non-daemon threads that are still around.
      * The watchdog has to hold the JVM open to be able to do that, so it is the one thread it ignores.
      */
-    private static void watchExit(Thread serverThread, int exitCode)
+    static void watchExit(Thread serverThread, int exitCode)
     {
         try
         {
@@ -1342,7 +1345,7 @@ public final class SelfTest
     }
 
     /** Players the distance manager still counts, read by reflection: a diagnostic for a stuck shutdown only. */
-    private static String trackedPlayers(ServerLevel level)
+    static String trackedPlayers(ServerLevel level)
     {
         try
         {
@@ -1370,7 +1373,7 @@ public final class SelfTest
         }
     }
 
-    private static List<Thread> lingeringThreads()
+    static List<Thread> lingeringThreads()
     {
         // main is the JVM's own wait for the last non-daemon thread, and it calls itself DestroyJavaVM there.
         Set<String> jvmThreads = Set.of("main", "DestroyJavaVM");
@@ -1384,18 +1387,18 @@ public final class SelfTest
     }
 
     // The player list matches names ignoring case, so the profile is what tells the exact name apart.
-    private static ServerPlayer player(MinecraftServer server, String name)
+    static ServerPlayer player(MinecraftServer server, String name)
     {
         return server.getPlayerList().getPlayerByName(name);
     }
 
-    private static void run(MinecraftServer server, String command)
+    static void run(MinecraftServer server, String command)
     {
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
     }
 
     /** Issues a command and reads back its result, the way the console reports success. */
-    private static int result(MinecraftServer server, String command)
+    static int result(MinecraftServer server, String command)
     {
         try
         {
@@ -1408,61 +1411,61 @@ public final class SelfTest
         }
     }
 
-    private static String forceload(BlockPos pos)
+    static String forceload(BlockPos pos)
     {
         return "forceload add " + pos.getX() + " " + pos.getZ();
     }
 
-    private static String setBlock(BlockPos pos, String block)
+    static String setBlock(BlockPos pos, String block)
     {
         return "setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + block;
     }
 
-    private static String summonTnt(BlockPos pos)
+    static String summonTnt(BlockPos pos)
     {
         return "summon tnt " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
     }
 
-    private static String setBlock(int x, int y, int z, String block)
+    static String setBlock(int x, int y, int z, String block)
     {
         return "setblock " + x + " " + y + " " + z + " " + block;
     }
 
     /** Keeps a stretch of chunks loaded, so navigation has blocks to plan over before the bot walks there. */
-    private static String forceload(int x0, int z0, int x1, int z1)
+    static String forceload(int x0, int z0, int x1, int z1)
     {
         return "forceload add " + x0 + " " + z0 + " " + x1 + " " + z1;
     }
 
-    private static String fill(int x0, int y0, int z0, int x1, int y1, int z1, String block)
+    static String fill(int x0, int y0, int z0, int x1, int y1, int z1, String block)
     {
         return "fill " + x0 + " " + y0 + " " + z0 + " " + x1 + " " + y1 + " " + z1 + " " + block;
     }
 
     /** The action pack behind a bot, which is where its navigation state is read from. */
-    private static EntityPlayerActionPack pack(MinecraftServer server, String name)
+    static EntityPlayerActionPack pack(MinecraftServer server, String name)
     {
         return ((ServerPlayerInterface) player(server, name)).getActionPack();
     }
 
-    private static boolean lit(MinecraftServer server, BlockPos pos)
+    static boolean lit(MinecraftServer server, BlockPos pos)
     {
         return server.overworld().getBlockState(pos).getValue(RedstoneLampBlock.LIT);
     }
 
     /** Runs a command as if it came from the given position, which nav come navigates to. */
-    private static void run(MinecraftServer server, String command, Vec3 sourcePos)
+    static void run(MinecraftServer server, String command, Vec3 sourcePos)
     {
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withPosition(sourcePos), command);
     }
 
-    private static Probe pending(String detail)
+    static Probe pending(String detail)
     {
         return new Probe(false, detail);
     }
 
     /** A hit counts in full only when the player is loaded, off the damage cooldown of the last one and healthy. */
-    private static boolean hittable(ServerPlayer... players)
+    static boolean hittable(ServerPlayer... players)
     {
         for (ServerPlayer player : players)
         {
@@ -1473,7 +1476,7 @@ public final class SelfTest
         return true;
     }
 
-    private static String hitWaitReason(ServerPlayer... players)
+    static String hitWaitReason(ServerPlayer... players)
     {
         for (ServerPlayer player : players)
         {
@@ -1484,30 +1487,30 @@ public final class SelfTest
     }
 
     /** Hits a player for a fixed amount and returns what it cost them in health. */
-    private static float damage(MinecraftServer server, ServerPlayer victim)
+    static float damage(MinecraftServer server, ServerPlayer victim)
     {
         float before = victim.getHealth();
         result(server, "damage " + victim.getName().getString() + " " + SWORD_BLOCK_HIT);
         return before - victim.getHealth();
     }
 
-    private static boolean same(float one, float other)
+    static boolean same(float one, float other)
     {
         return Math.abs(one - other) < 0.05F;
     }
 
-    private static int primed(MinecraftServer server, BlockPos pos)
+    static int primed(MinecraftServer server, BlockPos pos)
     {
         return count(server, net.minecraft.world.entity.item.PrimedTnt.class, pos, 48.0D);
     }
 
-    private static <T extends Entity> int count(MinecraftServer server, Class<T> type, BlockPos pos, double radius)
+    static <T extends Entity> int count(MinecraftServer server, Class<T> type, BlockPos pos, double radius)
     {
         return server.overworld().getEntitiesOfClass(type, new AABB(pos).inflate(radius)).size();
     }
 
     /** The biggest shulker box stack lying on the ground within four blocks of the drop point. */
-    private static int biggestShulkerStack(MinecraftServer server, Vec3 pos)
+    static int biggestShulkerStack(MinecraftServer server, Vec3 pos)
     {
         int biggest = 0;
         for (ItemEntity item : server.overworld().getEntitiesOfClass(ItemEntity.class, new AABB(pos, pos).inflate(4.0D)))
@@ -1518,7 +1521,7 @@ public final class SelfTest
     }
 
     /** Fills the fake player's left shoulder slot; the rule only ever looks at whether the slot is taken. */
-    private static void shoulder(MinecraftServer server, String name)
+    static void shoulder(MinecraftServer server, String name)
     {
         CompoundTag parrot = new CompoundTag();
         parrot.putString("id", "minecraft:parrot");
@@ -1531,7 +1534,7 @@ public final class SelfTest
      * disk. The file is looked up by name because the save path and the load path of the structure manager disagree
      * about which folder they use.
      */
-    private static boolean paletteHas(MinecraftServer server, String name, BlockPos corner, String block)
+    static boolean paletteHas(MinecraftServer server, String name, BlockPos corner, String block)
     {
         ServerLevel level = server.overworld();
         Identifier id = Identifier.withDefaultNamespace("selftest_" + name);
@@ -1557,7 +1560,7 @@ public final class SelfTest
     }
 
     /** A use-item-on packet the way a client sends it, so the packet handler and the rules it reads run. */
-    private static void placeByPacket(MinecraftServer server, String name, BlockPos against, Direction face)
+    static void placeByPacket(MinecraftServer server, String name, BlockPos against, Direction face)
     {
         ServerPlayer bot = player(server, name);
         Vec3 hit = Vec3.atCenterOf(against).add(face.getStepX() * 0.5D, 0.0D, face.getStepZ() * 0.5D);
@@ -1565,17 +1568,17 @@ public final class SelfTest
                 new BlockHitResult(hit, face, against, false), 0));
     }
 
-    private static void log(MinecraftServer server, String message)
+    static void log(MinecraftServer server, String message)
     {
         server.sendSystemMessage(Component.literal("[selftest] " + message));
     }
 
-    private static String coords(Vec3 pos)
+    static String coords(Vec3 pos)
     {
         return pos.x + " " + pos.y + " " + pos.z;
     }
 
-    private static String fmt(String format, Object... args)
+    static String fmt(String format, Object... args)
     {
         return String.format(Locale.ROOT, format, args);
     }

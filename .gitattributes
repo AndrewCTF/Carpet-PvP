@@ -5,3 +5,4 @@
 # Demote any incidental Python from language stats
 *.py linguist-vendored
 *.py linguist-detectable=false
+src/main/java/carpet/pvp/selftest/ScenarioIndex.java merge=union
