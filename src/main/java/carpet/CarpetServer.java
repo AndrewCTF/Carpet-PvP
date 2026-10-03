@@ -21,6 +21,7 @@ import carpet.commands.SpawnCommand;
 import carpet.commands.SpawnPlayerCommand;
 import carpet.commands.TestCommand;
 import carpet.network.ServerNetworkHandler;
+import carpet.pvp.selftest.SelfTest;
 import carpet.helpers.HopperCounter;
 import carpet.logging.LoggerRegistry;
 import carpet.script.CarpetScriptServer;
@@ -112,6 +113,7 @@ public class CarpetServer
         ScheduleCommand.tick(server);
         CarpetSettings.impendingFillSkipUpdates.set(false);
         extensions.forEach(e -> e.onTick(server));
+        SelfTest.tick(server);
     }
 
     public static void registerCarpetCommands(CommandDispatcher<CommandSourceStack> dispatcher, Commands.CommandSelection environment, CommandBuildContext commandBuildContext)

@@ -33,5 +33,12 @@ jobs:
         run: |
           java --version
           ./gradlew --version
-      - name: Build every Minecraft version
-        run: ./gradlew --no-daemon build -x test
+      - name: Build, test and self-test every Minecraft version
+        run: ./gradlew --no-daemon build runSelfTest
+      - name: Upload self-test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-reports
+          path: run/selftest-*/selftest-report.json
+          if-no-files-found: ignore
