@@ -13,16 +13,18 @@ public abstract class Player_fakePlayersMixin
     /**
      * To make sure player attacks are able to knockback fake players
      */
+    //~ if >=26.3 'hurtMarked' -> 'syncVelocity' {
     @Redirect(
             method = "causeExtraKnockback",
             at = @At(
                     value = "FIELD",
-                    target = "Lnet/minecraft/world/entity/Entity;hurtMarked:Z",
+                    target = "Lnet/minecraft/world/entity/Entity;syncVelocity:Z",
                     ordinal = 0
             )
     )
     private boolean velocityModifiedAndNotCarpetFakePlayer(Entity target)
     {
-        return target.hurtMarked && !(target instanceof EntityPlayerMPFake);
+        return target.syncVelocity && !(target instanceof EntityPlayerMPFake);
     }
+    //~}
 }

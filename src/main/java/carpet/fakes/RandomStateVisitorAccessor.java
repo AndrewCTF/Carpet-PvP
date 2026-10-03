@@ -1,7 +1,9 @@
 package carpet.fakes;
 
-import net.minecraft.world.level.levelgen.DensityFunction;
+//? if <26.3 {
+/*import net.minecraft.world.level.levelgen.DensityFunction;
 
 public interface RandomStateVisitorAccessor {
     DensityFunction.Visitor getVisitor();
 }
+*///?}

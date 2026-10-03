@@ -38,11 +38,38 @@ import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.VerticalAnchor;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.feature.Feature;
+//? if >=26.3 {
+import java.util.stream.Stream;
+import net.minecraft.core.Direction;
+import net.minecraft.data.worldgen.features.AquaticFeatures;
+import net.minecraft.references.BlockItemIds;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.util.random.Weighted;
+import net.minecraft.util.random.WeightedList;
+import net.minecraft.util.valueproviders.UniformInt;
+import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+import net.minecraft.world.level.levelgen.densityfunction.SamplerContext;
+import net.minecraft.world.level.levelgen.feature.CoralClawFeature;
+import net.minecraft.world.level.levelgen.feature.CoralTreeFeature;
+import net.minecraft.world.level.levelgen.feature.CuboidPlacement;
+import net.minecraft.world.level.levelgen.feature.NoOpFeature;
+import net.minecraft.world.level.levelgen.feature.OverlayFeature;
+import net.minecraft.world.level.levelgen.feature.SimpleBlockFeature;
+import net.minecraft.world.level.levelgen.feature.SimpleRandomSelectorFeature;
+import net.minecraft.world.level.levelgen.feature.TreeFeature;
+import net.minecraft.world.level.levelgen.feature.WeightedRandomSelectorFeature;
+import net.minecraft.world.level.levelgen.feature.stateproviders.RandomBlockProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.RotatedBlockProvider;
+import net.minecraft.world.level.levelgen.placement.BlockPredicateFilter;
+import net.minecraft.world.level.levelgen.placement.OffsetPlacement;
+import net.minecraft.world.level.levelgen.placement.RandomChancePlacement;
+//?} else {
+/*import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.CompositeFeatureConfiguration;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration;
+*///?}
 import net.minecraft.world.level.levelgen.feature.featuresize.TwoLayersFeatureSize;
 import net.minecraft.world.level.levelgen.feature.foliageplacers.BlobFoliagePlacer;
 import net.minecraft.world.level.levelgen.feature.foliageplacers.FancyFoliagePlacer;
@@ -66,7 +93,8 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProc
 
 import jakarta.annotation.Nullable;
 
-import static net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration.CAN_PLACE_BELOW_TREE_TRUNKS;
+//? if <26.3
+//import static net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration.CAN_PLACE_BELOW_TREE_TRUNKS;
 
 public class FeatureGenerator
 {
@@ -85,7 +113,11 @@ public class FeatureGenerator
             return plopAnywhere(structure, world, pos, world.getChunkSource().getGenerator(), false);
         }
 
-        ConfiguredFeature<?, ?> configuredFeature = world.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE).getValue(id);
+        //? if >=26.3 {
+        Feature configuredFeature = world.registryAccess().lookupOrThrow(Registries.FEATURE).getValue(id);
+        //?} else {
+        /*ConfiguredFeature<?, ?> configuredFeature = world.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE).getValue(id);
+        *///?}
         if (configuredFeature != null)
         {
             ThreadLocal<Boolean> checks = Vanilla.skipGenerationChecks(world);
@@ -108,10 +140,10 @@ public class FeatureGenerator
                 return plopAnywhere(configuredStandard, world, pos, world.getChunkSource().getGenerator(), false);
             }
         }
-        Feature<?> feature = world.registryAccess().lookupOrThrow(Registries.FEATURE).getValue(id);
+        Feature/*? if <26.3 {*//*<?>*//*?}*/ feature = world.registryAccess().lookupOrThrow(Registries.FEATURE).getValue(id);
         if (feature != null)
         {
-            ConfiguredFeature<?, ?> configuredStandard = getDefaultFeature(feature, world, pos, true);
+            /*? if >=26.3 {*/Feature/*?} else {*//*ConfiguredFeature<?, ?>*//*?}*/ configuredStandard = getDefaultFeature(feature, world, pos, true);
             if (configuredStandard != null)
             {
                 ThreadLocal<Boolean> checks = Vanilla.skipGenerationChecks(world);
@@ -157,7 +189,7 @@ public class FeatureGenerator
         Boolean plop(ServerLevel world, BlockPos pos);
     }
 
-    private static Thing simplePlop(ConfiguredFeature<?, ?> feature)
+    private static Thing simplePlop(/*? if >=26.3 {*/Feature/*?} else {*//*ConfiguredFeature<?, ?>*//*?}*/ feature)
     {
         return (w, p) -> {
             ThreadLocal<Boolean> checks = Vanilla.skipGenerationChecks(w);
@@ -173,7 +205,14 @@ public class FeatureGenerator
         };
     }
 
-    private static <FC extends FeatureConfiguration, F extends Feature<FC>> Thing simplePlop(F feature, FC config)
+    //? if >=26.3 {
+    private static Thing simpleTree(TreeFeature.Builder config)
+    {
+        //config.ignoreFluidCheck();
+        return simplePlop(config.build());
+    }
+    //?} else {
+    /*private static <FC extends FeatureConfiguration, F extends Feature<FC>> Thing simplePlop(F feature, FC config)
     {
         return simplePlop(new ConfiguredFeature<>(feature, config));
     }
@@ -183,6 +222,7 @@ public class FeatureGenerator
         //config.ignoreFluidCheck();
         return simplePlop(new ConfiguredFeature<>(Feature.TREE, config));
     }
+    *///?}
 
     private static Thing spawnCustomStructure(Structure structure)
     {
@@ -212,14 +252,15 @@ public class FeatureGenerator
         return result;
     }
 
-    private static ConfiguredFeature<?, ?> getDefaultFeature(Feature<?> feature, ServerLevel world, BlockPos pos, boolean tryHard)
+    private static /*? if >=26.3 {*/Feature/*?} else {*//*ConfiguredFeature<?, ?>*//*?}*/ getDefaultFeature(Feature/*? if <26.3 {*//*<?>*//*?}*/ feature, ServerLevel world, BlockPos pos, boolean tryHard)
     {
         List<HolderSet<PlacedFeature>> configuredStepFeatures = world.getBiome(pos).value().getGenerationSettings().features();
         for (HolderSet<PlacedFeature> step : configuredStepFeatures)
         {
             for (Holder<PlacedFeature> provider : step)
             {
-                if (provider.value().feature().value().feature() == feature)
+                //~ if >=26.3 'feature().value().feature() == feature' -> 'feature().value() == feature'
+                if (provider.value().feature().value() == feature)
                 {
                     return provider.value().feature().value();
                 }
@@ -229,13 +270,18 @@ public class FeatureGenerator
         {
             return null;
         }
-        return world.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE).entrySet().stream().
+        //? if >=26.3 {
+        return world.registryAccess().lookupOrThrow(Registries.FEATURE).entrySet().stream().
+                filter(cS -> cS.getValue() == feature).
+        //?} else {
+        /*return world.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE).entrySet().stream().
                 filter(cS -> cS.getValue().feature() == feature).
+        *///?}
                 findFirst().map(Map.Entry::getValue).orElse(null);
     }
 
 
-    public static <T extends FeatureConfiguration> StructureStart shouldStructureStartAt(ServerLevel world, BlockPos pos, Structure structure, boolean computeBox)
+    public static /*? if <26.3 {*//*<T extends FeatureConfiguration> *//*?}*/StructureStart shouldStructureStartAt(ServerLevel world, BlockPos pos, Structure structure, boolean computeBox)
     {
         ServerChunkCache chunkSource = world.getChunkSource();
         RandomState seed = chunkSource.randomState();
@@ -251,12 +297,13 @@ public class FeatureGenerator
 
         HolderSet<Biome> structureBiomes = structure.biomes();
 
+        //~ if >=26.3 'getStructureManager()' -> 'getStructureTemplateManager()' {
         if (!computeBox)
         {
             //Holder<Biome> genBiome = generator.getBiomeSource().getNoiseBiome(QuartPos.fromBlock(pos.getX()), QuartPos.fromBlock(pos.getY()), QuartPos.fromBlock(pos.getZ()), seed.sampler());
             if (structure.findValidGenerationPoint(new Structure.GenerationContext(
                     world.registryAccess(), generator, generator.getBiomeSource(),
-                    seed, world.getStructureManager(), world.getSeed(), chunkPos, world, structureBiomes::contains
+                    /*? if >=26.3 {*/seed.createClimateSampler(SamplerContext.EMPTY_UNCACHED), /*?}*/seed, world.getStructureTemplateManager(), world.getSeed(), chunkPos, world, structureBiomes::contains
             )).isPresent())
             {
                 return StructureStart.INVALID_START;
@@ -265,28 +312,120 @@ public class FeatureGenerator
         else
         {
             StructureStart filledStructure = structure.generate(Holder.direct(structure), world.dimension(),
-                    world.registryAccess(), generator, generator.getBiomeSource(), seed, world.getStructureManager(),
+                    world.registryAccess(), generator, generator.getBiomeSource(), /*? if >=26.3 {*/seed.createClimateSampler(SamplerContext.EMPTY_UNCACHED), /*?}*/seed, world.getStructureTemplateManager(),
                     world.getSeed(), chunkPos, 0, world, structureBiomes::contains);
             if (filledStructure != null && filledStructure.isValid())
             {
                 return filledStructure;
             }
         }
+        //~}
         return null;
     }
 
-    private static RuleBasedStateProvider belowTrees = RuleBasedStateProvider.ifTrueThenProvide(CAN_PLACE_BELOW_TREE_TRUNKS, Blocks.DIRT);
+    //? if >=26.3 {
+    private static RuleBasedStateProvider belowTrees = RuleBasedStateProvider.ifTrueThenProvide(BlockPredicate.not(BlockPredicate.matchesTag(BlockTags.CANNOT_REPLACE_BELOW_TREE_TRUNK)), Blocks.DIRT);
+
+    private static TreeFeature.Builder createTree(Block block, Block block2, int i, int j, int k, int l)
+    {
+        return new TreeFeature.Builder(BlockStateProvider.of(block), new StraightTrunkPlacer(i, j, k), BlockStateProvider.of(block2), new BlobFoliagePlacer(ConstantInt.of(l), ConstantInt.of(0), 3), new TwoLayersFeatureSize(1, 0, 1), Holder.direct( belowTrees));
+    }
+
+    // from AquaticFeatures
+    private static Holder<PlacedFeature> wallCoral(final HolderGetter<Block> blocks, final Direction direction) {
+        return PlacementUtils.inlinePlaced(
+                new SimpleBlockFeature(new RotatedBlockProvider(Holder.direct(new RandomBlockProvider(blocks.getOrThrow(BlockTags.WALL_CORALS))), Optional.of(direction))),
+                new RandomChancePlacement(0.2f),
+                OffsetPlacement.of(direction),
+                BlockPredicateFilter.forPredicate(BlockPredicate.matchesBlocks(Blocks.WATER))
+        );
+    }
+
+    public static Feature coral(final HolderGetter<Feature> features, final HolderGetter<Block> blocks, final Block block) {
+        return new OverlayFeature(HolderSet.direct(
+                PlacementUtils.inlinePlaced(new SimpleBlockFeature(BlockStateProvider.of(block))),
+                PlacementUtils.inlinePlaced(
+                        new WeightedRandomSelectorFeature(WeightedList.of(
+                                new Weighted<>(PlacementUtils.inlinePlaced(new SimpleBlockFeature(new RandomBlockProvider(blocks.getOrThrow(BlockTags.CORALS)))), 20),
+                                new Weighted<>(PlacementUtils.inlinePlaced(features.getOrThrow(AquaticFeatures.SEA_PICKLE)), 3),
+                                new Weighted<>(PlacementUtils.inlinePlaced(new NoOpFeature()), 57)
+                        )),
+                        OffsetPlacement.above()
+                ),
+                wallCoral(blocks, Direction.NORTH),
+                wallCoral(blocks, Direction.EAST),
+                wallCoral(blocks, Direction.SOUTH),
+                wallCoral(blocks, Direction.WEST)
+        ));
+    }
+
+    final static public BlockPredicateFilter coralPlacement = BlockPredicateFilter.forPredicate(BlockPredicate.allOf(
+            BlockPredicate.anyOf(BlockPredicate.matchesBlocks(Blocks.WATER), BlockPredicate.matchesTag(BlockTags.CORALS)),
+            BlockPredicate.matchesBlocks(Direction.UP, Blocks.WATER)
+    ));
+
+
+    private static Feature coral(ServerLevel level, final int type) {
+        var blocks = level.registryAccess().lookupOrThrow(Registries.BLOCK);
+        var features = level.registryAccess().lookupOrThrow(Registries.FEATURE);
+
+        return new SimpleRandomSelectorFeature(
+                HolderSet.direct(
+                        Stream.of(BlockItemIds.TUBE_CORAL_BLOCK, BlockItemIds.BRAIN_CORAL_BLOCK, BlockItemIds.BUBBLE_CORAL_BLOCK, BlockItemIds.FIRE_CORAL_BLOCK, BlockItemIds.HORN_CORAL_BLOCK)
+                                .map(id -> blocks.getOrThrow(id.block()).value())
+                                .map(block -> coral(features, blocks, block))
+                                .map(
+                                        coralType -> switch (type) {
+                                            case 0 -> PlacementUtils.inlinePlaced(new CoralTreeFeature(
+                                                    PlacementUtils.inlinePlaced(coralType, coralPlacement))
+                                            );
+                                            case 1 -> PlacementUtils.inlinePlaced(new CoralClawFeature(
+                                                    PlacementUtils.inlinePlaced(coralType, coralPlacement))
+                                            );
+                                                default -> PlacementUtils.inlinePlaced(
+                                                        coralType,
+                                                        OffsetPlacement.vertical(UniformInt.of(-3, -1)),
+                                                        new CuboidPlacement(
+                                                                UniformInt.of(3, 5),
+                                                                UniformInt.of(3, 5),
+                                                                false,
+                                                                false
+                                                        ),
+                                                        new RandomChancePlacement(0.9f),
+                                                        coralPlacement
+                                                );
+                                        }
+                                        )
+                                .toList()
+                )
+        );
+    }
+    //?} else {
+    /*private static RuleBasedStateProvider belowTrees = RuleBasedStateProvider.ifTrueThenProvide(CAN_PLACE_BELOW_TREE_TRUNKS, Blocks.DIRT);
 
     private static TreeConfiguration.TreeConfigurationBuilder createTree(Block block, Block block2, int i, int j, int k, int l)
     {
         return new TreeConfiguration.TreeConfigurationBuilder(BlockStateProvider.simple(block), new StraightTrunkPlacer(i, j, k), BlockStateProvider.simple(block2), new BlobFoliagePlacer(ConstantInt.of(l), ConstantInt.of(0), 3), new TwoLayersFeatureSize(1, 0, 1), belowTrees);
     }
+    *///?}
 
     public static final Map<String, Function<ServerLevel, Thing>> featureMap = new HashMap<>()
     {{
 
         // TODO remove this using what place feature is using
-        put("oak_bees", l -> simpleTree(createTree(Blocks.OAK_LOG, Blocks.OAK_LEAVES, 4, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
+        //? if >=26.3 {
+        put("oak_bees", l -> simpleTree(createTree(Blocks.OAK_LOG, Blocks.OAK_LEAVES, 4, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F)))));
+        put("fancy_oak_bees", l -> simpleTree(new TreeFeature.Builder(BlockStateProvider.of(Blocks.OAK_LOG), new FancyTrunkPlacer(3, 11, 0), BlockStateProvider.of(Blocks.OAK_LEAVES), new FancyFoliagePlacer(ConstantInt.of(2), ConstantInt.of(4), 4), new TwoLayersFeatureSize(0, 0, 0, OptionalInt.of(4)), Holder.direct(belowTrees)).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F)))));
+        put("birch_bees", l -> simpleTree(createTree(Blocks.BIRCH_LOG, Blocks.BIRCH_LEAVES, 5, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F)))));
+
+        put("coral_tree", l -> simplePlop(coral(l, 0)));
+
+        put("coral_claw", l -> simplePlop(coral(l, 1)));
+        put("coral_mushroom", l -> simplePlop(coral(l , 2)));
+
+        put("coral", l -> simplePlop( l.registryAccess().lookupOrThrow(Registries.FEATURE).getOrThrow(AquaticFeatures.WARM_OCEAN_VEGETATION).value()));
+        //?} else {
+        /*put("oak_bees", l -> simpleTree(createTree(Blocks.OAK_LOG, Blocks.OAK_LEAVES, 4, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
         put("fancy_oak_bees", l -> simpleTree((new TreeConfiguration.TreeConfigurationBuilder(BlockStateProvider.simple(Blocks.OAK_LOG), new FancyTrunkPlacer(3, 11, 0), BlockStateProvider.simple(Blocks.OAK_LEAVES), new FancyFoliagePlacer(ConstantInt.of(2), ConstantInt.of(4), 4), new TwoLayersFeatureSize(0, 0, 0, OptionalInt.of(4)), belowTrees)).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
         put("birch_bees", l -> simpleTree(createTree(Blocks.BIRCH_LOG, Blocks.BIRCH_LEAVES, 5, 2, 0, 2).ignoreVines().decorators(List.of(new BeehiveDecorator(1.00F))).build()));
 
@@ -299,6 +438,7 @@ public class FeatureGenerator
                 PlacementUtils.inlinePlaced(Feature.CORAL_CLAW, FeatureConfiguration.NONE),
                 PlacementUtils.inlinePlaced(Feature.CORAL_MUSHROOM, FeatureConfiguration.NONE)
         ))));
+        *///?}
         put("bastion_remnant_units", l -> {
             RegistryAccess regs = l.registryAccess();
 
@@ -424,7 +564,9 @@ public class FeatureGenerator
         checks.set(true);
         try
         {
-            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), world.getChunkSource().randomState(), world.getStructureManager(), world.getSeed(), new ChunkPos(pos.getX(), pos.getZ()), 0, world, b -> true);
+            //~ if >=26.3 'getStructureManager()' -> 'getStructureTemplateManager()' {
+            StructureStart start = structure.generate(Holder.direct(structure), world.dimension(), world.registryAccess(), generator, generator.getBiomeSource(), /*? if >=26.3 {*/world.getChunkSource().randomState().createClimateSampler(SamplerContext.EMPTY_UNCACHED), /*?}*/world.getChunkSource().randomState(), world.getStructureTemplateManager(), world.getSeed(), new ChunkPos(pos.getX(), pos.getZ()), 0, world, b -> true);
+            //~}
             if (start == StructureStart.INVALID_START)
             {
                 return false;

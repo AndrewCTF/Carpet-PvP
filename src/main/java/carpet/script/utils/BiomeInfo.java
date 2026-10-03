@@ -17,7 +17,11 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+//? if >=26.3 {
+import net.minecraft.world.level.levelgen.feature.Feature;
+//?} else {
+/*import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+*///?}
 
 public class BiomeInfo
 {
@@ -36,7 +40,11 @@ public class BiomeInfo
         map.put("humidity", (w, b) -> NumericValue.of(0.0));
         map.put("precipitation", (w, b) -> StringValue.of(b.getPrecipitationAt(new BlockPos(0, w.getSeaLevel(), 0), w.getSeaLevel()).name().toLowerCase(Locale.ROOT)));
         map.put("features", (w, b) -> {
-            Registry<ConfiguredFeature<?, ?>> registry = w.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE);
+            //? if >=26.3 {
+            Registry<Feature> registry = w.registryAccess().lookupOrThrow(Registries.FEATURE);
+            //?} else {
+            /*Registry<ConfiguredFeature<?, ?>> registry = w.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE);
+            *///?}
             return ListValue.wrap(
                     b.getGenerationSettings().features().stream().map(step ->
                             ListValue.wrap(step.stream().map(cfp ->

@@ -1,6 +1,7 @@
 package carpet.mixins;
 
-import carpet.CarpetSettings;
+//? if <26.3 {
+/*import carpet.CarpetSettings;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -20,3 +21,4 @@ public interface PieceGeneratorSupplier_plopMixin
         return CarpetSettings.skipGenerationChecks.get() || predicate.test(o);
     }
 }
+*///?}

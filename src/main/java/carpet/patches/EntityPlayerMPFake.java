@@ -547,7 +547,8 @@ public class EntityPlayerMPFake extends ServerPlayer
     public void die(DamageSource cause) {
         shakeOff();
         // Avoid super.die() to prevent the internal "dead" flag from sticking and blocking future damage.
-        this.invulnerableTime = 0;
+        //~ if >=26.3 'this.invulnerableTime = 0' -> 'this.setInvulnerableTime(0)'
+        this.setInvulnerableTime(0);
         this.hurtTime = 0;
         this.deathTime = 0;
         this.setRemainingFireTicks(0);
@@ -652,9 +653,11 @@ public class EntityPlayerMPFake extends ServerPlayer
     private void resetDeathStateForRespawn() {
         // Ensure the entity is not flagged as removed from the world.
         this.unsetRemoved();
-        this.setInvulnerable(false);
+        //~ if >=26.3 'setInvulnerable' -> 'setPermanentlyInvulnerable'
+        this.setPermanentlyInvulnerable(false);
         // Clear invulnerability and death timers that can block damage after death.
-        this.invulnerableTime = 0;
+        //~ if >=26.3 'this.invulnerableTime = 0' -> 'this.setInvulnerableTime(0)'
+        this.setInvulnerableTime(0);
         this.hurtTime = 0;
         this.deathTime = 0;
         // Reset core survival state.
@@ -797,7 +800,8 @@ public class EntityPlayerMPFake extends ServerPlayer
                     this.getCooldowns().addCooldown(stack, disableTicks);
                 }
                 if(!CarpetSettings.shieldStunning) {
-                    this.invulnerableTime = 20;
+                    //~ if >=26.3 'this.invulnerableTime = 20' -> 'this.setInvulnerableTime(20)'
+                    this.setInvulnerableTime(20);
                 }
                 String ign = this.getGameProfile().name();
                 MinecraftServer srv = this.level().getServer();
@@ -821,7 +825,7 @@ public class EntityPlayerMPFake extends ServerPlayer
         return super.applyItemBlocking(serverLevel, damageSource, f);
     }
 
-    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f) {
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/) {
         // Commenting out original LivingEntity shield blocking knockback code that
         // caused the fake player to jump forward when holding a shield that was hit.
         //this.knockback(0.5, livingEntity.getX() - this.getX(), livingEntity.getZ() - this.getZ());

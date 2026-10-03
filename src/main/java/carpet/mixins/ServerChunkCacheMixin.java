@@ -27,7 +27,8 @@ public abstract class ServerChunkCacheMixin
 
     @Shadow @Final private DistanceManager distanceManager;
 
-    @Redirect(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;J)V", at = @At(
+    //~ if >=26.3 'ProfilerFiller;J)V' -> 'ProfilerFiller;)V'
+    @Redirect(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/DistanceManager;getNaturalSpawnChunkCount()I"
     ))
@@ -54,7 +55,8 @@ public abstract class ServerChunkCacheMixin
     }
 
 
-    @Inject(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;J)V", at = @At("RETURN"))
+    //~ if >=26.3 'ProfilerFiller;J)V' -> 'ProfilerFiller;)V'
+    @Inject(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("RETURN"))
     private void onFinishSpawnWorldCycle(CallbackInfo ci)
     {
         if (this.level.getServer() != null && !this.level.getServer().isSameThread()) return;

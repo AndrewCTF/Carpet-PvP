@@ -58,11 +58,20 @@ import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.levelgen.DensityFunction;
-import net.minecraft.world.level.levelgen.DensityFunctions;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
-import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.RandomState;
+//? if >=26.3 {
+import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.world.level.levelgen.Aquifer;
+import net.minecraft.world.level.levelgen.NoiseRouterData;
+import net.minecraft.world.level.levelgen.densityfunction.DensityFunction;
+import net.minecraft.world.level.levelgen.densityfunction.DensitySamplerSet;
+import net.minecraft.world.level.levelgen.densityfunction.SamplerContext;
+//?} else {
+/*import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.DensityFunctions;
+import net.minecraft.world.level.levelgen.NoiseRouter;
+*///?}
 import net.minecraft.util.random.WeightedList;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureType;
@@ -1079,7 +1088,7 @@ public class WorldAccess
                             knockback,
                             explosionParticle,
                             SoundEvents.GENERIC_EXPLODE,
-                            WeightedList.of()
+                            WeightedList.of()/*? if >=26.3 {*/, true/*?}*/
                     ));
                 }
             });
@@ -1712,14 +1721,74 @@ public class WorldAccess
             {
                 return ListValue.wrap(cc.registry(Registries.DENSITY_FUNCTION).keySet().stream().map(ValueConversions::of));
             }
-            NoiseRouter router = level.getChunkSource().randomState().router();
+            //? if <26.3
+            //NoiseRouter router = level.getChunkSource().randomState().router();
             return densityFunctionQueries.length == 1
-                    ? NumericValue.of(sampleNoise(router, level, densityFunctionQueries[0], pos))
-                    : ListValue.wrap(Arrays.stream(densityFunctionQueries).map(s -> NumericValue.of(sampleNoise(router, level, s, pos))));
+                    ? NumericValue.of(sampleNoise(/*? if <26.3 {*//*router, *//*?}*/level, densityFunctionQueries[0], pos))
+                    : ListValue.wrap(Arrays.stream(densityFunctionQueries).map(s -> NumericValue.of(sampleNoise(/*? if <26.3 {*//*router, *//*?}*/level, s, pos))));
         });
     }
 
-    public static double sampleNoise(NoiseRouter router, ServerLevel level, String what, BlockPos pos)
+    //? if >=26.3 {
+    @Nullable static DensitySamplerSet samplersCache = null;
+    @Nullable static ServerLevel samplerLevel = null;
+
+    public static double sampleNoise(ServerLevel level, String what, BlockPos pos)
+    {
+        if (samplersCache == null || samplerLevel != level) {
+            final ServerChunkCache chunkSource = level.getChunkSource();
+            final RandomState randomState = chunkSource.randomState();
+            final SamplerContext samplerContext = SamplerContext.builder().enableCaches().build();
+            samplersCache = randomState.samplersWithContext(samplerContext);
+            samplerLevel = level;
+        }
+
+        ResourceKey<DensityFunction> key =  switch (what) {
+            case "temperature" -> NoiseRouterData.OVERWORLD_FUNCTIONS.temperature();
+            case "vegetation" -> NoiseRouterData.OVERWORLD_FUNCTIONS.vegetation();
+            case "continents" -> NoiseRouterData.OVERWORLD_FUNCTIONS.continents();
+            case "erosion" -> NoiseRouterData.OVERWORLD_FUNCTIONS.erosion();
+            case "depth" -> NoiseRouterData.OVERWORLD_FUNCTIONS.depth();
+            case "ridges" -> NoiseRouterData.RIDGES;
+            case "preliminary_height" -> NoiseRouterData.OVERWORLD_FUNCTIONS.preliminarySurfaceLevel();
+            case "final_density" -> NoiseRouterData.OVERWORLD_FUNCTIONS.finalDensity();
+            default -> null;
+        };
+        final DensityFunction df;
+        if (key != null) {
+            df = level.registryAccess().lookupOrThrow(Registries.DENSITY_FUNCTION).get(key).get().value();
+        } else {
+            df = level.registryAccess().lookupOrThrow(Registries.DENSITY_FUNCTION).getValue(InputValidator.identifierOf(what));
+        }
+        if (df == null)
+        {
+            // last call, maybe its the aquifers
+            DensityFunction dfa;
+            if (level.getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator noiseBasedChunkGenerator) {
+                Aquifer.Config aquifers = noiseBasedChunkGenerator.generatorSettings().value().aquifers().orElse(null);
+                if (aquifers != null) {
+                    dfa = switch (what) {
+                        case "barrier_noise" -> aquifers.barrierNoise();
+                        case "fluid_level_floodedness_noise" -> aquifers.fluidLevelFloodednessNoise();
+                        case "fluid_level_spread_noise" -> aquifers.fluidLevelSpreadNoise();
+                        case "lava_noise" -> aquifers.lavaNoise();
+                        default -> null;
+                    };
+                    if (dfa != null) {
+                        return samplersCache.sampleValue(dfa, pos.getX(), pos.getY(), pos.getZ());
+                    }
+                }
+            } else if (what.equalsIgnoreCase("barrier_noise") || what.equalsIgnoreCase("fluid_level_floodedness_noise") || what.equalsIgnoreCase("fluid_level_spread_noise") || what.equalsIgnoreCase("lava_noise")) {
+                // querying for aquifers outside of noise based level should not result in an invalid exception, but rather a 0 value, as the aquifers are not present in that world.
+                return 0;
+            }
+
+            throw new InternalExpressionException("Density function '" + what + "' is not defined in the registries.");
+        }
+        return samplersCache.sampleValue(df, pos.getX(), pos.getY(), pos.getZ());
+    }
+    //?} else {
+    /*public static double sampleNoise(NoiseRouter router, ServerLevel level, String what, BlockPos pos)
     {
         DensityFunction densityFunction = switch (what)
         {
@@ -1788,4 +1857,5 @@ public class WorldAccess
         }
         return DensityFunctions.zero();
     });
+    *///?}
 }

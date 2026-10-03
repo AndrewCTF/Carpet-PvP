@@ -24,7 +24,7 @@ public abstract class ServerPlayer_fakeLastMovementMixin extends Player {
 
     @ModifyExpressionValue(
         method = {"getKnownMovement", "getKnownSpeed"}, // both because ServerPlayer overrides both to the same "movement" field
-        at = @At(value = "FIELD", target = "lastKnownClientMovement", opcode = Opcodes.GETFIELD),
+        at = @At(value = "FIELD", target = "Lnet/minecraft/server/level/ServerPlayer;lastKnownClientMovement:Lnet/minecraft/world/phys/Vec3;", opcode = Opcodes.GETFIELD),
         require = 2
     )
     private Vec3 bypassClientMovementInfo(Vec3 original) {

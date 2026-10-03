@@ -26,10 +26,11 @@ public abstract class Player_shieldStunMixin extends LivingEntity {
     protected Player_shieldStunMixin(EntityType<? extends LivingEntity> entityType, Level level) { super(entityType, level); }
 
     @Inject(method = "blockUsingItem", at = @At("HEAD"))
-    private void onShieldDisabled(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float damage, CallbackInfo ci) {
+    private void onShieldDisabled(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float damage/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/, CallbackInfo ci) {
         if (CarpetSettings.shieldStunning) {
             executor.schedule(() -> {
-                this.invulnerableTime = 0;
+                //~ if >=26.3 'this.invulnerableTime = 0' -> 'this.setInvulnerableTime(0)'
+                this.setInvulnerableTime(0);
             }, 1, TimeUnit.MILLISECONDS);
         }
     }

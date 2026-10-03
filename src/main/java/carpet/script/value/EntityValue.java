@@ -71,6 +71,7 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull;
 import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.entity.EntityTypeTest;
@@ -553,7 +554,8 @@ public class EntityValue extends Value
         put("sneaking", (e, a) -> e.isShiftKeyDown() ? Value.TRUE : Value.FALSE);
         put("sprinting", (e, a) -> e.isSprinting() ? Value.TRUE : Value.FALSE);
         put("swimming", (e, a) -> e.isSwimming() ? Value.TRUE : Value.FALSE);
-        put("swinging", (e, a) -> e instanceof LivingEntity le ? BooleanValue.of(le.swinging) : Value.NULL);
+        //~ if >=26.3 'le.swinging' -> 'le.isSwinging()'
+        put("swinging", (e, a) -> e instanceof LivingEntity le ? BooleanValue.of(le.isSwinging()) : Value.NULL);
         put("is_using_item", (e, a) -> {
             if (!(e instanceof LivingEntity le)) return Value.NULL;
             if (!le.isUsingItem()) return a == null ? Value.FALSE : Value.FALSE;
@@ -944,7 +946,8 @@ public class EntityValue extends Value
 
     private static void updateVelocity(Entity e, double scale)
     {
-        e.hurtMarked = true;
+        //~ if >=26.3 'hurtMarked' -> 'syncVelocity'
+        e.syncVelocity = true;
         if (Math.abs(scale) > 10000)
         {
             CarpetScriptServer.LOG.warn("Moved entity " + e.getScoreboardName() + " " + e.getName() + " at " + e.position() + " extremely fast: " + e.getDeltaMovement());
@@ -1587,7 +1590,7 @@ public class EntityValue extends Value
                         hand = InteractionHand.OFF_HAND;
                     }
                 }
-                le.swing(hand, true);
+                le.swing(hand, /*? if >=26.3 {*/SwingAnimation.DEFAULT, /*?}*/true);
             }
         });
 
@@ -1604,7 +1607,8 @@ public class EntityValue extends Value
             }
             else
             {
-                e.setInvulnerable(invulnerable);
+                //~ if >=26.3 'setInvulnerable' -> 'setPermanentlyInvulnerable'
+                e.setPermanentlyInvulnerable(invulnerable);
             }
         });
 

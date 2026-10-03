@@ -161,10 +161,11 @@ public class PerimeterDiagnostics
 
     private boolean check_entity_spawn(BlockPos pos)
     {
-        if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer.getBiome(pos), worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
+        //~ if >=26.3 'getMobsAt(worldServer.getBiome(pos),' -> 'getMobsAt(worldServer,' {
+        if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer, worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
         {
             sle = null;
-            for (Weighted<MobSpawnSettings.SpawnerData> wsle: worldServer.getChunkSource().getGenerator().getMobsAt(worldServer.getBiome(pos), worldServer.structureManager(), ctype, pos).unwrap())
+            for (Weighted<MobSpawnSettings.SpawnerData> wsle: worldServer.getChunkSource().getGenerator().getMobsAt(worldServer, worldServer.structureManager(), ctype, pos).unwrap())
             {
                 MobSpawnSettings.SpawnerData sle = wsle.value();
                 if (el.getType() == sle.type())
@@ -173,11 +174,12 @@ public class PerimeterDiagnostics
                     break;
                 }
             }
-            if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer.getBiome(pos), worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
+            if (sle == null || !worldServer.getChunkSource().getGenerator().getMobsAt(worldServer, worldServer.structureManager(), ctype, pos).unwrap().contains(sle))
             {
                 return false;
             }
         }
+        //~}
 
         if (SpawnPlacements.isSpawnPositionOk(sle.type(), worldServer, pos))
         {

@@ -40,7 +40,8 @@ import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+//~ if >=26.3 'ServerboundSwingPacket' -> 'ServerboundPunchPacket'
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -110,11 +111,12 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     }
 
 
-    @Inject(method = "handleMovePlayer", at = @At(
+    //~ if >=26.3 'handleMovePlayer' -> 'handlePlayerPositionChange'
+    @Inject(method = "handlePlayerPositionChange", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerPlayer;jumpFromGround()V"
     ))
-    private void onJump(ServerboundMovePlayerPacket playerMoveC2SPacket_1, CallbackInfo ci)
+    private void onJump(/*? if >=26.3 {*/double requestedX, double requestedY, double requestedZ, float requestedYRot, float requestedXRot, boolean isOnGround, boolean horizontalCollision/*?} else {*//*ServerboundMovePlayerPacket playerMoveC2SPacket_1*//*?}*/, CallbackInfo ci)
     {
         PLAYER_JUMPS.onPlayerEvent(player);
     }
@@ -159,8 +161,10 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     {
         if (PLAYER_RIGHT_CLICKS_BLOCK.isNeeded())
         {
-            InteractionHand hand = playerInteractBlockC2SPacket_1.getHand();
-            BlockHitResult hitRes = playerInteractBlockC2SPacket_1.getHitResult();
+            //~ if >=26.3 '.getHand()' -> '.hand()'
+            InteractionHand hand = playerInteractBlockC2SPacket_1.hand();
+            //~ if >=26.3 '.getHitResult()' -> '.hitResult()'
+            BlockHitResult hitRes = playerInteractBlockC2SPacket_1.hitResult();
             if(PLAYER_RIGHT_CLICKS_BLOCK.onBlockHit(player, hand, hitRes)) {
                 ci.cancel();
             }
@@ -175,7 +179,8 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     {
         if (carpet.CarpetSettings.scarpetItemUseEvents && PLAYER_USES_ITEM.isNeeded())
         {
-            InteractionHand hand = playerInteractItemC2SPacket_1.getHand();
+            //~ if >=26.3 '.getHand()' -> '.hand()'
+            InteractionHand hand = playerInteractItemC2SPacket_1.hand();
             if(PLAYER_USES_ITEM.onItemAction(player, hand, player.getItemInHand(hand).copy())) {
                 ci.cancel();
             }
@@ -272,16 +277,20 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
         }
     }
 
-    @Inject(method = "handleAnimate", at = @At(
+    //~ if >=26.3 'handleAnimate' -> 'handlePunch'
+    @Inject(method = "handlePunch", at = @At(
             value = "INVOKE", target =
             "Lnet/minecraft/server/level/ServerPlayer;resetLastActionTime()V",
             shift = At.Shift.BEFORE)
     )
-    private void onSwing(ServerboundSwingPacket packet, CallbackInfo ci)
+    //~ if >=26.3 'ServerboundSwingPacket' -> 'ServerboundPunchPacket'
+    private void onSwing(ServerboundPunchPacket packet, CallbackInfo ci)
     {
-        if (PLAYER_SWINGS_HAND.isNeeded() && !player.swinging)
+        //~ if >=26.3 'player.swinging' -> 'player.isSwinging()'
+        if (PLAYER_SWINGS_HAND.isNeeded() && !player.isSwinging())
         {
-            PLAYER_SWINGS_HAND.onHandAction(player, packet.getHand());
+            //~ if >=26.3 'packet.getHand()' -> 'InteractionHand.MAIN_HAND'
+            PLAYER_SWINGS_HAND.onHandAction(player, InteractionHand.MAIN_HAND);
         }
     }
 

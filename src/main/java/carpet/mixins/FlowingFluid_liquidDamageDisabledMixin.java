@@ -19,7 +19,8 @@ public class FlowingFluid_liquidDamageDisabledMixin
             method = "canHoldAnyFluid",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/block/state/BlockState;blocksMotion()Z"
+                    //~ if >=26.3 'BlockState;blocksMotion()Z' -> 'BlockState;is(Lnet/minecraft/tags/TagKey;)Z'
+                    target = "Lnet/minecraft/world/level/block/state/BlockState;is(Lnet/minecraft/tags/TagKey;)Z"
             ),
             cancellable = true
     )

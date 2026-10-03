@@ -40,6 +40,22 @@ tasks.processResources {
     filesMatching("fabric.mod.json") {
         expand(props)
     }
+
+    // JSON cannot carry version conditions, so mixins that have no target in this Minecraft
+    // version are listed in versions/<minecraft>/gradle.properties and dropped from the config here.
+    val excludedMixins = (findProperty("excluded_mixins") as String? ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    inputs.property("excludedMixins", excludedMixins)
+    val mixinConfig = destinationDir.resolve("carpet.mixins.json")
+    doLast {
+        if (excludedMixins.isEmpty()) return@doLast
+        @Suppress("UNCHECKED_CAST")
+        val config = groovy.json.JsonSlurper().parse(mixinConfig) as MutableMap<String, Any?>
+        for (key in listOf("mixins", "client", "server")) {
+            (config[key] as? MutableList<*>)?.removeAll(excludedMixins)
+        }
+        mixinConfig.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)))
+    }
 }
 
 tasks.withType<JavaCompile>().configureEach {
