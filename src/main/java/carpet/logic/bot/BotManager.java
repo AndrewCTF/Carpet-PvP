@@ -55,12 +55,7 @@ public class BotManager
         {
             return "Player " + name + " cannot be placed outside of the world";
         }
-        GameProfile profile = server.services().profileResolver().fetchByName(name)
-                .orElseGet(() -> new GameProfile(UUIDUtil.createOfflinePlayerUUID(name), name));
-        if (server.getPlayerList().getBans().isBanned(new NameAndId(profile.id(), profile.name())))
-        {
-            return "Player " + name + " is banned on this server";
-        }
+        // createFake resolves the profile without blocking this thread and applies the ban and whitelist checks.
         if (!EntityPlayerMPFake.createFake(name, server, pos, yaw, pitch, dimension, GameType.SURVIVAL, false))
         {
             return "Player " + name + " doesn't exist and cannot spawn in online mode";

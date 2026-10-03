@@ -10,7 +10,11 @@ import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.RedstoneLampBlock;
 import net.minecraft.world.phys.Vec3;
 
@@ -20,6 +24,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -31,14 +36,22 @@ import java.util.function.Function;
 public final class SelfTest
 {
     private static final List<String> SCENARIOS = List.of(
-            "spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow", "chase_attack", "chase_crit", "script_run", "fill_updates", "logic_program", "logic_forever_budget");
+            "spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow",
+            "chase_attack", "chase_crit", "script_run", "fill_updates", "logic_program", "logic_forever_budget",
+            "spawn_exact_name", "spawn_gamemode", "shield_disable");
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     private static final double SURFACE_Y = -60.0D;
     private static final double SPACING = 256.0D;
     private static final Gson GSON = new Gson();
+    /** How long the server thread gets to stop, and then how long its worker threads get to finish. */
+    private static final long EXIT_WAIT_MILLIS = 120_000L;
+    private static volatile MinecraftServer stoppingServer;
 
-    private record Bot(String name, Vec3 pos) {}
+    private record Bot(String name, Vec3 pos, String gamemode)
+    {
+        Bot(String name, Vec3 pos) { this(name, pos, "survival"); }
+    }
 
     private record Probe(boolean ok, String detail) {}
 
@@ -55,6 +68,7 @@ public final class SelfTest
     }
 
     private static final List<Result> results = new ArrayList<>();
+    private static final ItemStack SHIELD = new ItemStack(Items.SHIELD);
     private static List<String> names;
     private static Scenario current;
     private static boolean acting;
@@ -90,7 +104,7 @@ public final class SelfTest
             }
             for (Bot bot : current.bots())
             {
-                run(server, "player " + bot.name() + " spawn at " + coords(bot.pos()) + " facing 0 0 in minecraft:overworld in survival");
+                run(server, "player " + bot.name() + " spawn at " + coords(bot.pos()) + " facing 0 0 in minecraft:overworld in " + bot.gamemode());
             }
             return;
         }
@@ -135,6 +149,20 @@ public final class SelfTest
                 {
                     double off = player(server, a).position().distanceTo(origin);
                     return new Probe(off < 0.5D, fmt("%s is %.2f blocks from where it was spawned", a, off));
+                });
+            case "spawn_exact_name":
+                // Mixed case: the name has to survive the spawn untouched.
+                String mixed = "sElF" + index + "a";
+                return new Scenario(200, List.of(new Bot(mixed, origin)), List.of(), server ->
+                {
+                    String actual = player(server, mixed).getGameProfile().name();
+                    return new Probe(mixed.equals(actual), fmt("%s was spawned as %s", mixed, actual));
+                });
+            case "spawn_gamemode":
+                return new Scenario(200, List.of(new Bot(a, origin, "creative")), List.of(), server ->
+                {
+                    GameType mode = player(server, a).gameMode.getGameModeForPlayer();
+                    return new Probe(mode == GameType.CREATIVE, fmt("%s is in %s mode", a, mode));
                 });
             case "nav_goto":
                 Vec3 goal = origin.add(12.0D, 0.0D, 0.0D);
@@ -276,6 +304,20 @@ public final class SelfTest
                     return new Probe(ticks >= 40 && status.equals("RUNNING"),
                             fmt("after %d ticks the program is %s", ticks, status));
                 });
+            case "shield_disable":
+                // The attacker stands in front of the blocker, as everyone spawns looking along +z.
+                Vec3 front = origin.add(0.0D, 0.0D, 2.0D);
+                return new Scenario(600, List.of(new Bot(a, origin), new Bot(b, front)),
+                        List.of("player " + a + " equip shield minecraft:shield", "player " + a + " use continuous",
+                                "player " + b + " equip mainhand minecraft:diamond_axe",
+                                "player " + b + " turn back", "player " + b + " attack continuous"), server ->
+                {
+                    ServerPlayer blocker = player(server, a);
+                    boolean cooling = blocker.getCooldowns().isOnCooldown(SHIELD);
+                    return new Probe(cooling, fmt("%s is %s and its shield is %s", a,
+                            blocker.isBlocking() ? "still blocking" : "not blocking",
+                            cooling ? "on cooldown" : "not on cooldown"));
+                });
             default:
                 return null;
         }
@@ -323,12 +365,117 @@ public final class SelfTest
             passed = false;
         }
         log(server, fmt("%s, %d of %d scenarios passed", passed ? "PASSED" : "FAILED", results.stream().filter(Result::passed).count(), results.size()));
+        // Stop the server the way an operator would, then let the watchdog wait it out: a server that
+        // leaves a thread behind would keep this JVM alive forever, so the run has to prove it can end.
+        Thread serverThread = Thread.currentThread();
         int exitCode = passed ? 0 : 1;
-        // Not from this thread: the server's shutdown hook waits for the server thread to stop ticking.
-        new Thread(() -> System.exit(exitCode), "selftest-exit").start();
+        stoppingServer = server;
+        // Servers are usually stopped with bots online, so the run ends that way too.
+        run(server, "player SelfStop spawn at 0.5 -60 0.5 facing 0 0 in minecraft:overworld in survival");
+        log(server, "stopping with " + server.getPlayerList().getPlayers().size() + " fake player(s) online");
+        server.halt(false);
+        Thread watchdog = new Thread(() -> watchExit(serverThread, exitCode), "selftest-watchdog");
+        // Not a daemon thread: the JVM would end on its own the moment the server thread stops, taking
+        // the result and the thread check with it. The watchdog has to outlive the server to end the run.
+        watchdog.setDaemon(false);
+        watchdog.start();
     }
 
-    // The player list matches names ignoring case; a profile lookup may have changed the capitalisation.
+    /**
+     * Waits for the server thread to end, then reports the non-daemon threads that are still around.
+     * The watchdog has to hold the JVM open to be able to do that, so it is the one thread it ignores.
+     */
+    private static void watchExit(Thread serverThread, int exitCode)
+    {
+        try
+        {
+            serverThread.join(EXIT_WAIT_MILLIS);
+            // The game's own I/O workers may still be saving chunks; only a thread that never ends is a leak.
+            long deadline = System.currentTimeMillis() + EXIT_WAIT_MILLIS;
+            while (!serverThread.isAlive() && !lingeringThreads().isEmpty() && System.currentTimeMillis() < deadline)
+            {
+                Thread.sleep(250L);
+            }
+        }
+        catch (InterruptedException e)
+        {
+            Thread.currentThread().interrupt();
+            System.out.println("[selftest] interrupted while waiting for the server to stop: " + e);
+            Runtime.getRuntime().halt(3);
+        }
+        List<Thread> lingering = lingeringThreads();
+        if (serverThread.isAlive())
+        {
+            System.out.println("[selftest] the server thread did not stop");
+            lingering.add(serverThread);
+            // What a stuck shutdown is usually waiting on: players that were never removed, and chunk work.
+            MinecraftServer stuck = stoppingServer;
+            if (stuck != null)
+            {
+                System.out.println("[selftest]   players still listed: " + stuck.getPlayerList().getPlayers().stream().map(p -> p.getGameProfile().name()).toList());
+                for (ServerLevel level : stuck.getAllLevels())
+                {
+                    System.out.println("[selftest]   " + level.dimension().identifier() + ": players=" + level.players().size()
+                            + " chunkMapHasWork=" + level.getChunkSource().chunkMap.hasWork()
+                            + " loadedChunks=" + level.getChunkSource().getLoadedChunksCount());
+                    System.out.println("[selftest]   " + level.dimension().identifier() + ": players the chunk tracker still holds: " + trackedPlayers(level));
+                }
+            }
+        }
+        for (Thread thread : lingering)
+        {
+            System.out.println("[selftest] the server left the non-daemon thread '" + thread.getName() + "' running");
+            for (StackTraceElement element : thread.getStackTrace())
+            {
+                System.out.println("[selftest]    at " + element);
+            }
+        }
+        Runtime.getRuntime().halt(lingering.isEmpty() ? exitCode : 3);
+    }
+
+    /** Players the distance manager still counts, read by reflection: a diagnostic for a stuck shutdown only. */
+    private static String trackedPlayers(ServerLevel level)
+    {
+        try
+        {
+            Object chunkMap = level.getChunkSource().chunkMap;
+            java.lang.reflect.Method getter = chunkMap.getClass().getDeclaredMethod("getDistanceManager");
+            getter.setAccessible(true);
+            Object distanceManager = getter.invoke(chunkMap);
+            java.lang.reflect.Field field = net.minecraft.server.level.DistanceManager.class.getDeclaredField("playersPerChunk");
+            field.setAccessible(true);
+            java.util.Map<?, ?> perChunk = (java.util.Map<?, ?>) field.get(distanceManager);
+            java.util.Set<String> found = new java.util.TreeSet<>();
+            for (Object players : perChunk.values())
+            {
+                for (Object o : (java.util.Collection<?>) players)
+                {
+                    ServerPlayer p = (ServerPlayer) o;
+                    found.add(p.getGameProfile().name() + (p.isRemoved() ? "(removed:" + p.getRemovalReason() + ")" : "(live)") + "@" + p.blockPosition().toShortString());
+                }
+            }
+            return found.toString();
+        }
+        catch (ReflectiveOperationException | RuntimeException e)
+        {
+            return "unavailable (" + e + ")";
+        }
+    }
+
+    private static List<Thread> lingeringThreads()
+    {
+        // main is the JVM's own wait for the last non-daemon thread, and it calls itself DestroyJavaVM there.
+        Set<String> jvmThreads = Set.of("main", "DestroyJavaVM");
+        List<Thread> lingering = new ArrayList<>();
+        for (Thread thread : Thread.getAllStackTraces().keySet())
+        {
+            if (!thread.isAlive() || thread.isDaemon() || thread == Thread.currentThread() || jvmThreads.contains(thread.getName())) continue;
+            lingering.add(thread);
+        }
+        return lingering;
+    }
+
+    // The player list matches names ignoring case, so the profile is what tells the exact name apart.
     private static ServerPlayer player(MinecraftServer server, String name)
     {
         return server.getPlayerList().getPlayerByName(name);

@@ -39,7 +39,6 @@ import net.minecraft.commands.arguments.item.ItemArgument;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
@@ -1504,28 +1503,8 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is already logged on");
             return true;
         }
-        GameProfile profile = server.services().profileResolver().fetchByName(playerName).orElse(null);
-        if (profile == null)
-        {
-            if (!CarpetSettings.allowSpawningOfflinePlayers)
-            {
-                Messenger.m(context.getSource(), "r Player "+playerName+" is either banned by Mojang, or auth servers are down. " +
-                        "Banned players can only be summoned in Singleplayer and in servers in off-line mode.");
-                return true;
-            } else {
-                profile = new GameProfile(UUIDUtil.createOfflinePlayerUUID(playerName), playerName);
-            }
-        }
-        if (manager.getBans().isBanned(nameAndId(profile)))
-        {
-            Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is banned on this server");
-            return true;
-        }
-        if (manager.isUsingWhitelist() && manager.isWhiteListed(nameAndId(profile)) && !CommandHelper.hasPermissionLevel(context.getSource(), 2))
-        {
-            Messenger.m(context.getSource(), "r Whitelisted players can only be spawned by operators");
-            return true;
-        }
+        // The profile is resolved by createFake, as it blocks on Mojang on an online mode server. Bans
+        // and the whitelist are checked there too, once the profile is known.
         return false;
     }
 
@@ -1613,9 +1592,9 @@ public class PlayerCommand
             Messenger.m(source, "rb Player " + playerName + " cannot be placed outside of the world");
             return 0;
         }
-        boolean success = EntityPlayerMPFake.createFake(playerName, source.getServer(), pos, facing.y, facing.x, dimType, mode, flying);
+        boolean success = EntityPlayerMPFake.createFake(playerName, source.getServer(), source, pos, facing.y, facing.x, dimType, mode, flying);
         if (!success) {
-            Messenger.m(source, "rb Player " + playerName + " doesn't exist and cannot spawn in online mode. " +
+            Messenger.m(source, "rb Player " + playerName + " doesn't exist and cannot spawn with allowSpawningOfflinePlayers off. " +
                     "Turn the server offline or the allowSpawningOfflinePlayers on to spawn non-existing players");
             return 0;
         };
