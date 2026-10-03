@@ -175,10 +175,22 @@ public final class CombatMath
     public static double[] knockback(double strength, double dx, double dz, double resistance, boolean onGround,
                                      double vx, double vy, double vz)
     {
+        double[] out = new double[3];
+        knockback(out, strength, dx, dz, resistance, onGround, vx, vy, vz);
+        return out;
+    }
+
+    /** Allocation-free form of {@link #knockback(double, double, double, double, boolean, double, double, double)}; writes {x, y, z} into out. */
+    public static void knockback(double[] out, double strength, double dx, double dz, double resistance,
+                                 boolean onGround, double vx, double vy, double vz)
+    {
         double s = strength * (1.0 - resistance);
         if (s <= 0.0)
         {
-            return new double[] {vx, vy, vz};
+            out[0] = vx;
+            out[1] = vy;
+            out[2] = vz;
+            return;
         }
         double len = Math.sqrt(dx * dx + dz * dz);
         double nx = 0.0;
@@ -188,8 +200,9 @@ public final class CombatMath
             nx = dx / len * s;
             nz = dz / len * s;
         }
-        double ny = onGround ? Math.min(0.4, vy / 2.0 + s) : vy;
-        return new double[] {vx / 2.0 - nx, ny, vz / 2.0 - nz};
+        out[0] = vx / 2.0 - nx;
+        out[1] = onGround ? Math.min(0.4, vy / 2.0 + s) : vy;
+        out[2] = vz / 2.0 - nz;
     }
 
     /** Mirrors LivingEntity.getKnockback plus the sprint bonus passed to Player.causeExtraKnockback. */
