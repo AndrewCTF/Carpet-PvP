@@ -32,5 +32,10 @@ final class ScenarioIndex
         SCENARIOS.put("trace_records_fight", MatchScenarios::traceRecordsFight);
         SCENARIOS.put("drill_aim_scores", DrillScenarios::aimScores);
         SCENARIOS.put("drill_skips_without_needs", DrillScenarios::skipsWithoutWhatItNeeds);
+        SCENARIOS.put("gui_toggle_option", GuiScenarios::toggleOption);
+        SCENARIOS.put("gui_cycle_style", GuiScenarios::cycleStyle);
+        SCENARIOS.put("gui_spawn", GuiScenarios::spawn);
+        SCENARIOS.put("gui_no_item_theft", GuiScenarios::noItemTheft);
+        SCENARIOS.put("gui_kit_editor_roundtrip", GuiScenarios::kitEditorRoundtrip);
     }
 }
