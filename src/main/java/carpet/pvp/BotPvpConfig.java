@@ -1,6 +1,9 @@
 package carpet.pvp;
 
 import carpet.CarpetSettings;
+import carpet.pvp.sim.DifficultyPreset;
+import carpet.pvp.sim.DifficultyPresets;
+import carpet.pvp.sim.PlannerParams;
 
 import java.util.Locale;
 import java.util.UUID;
@@ -42,13 +45,81 @@ public final class BotPvpConfig
 
     private static Preset presetOf(Difficulty difficulty)
     {
+        DifficultyPreset tuned = measuredPreset(difficulty);
+        boolean[] technique = techniquesOf(difficulty);
+        return new Preset(skillOf(difficulty), tuned.reactionDelay(), pingOf(difficulty),
+                clicksOf(difficulty), technique[0], technique[1], technique[2], technique[3],
+                tuned.params().horizon(), tuned.params().population());
+    }
+
+    /**
+     * The measured preset a difficulty level fights with: the planner parameters, the reaction delay and the
+     * miss rate that self-play tuning settled on, in the order of the measured ladder. A bot's five levels
+     * are its ladder, so there is one set of numbers and not one per consumer.
+     */
+    public static DifficultyPreset measuredPreset(Difficulty difficulty)
+    {
         return switch (difficulty)
         {
-            case BEGINNER -> new Preset(0.15, 9, 2, 6.0, false, false, false, true, 8, 6);
-            case CASUAL -> new Preset(0.35, 7, 1, 8.0, true, false, false, true, 10, 8);
-            case AVERAGE -> new Preset(0.60, 5, 1, 10.0, true, true, false, true, 12, 10);
-            case SKILLED -> new Preset(0.80, 3, 0, 12.0, true, true, true, true, 14, 12);
-            case EXPERT -> new Preset(1.00, 2, 0, 14.0, true, true, true, true, 16, 16);
+            case BEGINNER -> DifficultyPresets.BEGINNER;
+            case CASUAL -> DifficultyPresets.AMATEUR;
+            case AVERAGE -> DifficultyPresets.SKILLED;
+            case SKILLED -> DifficultyPresets.EXPERT;
+            case EXPERT -> DifficultyPresets.MASTER;
+        };
+    }
+
+    /** The planner parameters of a bot's difficulty, which is what a style builds its planner from. */
+    public PlannerParams plannerParams()
+    {
+        return measuredPreset(difficulty).params();
+    }
+
+    private static double skillOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> 0.15;
+            case CASUAL -> 0.35;
+            case AVERAGE -> 0.60;
+            case SKILLED -> 0.80;
+            case EXPERT -> 1.00;
+        };
+    }
+
+    private static int pingOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER, CASUAL -> 1;
+            case AVERAGE, SKILLED, EXPERT -> 0;
+        };
+    }
+
+    private static double clicksOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> 6.0;
+            case CASUAL -> 8.0;
+            case AVERAGE -> 10.0;
+            case SKILLED -> 12.0;
+            case EXPERT -> 14.0;
+        };
+    }
+
+    /**
+     * Which techniques a difficulty level may use: the jump crit from the second level on, strafing from the
+     * middle, the W-tap from there too, and the shield only once the bot is good enough to time it.
+     */
+    private static boolean[] techniquesOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> new boolean[] {false, false, false, true};
+            case CASUAL -> new boolean[] {true, false, false, true};
+            case AVERAGE -> new boolean[] {true, true, false, true};
+            case SKILLED, EXPERT -> new boolean[] {true, true, true, true};
         };
     }
 
@@ -244,6 +315,7 @@ public final class BotPvpConfig
             return "Unknown difficulty: " + name;
         }
         Preset preset = presetOf(wanted);
+        DifficultyPreset tuned = measuredPreset(wanted);
         difficulty = wanted;
         skill = preset.skill();
         reactionDelay = preset.reactionDelay();
@@ -255,6 +327,8 @@ public final class BotPvpConfig
         shieldPlay = preset.shieldPlay();
         plannerHorizon = preset.horizon();
         plannerPopulation = preset.population();
+        // The share of the swings a level of the ladder throws early, as a percentage like the rule it fills.
+        missChance = (int) Math.round(tuned.missChance() * 100.0D);
         return null;
     }
 

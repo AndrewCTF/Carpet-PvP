@@ -2,6 +2,7 @@ package carpet.pvp;
 
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.patches.EntityPlayerMPFake;
+import carpet.pvp.BotStats.ClickOutcome;
 import carpet.pvp.look.LookController;
 import carpet.pvp.look.LookProfile;
 import carpet.pvp.sim.CombatMath;
@@ -250,20 +251,7 @@ public final class BotBody
      */
     public boolean canHit(LivingEntity target)
     {
-        if (target == null || !target.isAlive())
-        {
-            return false;
-        }
-        AABB box = target.getBoundingBox();
-        if (!bot.isWithinAttackRange(bot.getWeaponItem(), box, 0.0))
-        {
-            return false;
-        }
-        return rayHitsBox(bot.getX(), bot.getEyeY(), bot.getZ(),
-                -Mth.sin(Math.toRadians(bot.getYRot())) * Mth.cos(Math.toRadians(bot.getXRot())),
-                -Mth.sin(Math.toRadians(bot.getXRot())),
-                Mth.cos(Math.toRadians(bot.getYRot())) * Mth.cos(Math.toRadians(bot.getXRot())),
-                box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
+        return inReach(target) && rayHits(target);
     }
 
     /**
@@ -492,28 +480,42 @@ public final class BotBody
             return;
         }
         stats.clicks++;
-        if (!canHit(target))
+        long now = bot.level().getGameTime();
+        double distance = target == null ? Double.NaN : bot.distanceTo(target);
+        float charge = bot.getAttackStrengthScale(0.5F);
+        double[] aim = aimError(target);
+        if (!inReach(target))
         {
-            stats.misses++;
+            stats.recordClick(now, distance, charge, aim[0], aim[1], ClickOutcome.OUT_OF_REACH);
             CombatTraces.miss(bot, target);
             pack.swing();
             return;
         }
-        stats.hits++;
-        if (target.isBlocking() && Perception.weaponOf(bot.getMainHandItem()) == Perception.Weapon.AXE)
+        if (!rayHits(target))
         {
-            // An axe hit is what takes a shield down in vanilla.
-            stats.shieldBreaks++;
+            stats.recordClick(now, distance, charge, aim[0], aim[1], ClickOutcome.OFF_AIM);
+            pack.swing();
+            return;
         }
-        float charge = bot.getAttackStrengthScale(0.5F);
         boolean gate = CombatMath.passesChargeGate(charge);
         boolean sprintHit = bot.isSprinting() && gate;
         boolean crit = CombatMath.isCritical(bot.fallDistance > 0.0F, bot.onGround(), false, false,
                 false, false, true, bot.isSprinting(), gate);
+        if (target.isBlocking() && Perception.weaponOf(bot.getMainHandItem()) == Perception.Weapon.AXE)
+        {
+            // An axe hit is what takes a shield down in vanilla, charged or not.
+            stats.shieldBreaks++;
+        }
         float before = target.getHealth() + target.getAbsorptionAmount();
         pack.attackEntity(target);
         double dealt = Math.max(0.0F, before - (target.getHealth() + target.getAbsorptionAmount()));
         stats.damageDealt += dealt;
+        stats.recordClick(now, distance, charge, aim[0], aim[1],
+                gate ? ClickOutcome.HIT : ClickOutcome.UNCHARGED);
+        if (!gate)
+        {
+            return;
+        }
         CombatTraces.hit(bot, target, dealt, crit);
         if (crit)
         {
@@ -524,6 +526,45 @@ public final class BotBody
             stats.sprintHits++;
             sprintLock.onSprintHit();
         }
+    }
+
+    /** True when the game would let this bot reach the target with the item it is holding. */
+    private boolean inReach(LivingEntity target)
+    {
+        return target != null && target.isAlive()
+                && bot.isWithinAttackRange(bot.getWeaponItem(), target.getBoundingBox(), 0.0);
+    }
+
+    /**
+     * How far the view is from the middle of the target, sideways and up and down, in degrees. It is what says
+     * whether a click that missed was pointed to the side or pointed over or under the target.
+     */
+    private double[] aimError(LivingEntity target)
+    {
+        if (target == null)
+        {
+            return new double[] {Double.NaN, Double.NaN};
+        }
+        double dx = target.getX() - bot.getX();
+        double dy = target.getY() + target.getBbHeight() * 0.5 - bot.getEyeY();
+        double dz = target.getZ() - bot.getZ();
+        double flat = Math.max(Math.sqrt(dx * dx + dz * dz), 1.0E-6);
+        double wantedYaw = Math.toDegrees(Math.atan2(dz, dx)) - 90.0;
+        double off = wantedYaw - bot.getYRot();
+        off -= 360.0F * Math.round(off / 360.0F);
+        return new double[] {Math.abs(off),
+                Math.abs(Math.toDegrees(Math.atan2(dy, flat)) + bot.getXRot())};
+    }
+
+    /** True when a ray from the eyes along the view the bot has right now meets the target's box. */
+    private boolean rayHits(LivingEntity target)
+    {
+        AABB box = target.getBoundingBox();
+        return rayHitsBox(bot.getX(), bot.getEyeY(), bot.getZ(),
+                -Mth.sin(Math.toRadians(bot.getYRot())) * Mth.cos(Math.toRadians(bot.getXRot())),
+                -Mth.sin(Math.toRadians(bot.getXRot())),
+                Mth.cos(Math.toRadians(bot.getYRot())) * Mth.cos(Math.toRadians(bot.getXRot())),
+                box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
     }
 
     /** The aim point of the middle of the seen target, or null while nothing has been seen. */

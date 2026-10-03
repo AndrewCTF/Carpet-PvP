@@ -56,5 +56,10 @@ final class ScenarioIndex
         SCENARIOS.put("tnt_cart_safe", RangedScenarios::tntCartSafe);
         SCENARIOS.put("ranged_keeps_distance", RangedScenarios::rangedKeepsDistance);
         SCENARIOS.put("ranged_duel", RangedScenarios::rangedDuel);
+        SCENARIOS.put("sword_damage_rate", SwordScenarios::damageRate);
+        SCENARIOS.put("sword_ladder", SwordScenarios::ladder);
+        SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);
+        SCENARIOS.put("sword_shield_play", SwordScenarios::shieldPlay);
+        SCENARIOS.put("sword_settings", SwordScenarios::swordSettings);
     }
 }

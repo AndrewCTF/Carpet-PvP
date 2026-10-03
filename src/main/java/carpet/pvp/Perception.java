@@ -191,6 +191,12 @@ public final class Perception
     /** Ticks since each side last swung, recovered from the resets of the attack charge. */
     private int selfSwings;
     private int targetSwings;
+    /** Health the target lost to the last hit that was seen, after its defences. */
+    private float targetDamage;
+    /** Game tick that hit was seen on, which is how long ago the hurt window still has to run. */
+    private long targetHurtTick = Long.MIN_VALUE;
+    /** Game tick of the tick that was observed last. */
+    private long now;
 
     /** The bot's own state, current. */
     public Snapshot self()
@@ -219,6 +225,7 @@ public final class Perception
     /** Records this tick of the bot and, if there is one, of its target. */
     public void update(EntityPlayerMPFake bot, LivingEntity enemy)
     {
+        now = bot.level().getGameTime();
         fill(scratch, bot);
         scratch.ticksSinceSwing = countSwing(self.latest(), scratch, selfSwings);
         selfSwings = scratch.ticksSinceSwing;
@@ -228,9 +235,12 @@ public final class Perception
         {
             target.reset();
             targetSwings = 0;
+            targetDamage = 0.0F;
+            targetHurtTick = Long.MIN_VALUE;
             return;
         }
         fill(scratch, enemy);
+        noteDamage(scratch.healthTotal());
         scratch.ticksSinceSwing = countSwing(target.latest(), scratch, targetSwings);
         targetSwings = scratch.ticksSinceSwing;
         if (!(enemy instanceof Player))
@@ -241,6 +251,53 @@ public final class Perception
         target.record(scratch);
     }
 
+    /**
+     * Books the last hit the target took, which the game does not let anybody read: what a fighter's own
+     * lastHurt is, the value that decides whether the next hit against it is worth anything at all, is only
+     * visible from outside as the health dropping. Remembering the drop and the tick it happened on is what
+     * lets a bot stop planning hits the game is going to reject.
+     */
+    private void noteDamage(float health)
+    {
+        Snapshot previous = target.latest();
+        if (!previous.seen)
+        {
+            return;
+        }
+        float lost = previous.healthTotal() - health;
+        if (lost <= 0.0F)
+        {
+            return;
+        }
+        targetDamage = lost;
+        targetHurtTick = now;
+    }
+
+    /**
+     * Health the target lost to the last hit that was seen, after its defences, or 0 while none has been seen.
+     * The game compares the damage of an incoming hit with the damage of the last one, both of them before the
+     * target's defences, so a caller that needs that comparison has to scale this back up.
+     */
+    public float lastTargetDamage()
+    {
+        return targetDamage;
+    }
+
+    /** The game tick of the last hit the bot saw the target take, or a tick far in the past. */
+    public long lastTargetHurtTick()
+    {
+        return targetHurtTick;
+    }
+
+    /**
+     * Ticks since the bot last saw the target lose health, which is how much of the hurt window is still to
+     * run, or a large number when no hit has been seen at all.
+     */
+    public int ticksSinceTargetHurt()
+    {
+        return targetHurtTick == Long.MIN_VALUE ? Integer.MAX_VALUE : (int) Math.max(0L, now - targetHurtTick);
+    }
+
     /** Forgets the history of both sides. */
     public void reset()
     {
@@ -248,6 +305,8 @@ public final class Perception
         target.reset();
         selfSwings = 0;
         targetSwings = 0;
+        targetDamage = 0.0F;
+        targetHurtTick = Long.MIN_VALUE;
     }
 
     /**

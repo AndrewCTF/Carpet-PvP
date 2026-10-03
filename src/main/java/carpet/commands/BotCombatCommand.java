@@ -4,6 +4,7 @@ import carpet.CarpetSettings;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBody;
+import carpet.pvp.BotMatchReport;
 import carpet.pvp.BotPvpConfig;
 import carpet.pvp.kit.KitInventory;
 import carpet.pvp.kit.KitStore;
@@ -335,6 +336,8 @@ public class BotCombatCommand
             return 1;
         }
         Messenger.m(source, "w " + bot.getName().getString() + ": " + body.stats().describe());
+        Messenger.m(source, "w " + bot.getName().getString() + " last fights: "
+                + BotMatchReport.describe(bot.getName().getString()));
         return 1;
     }
 

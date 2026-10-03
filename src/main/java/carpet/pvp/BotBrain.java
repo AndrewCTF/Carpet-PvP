@@ -37,6 +37,12 @@ public final class BotBrain
     private BotPvpConfig.CombatStyle styleKind;
     private BotPvpConfig.Difficulty difficulty;
     private UUID perceivedTarget;
+    /** Game tick the fight being watched started, and the damage the counters stood at when it did. */
+    private long matchStart;
+    private double matchDealt;
+    private double matchTaken;
+    /** The death of the current target this brain has already recorded, so a fight is recorded once. */
+    private long recordedDeath = Long.MIN_VALUE;
     private UUID brainChaseTarget;
     private boolean warnedFallback;
 
@@ -90,7 +96,7 @@ public final class BotBrain
         if (pack == null) return;
 
         // 1) Survival reflexes run regardless of the combat toggle.
-        applySurvival(cfg);
+        applySurvival(cfg, pack);
 
         // 2) Combat disabled -> make sure nothing is left running.
         if (!cfg.combat)
@@ -123,11 +129,48 @@ public final class BotBrain
         {
             perception.reset();
             perceivedTarget = target.getUUID();
+            startMatch();
         }
         perception.update(bot, target);
+        watchMatch(target);
 
         // 5) Engage: what the bot perceives in, what the planner decides, what the body does.
         style.engage(body, perception, cfg, target, pack);
+    }
+
+    /**
+     * Records the fight once it is over. A bot records it when it beat the target it was fighting: the loser is
+     * the one that is dead and cannot, so between them exactly one of the two records anything, and
+     * {@link MatchHistory} gets a result with both sides' damage in it for the web panel to show.
+     */
+    private void watchMatch(LivingEntity target)
+    {
+        if (body == null)
+        {
+            return;
+        }
+        // A fake player is put back a tick after it dies, before anyone else's brain runs again, so the death
+        // is read off the tick it happened on rather than off a flag that is already gone by then.
+        long died = target instanceof EntityPlayerMPFake dead ? dead.diedTick() : Long.MIN_VALUE;
+        if (died == Long.MIN_VALUE || died == recordedDeath)
+        {
+            return;
+        }
+        recordedDeath = died;
+        BotStats stats = body.stats();
+        long ticks = bot.level().getGameTime() - matchStart;
+        MatchHistory.record(new MatchHistory.Match(bot.getName().getString(), nameOf(target),
+                bot.getName().getString(), ticks, stats.damageDealt - matchDealt,
+                stats.damageTaken - matchTaken));
+        matchDealt = stats.damageDealt;
+        matchTaken = stats.damageTaken;
+        matchStart = bot.level().getGameTime();
+    }
+
+    private static String nameOf(LivingEntity target)
+    {
+        return target instanceof EntityPlayerMPFake fake ? fake.getName().getString()
+                : target.getName().getString();
     }
 
     /** One style per combat style; the ones without an implementation fall back to the sword. */
@@ -151,8 +194,11 @@ public final class BotBrain
         return styleKind;
     }
 
-    private void applySurvival(BotPvpConfig cfg)
+    private void applySurvival(BotPvpConfig cfg, EntityPlayerActionPack pack)
     {
+        // The action pack's own auto-eat belongs to the navigation, so the per-bot switch is passed to it as
+        // the navigation option of the same name: a bot with autoFood off never eats on its way somewhere.
+        pack.setNavOption("autoEat", cfg.autoFood);
         if (cfg.autoTotem)
         {
             CombatUtils.ensureTotemInOffhand(bot);
@@ -161,7 +207,17 @@ public final class BotBrain
         {
             CombatUtils.ensureShieldInOffhand(bot);
         }
-        // auto-food is handled by the action pack's existing maybeAutoEat() path.
+    }
+
+    /** Opens the fight the match result is measured over, from where this bot's damage counters stand. */
+    private void startMatch()
+    {
+        matchStart = bot.level().getGameTime();
+        if (body != null)
+        {
+            matchDealt = body.stats().damageDealt;
+            matchTaken = body.stats().damageTaken;
+        }
     }
 
     private void disengage(EntityPlayerActionPack pack)
@@ -179,6 +235,7 @@ public final class BotBrain
         }
         perceivedTarget = null;
         perception.reset();
+        startMatch();
     }
 
     private LivingEntity resolveTarget(BotPvpConfig cfg)

@@ -745,6 +745,16 @@ public final class NavController
 
     public void chase(UUID targetUUID, boolean crit, double attackRange, int attackInterval)
     {
+        chase(targetUUID, crit, attackRange, attackInterval, true);
+    }
+
+    /**
+     * Chase mode, optionally without the attack action. A caller that decides for itself when a hit is worth
+     * taking - a combat bot, whose clicks go through its body's aim gate - passes {@code attack = false} and
+     * the navigation only ever closes the distance: nothing can swing from here.
+     */
+    public void chase(UUID targetUUID, boolean crit, double attackRange, int attackInterval, boolean attack)
+    {
         stop();
         pack.stopAll(); // Clear any existing actions
         navEnabled = true;
@@ -760,9 +770,12 @@ public final class NavController
         navChaseTargetEntityId = -1;
         navArrivalRadius = navChaseAttackRange;
         ChaseFlowFields.acquire(targetUUID);
-        // Start the attack action
-        pack.setAttackCritical(crit);
-        pack.start(ActionType.ATTACK, Action.continuous());
+        if (attack)
+        {
+            // Start the attack action
+            pack.setAttackCritical(crit);
+            pack.start(ActionType.ATTACK, Action.continuous());
+        }
     }
 
     public void mine(List<Block> targets, int radius, int maxCount)
