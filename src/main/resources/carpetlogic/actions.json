@@ -1,0 +1,242 @@
+{
+  "_comment": [
+    "The single definition of every bot action and its parameters.",
+    "The interpreter reads parameters only through this file (carpet.logic.program.ActionSchema), and the web",
+    "editor builds its node widgets from it and compiles graphs against it (webui/js/node-compiler.js).",
+    "kind: action (a step), control (holds other actions in the listed slots) or condition (tested by IF_THEN_ELSE",
+    "and by WAIT_UNTIL).",
+    "node: the editor node this action is compiled from.",
+    "params: name, type (int, number, bool, string), default, and optionally min/max or the allowed options.",
+    "An int or number parameter may also hold a variable: the referencePrefix followed by a name, for example",
+    "'$counter'. A variable that was never set reads as 0.",
+    "requires: the boolean carpet rule that must be on for the action to work.",
+    "A 'ticks' parameter is how long the step lasts before the next one starts.",
+    "ON_EVENT registers a reaction and then carries on with the sequence: its children run when the event happens,",
+    "taking over from the main sequence, which resumes where it was once they are done. Every event fires on its",
+    "rising edge only, and an event that fires while its own handler is still running is ignored."
+  ],
+  "variables": {
+    "referencePrefix": "$",
+    "namePattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+    "maxVariables": 64
+  },
+  "actions": {
+    "MOVE": {"kind": "action", "node": "Movement/Move", "params": [
+      {"name": "direction", "type": "string", "default": "forward", "options": ["forward", "backward", "left", "right"]},
+      {"name": "ticks", "type": "int", "default": 20, "min": 1, "max": 6000}
+    ]},
+    "STRAFE": {"kind": "action", "node": "Movement/Strafe", "params": [
+      {"name": "direction", "type": "string", "default": "left", "options": ["left", "right"]},
+      {"name": "ticks", "type": "int", "default": 10, "min": 1, "max": 6000}
+    ]},
+    "SPRINT": {"kind": "action", "node": "Movement/Sprint", "params": [
+      {"name": "enabled", "type": "bool", "default": true},
+      {"name": "ticks", "type": "int", "default": 0, "min": 0, "max": 6000}
+    ]},
+    "SNEAK": {"kind": "action", "node": "Movement/Sneak", "params": [
+      {"name": "enabled", "type": "bool", "default": true},
+      {"name": "ticks", "type": "int", "default": 0, "min": 0, "max": 6000}
+    ]},
+    "JUMP": {"kind": "action", "node": "Movement/Jump", "params": [
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 200}
+    ]},
+    "MOUNT": {"kind": "action", "node": "Movement/Mount", "params": [
+      {"name": "onlyRideables", "type": "bool", "default": true}
+    ]},
+    "DISMOUNT": {"kind": "action", "node": "Movement/Dismount", "params": []},
+    "STOP_MOVEMENT": {"kind": "action", "node": "Movement/StopMovement", "params": []},
+
+    "ATTACK": {"kind": "action", "node": "Combat/Attack", "params": [
+      {"name": "mode", "type": "string", "default": "once", "options": ["once", "continuous", "interval"]},
+      {"name": "interval", "type": "int", "default": 10, "min": 1, "max": 200},
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 6000}
+    ]},
+    "ATTACK_CRIT": {"kind": "action", "node": "Combat/CritAttack", "params": [
+      {"name": "ticks", "type": "int", "default": 15, "min": 10, "max": 100}
+    ]},
+    "SWORD_BLOCK": {"kind": "action", "requires": "swordBlockHitting", "node": "Combat/SwordBlock", "params": [
+      {"name": "ticks", "type": "int", "default": 40, "min": 1, "max": 6000}
+    ]},
+    "SHIELD_BLOCK": {"kind": "action", "node": "Combat/ShieldBlock", "params": [
+      {"name": "ticks", "type": "int", "default": 40, "min": 1, "max": 6000}
+    ]},
+    "USE": {"kind": "action", "node": "Combat/UseItem", "params": [
+      {"name": "mode", "type": "string", "default": "once", "options": ["once", "continuous", "interval"]},
+      {"name": "interval", "type": "int", "default": 10, "min": 1, "max": 200},
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 6000}
+    ]},
+
+    "HOTBAR": {"kind": "action", "node": "Equipment/Hotbar", "params": [
+      {"name": "slot", "type": "int", "default": 1, "min": 1, "max": 9}
+    ]},
+    "EQUIP_ARMOR": {"kind": "action", "node": "Equipment/EquipArmor", "params": [
+      {"name": "armorSet", "type": "string", "default": "diamond", "options": ["leather", "chainmail", "iron", "golden", "diamond", "netherite"]}
+    ]},
+    "EQUIP_SLOT": {"kind": "action", "node": "Equipment/EquipSlot", "params": [
+      {"name": "slot", "type": "string", "default": "mainhand", "options": ["mainhand", "offhand", "head", "chest", "legs", "feet"]},
+      {"name": "item", "type": "string", "default": "diamond_sword"}
+    ]},
+    "UNEQUIP": {"kind": "action", "node": "Equipment/Unequip", "params": [
+      {"name": "slot", "type": "string", "default": "all", "options": ["all", "mainhand", "offhand", "head", "chest", "legs", "feet"]}
+    ]},
+    "DROP": {"kind": "action", "node": "Equipment/Drop", "params": [
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 200}
+    ]},
+    "DROP_STACK": {"kind": "action", "node": "Equipment/DropStack", "params": [
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 200}
+    ]},
+    "SWAP_HANDS": {"kind": "action", "node": "Equipment/SwapHands", "params": []},
+
+    "LOOK_DIRECTION": {"kind": "action", "node": "Look/LookDirection", "params": [
+      {"name": "direction", "type": "string", "default": "north", "options": ["north", "south", "east", "west", "up", "down"]}
+    ]},
+    "LOOK_AT": {"kind": "action", "node": "Look/LookAt", "params": [
+      {"name": "x", "type": "number", "default": 0},
+      {"name": "y", "type": "number", "default": 64},
+      {"name": "z", "type": "number", "default": 0}
+    ]},
+    "LOOK_AT_PLAYER": {"kind": "action", "node": "Look/LookAtPlayer", "params": [
+      {"name": "player", "type": "string", "default": ""}
+    ]},
+    "LOOK_YAW_PITCH": {"kind": "action", "node": "Look/LookYawPitch", "params": [
+      {"name": "yaw", "type": "number", "default": 0, "min": -180, "max": 180},
+      {"name": "pitch", "type": "number", "default": 0, "min": -90, "max": 90}
+    ]},
+    "TURN": {"kind": "action", "node": "Look/Turn", "params": [
+      {"name": "yaw", "type": "number", "default": 90, "min": -360, "max": 360},
+      {"name": "pitch", "type": "number", "default": 0, "min": -180, "max": 180}
+    ]},
+
+    "PLACE_BLOCK": {"kind": "action", "node": "Crystal/PlaceBlock", "params": [
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 100}
+    ]},
+    "PLACE_CRYSTAL": {"kind": "action", "node": "Crystal/PlaceCrystal", "params": [
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 100}
+    ]},
+    "DETONATE_CRYSTAL": {"kind": "action", "node": "Crystal/DetonateCrystal", "params": [
+      {"name": "ticks", "type": "int", "default": 1, "min": 1, "max": 100}
+    ]},
+
+    "NAV_GOTO": {"kind": "action", "requires": "fakePlayerNavigation", "node": "Navigation/NavGoto", "params": [
+      {"name": "x", "type": "number", "default": 0},
+      {"name": "y", "type": "number", "default": 64},
+      {"name": "z", "type": "number", "default": 0},
+      {"name": "mode", "type": "string", "default": "auto", "options": ["auto", "land", "water", "air"]},
+      {"name": "radius", "type": "number", "default": 1, "min": 0, "max": 64}
+    ]},
+    "NAV_STOP": {"kind": "action", "node": "Navigation/NavStop", "params": []},
+    "FOLLOW_PLAYER": {"kind": "action", "requires": "fakePlayerNavigation", "node": "Navigation/FollowPlayer", "params": [
+      {"name": "player", "type": "string", "default": ""},
+      {"name": "distance", "type": "number", "default": 3, "min": 1, "max": 64},
+      {"name": "ticks", "type": "int", "default": 200, "min": 1, "max": 60000}
+    ]},
+    "CHASE_PLAYER": {"kind": "action", "requires": "fakePlayerNavigation", "node": "Navigation/ChasePlayer", "params": [
+      {"name": "player", "type": "string", "default": ""},
+      {"name": "critical", "type": "bool", "default": false},
+      {"name": "range", "type": "number", "default": 3, "min": 0.5, "max": 3},
+      {"name": "interval", "type": "int", "default": 0, "min": 0, "max": 200},
+      {"name": "ticks", "type": "int", "default": 200, "min": 1, "max": 60000}
+    ]},
+    "PATROL": {"kind": "action", "requires": "fakePlayerNavigation", "node": "Navigation/Patrol", "params": [
+      {"name": "x1", "type": "number", "default": 0},
+      {"name": "y1", "type": "number", "default": 64},
+      {"name": "z1", "type": "number", "default": 0},
+      {"name": "x2", "type": "number", "default": 10},
+      {"name": "y2", "type": "number", "default": 64},
+      {"name": "z2", "type": "number", "default": 0},
+      {"name": "loop", "type": "bool", "default": true},
+      {"name": "ticks", "type": "int", "default": 400, "min": 1, "max": 60000}
+    ]},
+    "FLEE_FROM": {"kind": "action", "requires": "fakePlayerNavigation", "node": "Navigation/FleeFrom", "params": [
+      {"name": "player", "type": "string", "default": ""},
+      {"name": "distance", "type": "number", "default": 16, "min": 5, "max": 128},
+      {"name": "ticks", "type": "int", "default": 100, "min": 1, "max": 60000}
+    ]},
+    "WANDER": {"kind": "action", "requires": "fakePlayerNavigation", "node": "Navigation/Wander", "params": [
+      {"name": "radius", "type": "number", "default": 16, "min": 5, "max": 128},
+      {"name": "ticks", "type": "int", "default": 200, "min": 1, "max": 60000}
+    ]},
+
+    "GLIDE_START": {"kind": "action", "requires": "fakePlayerElytraGlide", "node": "Elytra/GlideStart", "params": []},
+    "GLIDE_STOP": {"kind": "action", "node": "Elytra/GlideStop", "params": []},
+    "GLIDE_GOTO": {"kind": "action", "requires": "fakePlayerElytraGlide", "node": "Elytra/GlideGoto", "params": [
+      {"name": "x", "type": "number", "default": 0},
+      {"name": "y", "type": "number", "default": 100},
+      {"name": "z", "type": "number", "default": 0},
+      {"name": "radius", "type": "number", "default": 5, "min": 0, "max": 64}
+    ]},
+    "GLIDE_HEADING": {"kind": "action", "requires": "fakePlayerElytraGlide", "node": "Elytra/GlideHeading", "params": [
+      {"name": "yaw", "type": "number", "default": 0, "min": -180, "max": 180},
+      {"name": "pitch", "type": "number", "default": -5, "min": -90, "max": 90}
+    ]},
+    "GLIDE_SPEED": {"kind": "action", "requires": "fakePlayerElytraGlide", "node": "Elytra/GlideSpeed", "params": [
+      {"name": "speed", "type": "number", "default": 1.6, "min": 0.1, "max": 5}
+    ]},
+    "GLIDE_FREEZE": {"kind": "action", "requires": "fakePlayerElytraGlide", "node": "Elytra/GlideFreeze", "params": [
+      {"name": "enabled", "type": "bool", "default": true}
+    ]},
+    "GLIDE_LAND": {"kind": "action", "requires": "fakePlayerElytraGlide", "node": "Elytra/GlideLand", "params": []},
+
+    "DELAY": {"kind": "action", "node": "Control/Delay", "params": [
+      {"name": "ticks", "type": "int", "default": 20, "min": 1, "max": 6000}
+    ]},
+    "WAIT_UNTIL": {"kind": "control", "node": "Control/WaitUntil", "slots": ["condition"], "params": [
+      {"name": "timeout", "type": "int", "default": 100, "min": 1, "max": 60000}
+    ]},
+    "SET_VARIABLE": {"kind": "action", "node": "Variables/Set", "params": [
+      {"name": "name", "type": "string", "default": "counter"},
+      {"name": "value", "type": "number", "default": 0}
+    ]},
+    "ADD_VARIABLE": {"kind": "action", "node": "Variables/Add", "params": [
+      {"name": "name", "type": "string", "default": "counter"},
+      {"name": "amount", "type": "number", "default": 1}
+    ]},
+    "ON_EVENT": {"kind": "control", "node": "Events/OnEvent", "slots": ["children"], "params": [
+      {"name": "event", "type": "string", "default": "when_hit", "options": ["when_hit", "when_health_below", "when_target_lost", "when_target_in_range"]},
+      {"name": "target", "type": "string", "default": ""},
+      {"name": "value", "type": "number", "default": 5, "min": 0, "max": 1024}
+    ]},
+    "EXECUTE_COMMAND": {"kind": "action", "node": "Control/ExecuteCommand", "params": [
+      {"name": "command", "type": "string", "default": "say Hello"}
+    ]},
+    "LOOP": {"kind": "control", "node": "Control/Repeat", "slots": ["children"], "params": [
+      {"name": "count", "type": "int", "default": 3, "min": 0, "max": 10000}
+    ]},
+    "FOREVER": {"kind": "control", "node": "Control/Forever", "slots": ["children"], "params": []},
+    "SEQUENCE": {"kind": "control", "node": "Control/Sequence", "slots": ["children"], "params": []},
+    "IF_THEN_ELSE": {"kind": "control", "node": "Control/If-Else", "slots": ["condition", "children", "elseChildren"], "params": []},
+
+    "CONDITION_HEALTH": {"kind": "condition", "node": "Conditions/Health", "params": [
+      {"name": "operator", "type": "string", "default": "<", "options": ["<", "<=", ">", ">=", "==", "!="]},
+      {"name": "value", "type": "number", "default": 10, "min": 0, "max": 1024}
+    ]},
+    "CONDITION_DISTANCE": {"kind": "condition", "node": "Conditions/Distance", "params": [
+      {"name": "target", "type": "string", "default": ""},
+      {"name": "operator", "type": "string", "default": "<", "options": ["<", "<=", ">", ">=", "==", "!="]},
+      {"name": "value", "type": "number", "default": 5, "min": 0, "max": 1024}
+    ]},
+    "CONDITION_FOOD": {"kind": "condition", "node": "Conditions/Food", "params": [
+      {"name": "operator", "type": "string", "default": "<", "options": ["<", "<=", ">", ">=", "==", "!="]},
+      {"name": "value", "type": "number", "default": 10, "min": 0, "max": 20}
+    ]},
+    "CONDITION_ARMOR": {"kind": "condition", "node": "Conditions/Armor", "params": [
+      {"name": "operator", "type": "string", "default": "<", "options": ["<", "<=", ">", ">=", "==", "!="]},
+      {"name": "value", "type": "number", "default": 10, "min": 0, "max": 30}
+    ]},
+    "CONDITION_VARIABLE": {"kind": "condition", "node": "Conditions/Variable", "params": [
+      {"name": "name", "type": "string", "default": "counter"},
+      {"name": "operator", "type": "string", "default": "==", "options": ["<", "<=", ">", ">=", "==", "!="]},
+      {"name": "value", "type": "number", "default": 0}
+    ]},
+    "CONDITION_RANDOM": {"kind": "condition", "node": "Conditions/Random", "params": [
+      {"name": "chance", "type": "number", "default": 50, "min": 0, "max": 100}
+    ]},
+    "CONDITION_HAS_ITEM": {"kind": "condition", "node": "Conditions/HasItem", "params": [
+      {"name": "item", "type": "string", "default": "end_crystal"}
+    ]},
+    "CONDITION_IS_FLYING": {"kind": "condition", "node": "Conditions/IsFlying", "params": []},
+    "CONDITION_IS_SNEAKING": {"kind": "condition", "node": "Conditions/IsSneaking", "params": []},
+    "CONDITION_IS_SPRINTING": {"kind": "condition", "node": "Conditions/IsSprinting", "params": []},
+    "CONDITION_IS_IN_WATER": {"kind": "condition", "node": "Conditions/IsInWater", "params": []}
+  }
+}

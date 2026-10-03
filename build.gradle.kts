@@ -83,6 +83,28 @@ tasks.named<JavaExec>("runSelfTest") {
     }
 }
 
+// The CarpetLogic web editor's JavaScript has its own tests. check runs them when node is installed.
+val webuiTest = tasks.register<Exec>("webuiTest") {
+    group = "verification"
+    description = "Tests the CarpetLogic web editor's graph compiler with node."
+    val node = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+        .flatMap { dir -> listOf(File(dir, "node"), File(dir, "node.exe")) }
+        .firstOrNull { it.canExecute() }
+    val tests = fileTree(rootProject.file("src/test/js")) { include("*.test.js") }
+    inputs.files(tests)
+    inputs.dir(rootProject.file("src/main/resources/webui"))
+    inputs.dir(rootProject.file("src/main/resources/carpetlogic"))
+    onlyIf {
+        if (node == null) logger.lifecycle("webuiTest skipped: node is not on the PATH")
+        node != null
+    }
+    commandLine(listOf(node?.path ?: "node", "--test") + tests.files.map { it.path })
+}
+
+tasks.check {
+    dependsOn(webuiTest)
+}
+
 tasks.processResources {
     val props = mapOf(
         "version" to project.version,
