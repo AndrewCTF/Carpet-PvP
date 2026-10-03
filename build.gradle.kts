@@ -31,6 +31,16 @@ dependencies {
 
     // Jakarta annotations (replacement for javax.annotation removed from Java)
     compileOnly("jakarta.annotation:jakarta.annotation-api:2.1.1")
+
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
+    // One test JVM per core
+    maxParallelForks = Runtime.getRuntime().availableProcessors()
 }
 
 tasks.processResources {
