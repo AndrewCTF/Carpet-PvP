@@ -25,5 +25,11 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("crystal_damage_matches_model", CrystalScenarios::damageMatchesModel);
+        SCENARIOS.put("crystal_place_and_hit", CrystalScenarios::placeAndHit);
+        SCENARIOS.put("crystal_never_suicides", CrystalScenarios::neverSuicides);
+        SCENARIOS.put("crystal_retotem", CrystalScenarios::reTotem);
+        SCENARIOS.put("crystal_anchor", CrystalScenarios::anchor);
+        SCENARIOS.put("crystal_duel", CrystalScenarios::duel);
     }
 }

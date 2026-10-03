@@ -34,8 +34,19 @@ public final class StyleIndex
         KITS.put(CombatStyle.MELEE, "sword");
         KITS.put(CombatStyle.SMP, "smp");
         KITS.put(CombatStyle.MACE, "mace");
+        STYLES.put(CombatStyle.CRYSTAL, CrystalStyle::new);
+        STYLES.put(CombatStyle.ANCHOR, CrystalStyle::new);
         KITS.put(CombatStyle.CRYSTAL, "crystal");
         KITS.put(CombatStyle.ANCHOR, "crystal");
+        OPTIONS.put("crystal.crystals", "true");
+        OPTIONS.put("crystal.obsidian", "true");
+        OPTIONS.put("crystal.anchors", "true");
+        OPTIONS.put("crystal.pearls", "true");
+        OPTIONS.put("crystal.doubletap", "true");
+        OPTIONS.put("crystal.hand_totem", "true");
+        OPTIONS.put("crystal.retotem", "true");
+        OPTIONS.put("crystal.retotem_delay", "20");
+        OPTIONS.put("crystal.reach", "4.0");
     }
 
     public static boolean has(CombatStyle style)

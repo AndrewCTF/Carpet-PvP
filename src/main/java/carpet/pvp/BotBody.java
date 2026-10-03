@@ -7,6 +7,7 @@ import carpet.pvp.look.LookProfile;
 import carpet.pvp.sim.CombatMath;
 import carpet.pvp.sim.DuelSim;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -124,6 +125,8 @@ public final class BotBody
     private boolean shieldRaised;
     private int lastAction;
     private boolean lastBlock;
+    private boolean clickCounted;
+    private boolean clickAllowed;
     private float previousHealth;
     private UUID targetId;
 
@@ -192,14 +195,22 @@ public final class BotBody
      */
     public void tick(Perception.Snapshot seen, LivingEntity target, int action, boolean block)
     {
-        lastAction = action;
-        lastBlock = block;
         applyPendingSlot();
         followTarget(target);
         aim(seen);
-        move(action);
-        shield(block);
-        strike(target, DuelSim.attack(action));
+        act(target, action, block);
+    }
+
+    /**
+     * The same tick with the view left where the caller put it, for a style that aims the view at
+     * something other than the target this tick: a crystal goes on the face of a block, not on the
+     * opponent.
+     */
+    public void tickAimed(LivingEntity target, int action, boolean block)
+    {
+        applyPendingSlot();
+        followTarget(target);
+        act(target, action, block);
     }
 
     /**
@@ -208,15 +219,37 @@ public final class BotBody
      */
     public void hold(Perception.Snapshot seen, LivingEntity target)
     {
-        tick(seen, target, DuelSim.action(DuelSim.forward(lastAction), DuelSim.strafe(lastAction),
-                DuelSim.jump(lastAction), DuelSim.sprint(lastAction), false), lastBlock);
+        tick(seen, target, repeat(false), lastBlock);
+    }
+
+    /** {@link #hold} with the view left where the caller put it. */
+    public void holdAimed(LivingEntity target)
+    {
+        tickAimed(target, repeat(false), lastBlock);
+    }
+
+    private int repeat(boolean attack)
+    {
+        return DuelSim.action(DuelSim.forward(lastAction), DuelSim.strafe(lastAction),
+                DuelSim.jump(lastAction), DuelSim.sprint(lastAction), attack);
+    }
+
+    private void act(LivingEntity target, int action, boolean block)
+    {
+        lastAction = action;
+        lastBlock = block;
+        clickCounted = false;
+        move(action);
+        shield(block);
+        strike(target, DuelSim.attack(action));
     }
 
     /**
      * True when the game would let this bot hit the target now: inside the server's attack range, and
-     * a ray from the eyes along the view direction it currently has hits the target's box.
+     * a ray from the eyes along the view direction it currently has hits the target's box. The target is
+     * any entity, since a crystal is hit the same way a fighter is.
      */
-    public boolean canHit(LivingEntity target)
+    public boolean canHit(Entity target)
     {
         if (target == null || !target.isAlive())
         {
@@ -416,17 +449,10 @@ public final class BotBody
 
     private void strike(LivingEntity target, boolean wants)
     {
-        if (!wants)
+        if (!click(wants))
         {
-            clicks.tick();
             return;
         }
-        if (!clicks.tick())
-        {
-            stats.throttledClicks++;
-            return;
-        }
-        stats.clicks++;
         if (!canHit(target))
         {
             stats.misses++;
@@ -456,6 +482,35 @@ public final class BotBody
             stats.sprintHits++;
             sprintLock.onSprintHit();
         }
+    }
+
+    /**
+     * Spends this tick's click and reports whether the caller may use it. The limiter is counted once per
+     * body tick whichever caller asks first, so a click is granted at the bot's clicks-per-second rate no
+     * matter what it is for; a style that places a block or swings at a crystal asks here rather than
+     * clicking at a second rate on the side. The body itself asks again for its own swing, which then
+     * draws on the same click.
+     *
+     * @param wants whether the caller has a click ready to spend
+     */
+    public boolean click(boolean wants)
+    {
+        if (!clickCounted)
+        {
+            clickCounted = true;
+            clickAllowed = clicks.tick();
+        }
+        if (!wants)
+        {
+            return false;
+        }
+        if (!clickAllowed)
+        {
+            stats.throttledClicks++;
+            return false;
+        }
+        stats.clicks++;
+        return true;
     }
 
     /** Turns the view onto the seen position of the target, at the profile's speed. */
