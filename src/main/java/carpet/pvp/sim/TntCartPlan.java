@@ -4,8 +4,9 @@ package carpet.pvp.sim;
  * Picks where a bot should lay a rail and a tnt minecart to blow a target up, and how much of the blast reaches
  * either fighter.
  *
- * <p>The blast of a tnt minecart is not a fixed power: {@code MinecartTNT.explode} scales its base of four by
- * one plus a random share of one and a half, so the same cart goes off anywhere between four and ten. A player
+ * <p>The blast of a tnt minecart is not a fixed power: {@code MinecartTNT.explode} takes the square root of the
+ * speed whatever set the cart off arrived with, caps that at five, and adds up to one and a half times it to a
+ * base of four, so the same cart goes off anywhere between {@link #POWER_LOW} and {@link #POWER_HIGH}. A player
  * lays the cart down next to the target and then runs; the bot does the same, so the placement is scored for the
  * damage the target is likely to take and the bot's own survival is a question asked at the moment it lights the
  * cart, which is {@link #survivable} rather than something baked into the choice.</p>
@@ -15,16 +16,41 @@ package carpet.pvp.sim;
  */
 public final class TntCartPlan
 {
-    /** {@code MinecartTNT.explosionPowerBase}: the power a stationary cart starts from. */
-    public static final float POWER_LOW = 4.0f;
-    /** The mean of that base times one and a random share of one and a half, which is what a cart usually does. */
-    public static final float POWER_MEAN = 7.0f;
-    /** The same cart with the largest random factor the game can draw. */
-    public static final float POWER_HIGH = 10.0f;
+    /** {@code MinecartTNT.DEFAULT_EXPLOSION_POWER_BASE}: the power a cart starts its blast from. */
+    public static final float POWER_BASE = 4.0f;
+    /**
+     * {@code MinecartTNT.DEFAULT_EXPLOSION_SPEED_FACTOR}, the share of the speed of whatever set the cart off
+     * that the blast scales with.
+     */
+    public static final float POWER_SPEED = 1.0f;
+    /**
+     * How fast the igniting arrow is at most worth anything: {@code MinecartTNT.explode} takes the square root of
+     * the speed the projectile arrived with and caps it at five, so anything quicker than this is the same blast.
+     * A flaming arrow at full draw leaves at {@link ProjectileSim#bowSpeed}, which is what the bot shoots with.
+     */
+    public static final double IGNITER_SPEED = Math.min(ProjectileSim.bowSpeed(1.0D), 5.0D);
+    /**
+     * The power a cart goes off at, {@code 4 + speedFactor * random * 1.5 * min(igniterSpeed, 5)}: the smallest
+     * a roll can give, the mean of the roll, and the largest.
+     */
+    public static final float POWER_LOW = POWER_BASE;
+    public static final float POWER_MEAN = POWER_BASE + POWER_SPEED * 1.5F * (float) IGNITER_SPEED / 2.0F;
+    public static final float POWER_HIGH = POWER_BASE + POWER_SPEED * 1.5F * (float) IGNITER_SPEED;
     /** How far the bot's eyes reach a block, which is what decides where a rail can be laid. */
     public static final double REACH = 4.5;
     /** What a blast has to take off the bot before it is not worth lighting the cart at all. */
     public static final float SELF_WEIGHT = 0.75f;
+    /**
+     * What one {@link #choose} costs against the shared budget, in the simulated ticks a planner spends. It
+     * scores every block within reach, and a score is two blast estimates with an exposure ray cast through
+     * the real level behind each, which is more work than a rollout step.
+     */
+    public static final int COST_PER_SEARCH = 400;
+    /**
+     * What one {@link #survivable} costs: a single blast estimate with one exposure ray cast behind it, which
+     * is a fraction of a search but is still work the server does.
+     */
+    public static final int COST_PER_BLAST = 1;
     private static final double EYE_HEIGHT = 1.62;
 
     private final ExplosionView view;

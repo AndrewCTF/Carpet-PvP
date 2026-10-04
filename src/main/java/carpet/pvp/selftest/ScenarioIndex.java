@@ -108,5 +108,7 @@ final class ScenarioIndex
         SCENARIOS.put("bot_glide_commands", BotCommandParityScenarios::glide);
         SCENARIOS.put("bot_permission", BotCommandParityScenarios::permission);
         SCENARIOS.put("bot_skin_profile", SkinScenarios::profile);
+        SCENARIOS.put("tnt_cart_damage", TntCartBlastScenarios::blastDamage);
+        SCENARIOS.put("ranged_expert_uses_techniques", RangedExpertScenarios::expertUsesTechniques);
     }
 }

@@ -123,13 +123,20 @@ it needs is the one `crystal` needs.
 
 ### `ranged`
 
-Projectiles and spacing. The bot picks the best weapon it has for the current gap: a sword inside
-4 blocks, a crossbow or a bow at range, a trident in water, a spear when it can reach, a tnt minecart
-when it has one. Bow and trident shots are aimed by solving the projectile ballistics against the
-target's delayed position, including the lead for a moving one; the result is a yaw and pitch the
-bot's own view then has to turn onto at its own speed, so a shot can and does miss. Between shots it
-keeps `ranged.keep` blocks of distance, strafing, and it only closes with the sword once the gap is
+Projectiles and spacing. The bot picks the best weapon it has for the gap it believes it is standing
+at, in bands: a sword inside 4 blocks, a charged spear run in to 7.5, a crossbow inside 8, a trident
+up to 18, a bow at anything longer, and the sword again whenever a target is inside its reach. Bow
+and trident shots are aimed by solving the projectile ballistics against the target's delayed
+position, including the lead for a moving one; the result is a yaw and pitch the bot's own view then
+has to turn onto at its own speed, so a shot can and does miss. Between shots it keeps
+`ranged.keep` blocks of distance and strafes, and it only closes with the sword once the gap is
 small. This style never uses navigation.
+
+A bot that can lay a trap lays one: it plans a rail and a tnt minecart in a cell next to its target
+whose blast the target cannot walk out of, puts both down from its own hand at its own click rate,
+walks out of the blast, and then sets the cart off with a flaming arrow. **That last step is not
+reliable yet** — the trap goes off in some fights and not in others, so treat a tnt minecart as
+something this bot does rather than something it does well.
 
 ### `mace`
 
@@ -275,12 +282,13 @@ as a number.
 | `ranged.crossbow` | `true` | Shooting with a crossbow. `casual` and up |
 | `ranged.trident` | `true` | Throwing a trident, and Riptide in water. `average` and up |
 | `ranged.spear` | `true` | Charging and thrusting a spear. `average` and up |
-| `ranged.tntcart` | `true` | Laying rail and a tnt minecart and lighting it. `skilled` and up |
+| `ranged.tntcart` | `true` | Laying a rail and a tnt minecart beside the target and setting it off with a flaming arrow. `skilled` and up. The trap goes off in some fights and not in others |
 | `ranged.keep` | `9.0` | The distance in blocks it tries to keep |
 | `ranged.draw` | `-1` | Ticks of draw before a bow shot. Anything below 0 lets the aim solver pick |
 
-The `ranged` kit has a bow, a crossbow, arrows and a sword, so the trident, spear and minecart
-options have nothing to act on until a server puts those items in the bot's inventory.
+The `ranged` kit carries all of it, so a bot spawned with the kit has something for every one of the
+techniques; see [Kits.md](Kits.md). A bot on a version without a spear has the spear option turn
+itself away, because the kit it was given had no spear in it.
 
 ## The other route: `/player <name> ai`
 

@@ -1845,6 +1845,12 @@ boolean[] walkAsked = {false};
             Kit kit = store.get(name).orElseThrow();
             for (KitEntry entry : kit.entries())
             {
+                if (!entry.available(server.registryAccess()))
+                {
+                    // A kit file is shared by every version, so an item one of them does not have is skipped
+                    // by the loader and is not a kit that fails to build.
+                    continue;
+                }
                 try
                 {
                     entry.createStack(server.registryAccess());

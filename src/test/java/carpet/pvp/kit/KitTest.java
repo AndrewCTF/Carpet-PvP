@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KitTest
 {
+
     @Test
     void namesHoldLettersDigitsUnderscoreAndDash()
     {
@@ -87,6 +88,33 @@ class KitTest
         assertThrows(IllegalArgumentException.class, () -> Kit.fromJson("{\"items\": [{\"item\": \"a\", \"slot\": 36}]}", "x"));
         assertThrows(IllegalArgumentException.class, () -> Kit.fromJson("{\"items\": [{\"item\": \"a\", \"enchantments\": [{\"id\": \"b\", \"level\": 0}]}]}", "x"));
         assertThrows(IllegalArgumentException.class, () -> Kit.fromJson("{\"name\": \"bad name\", \"items\": []}", "x"));
+    }
+
+    /**
+     * A kit file is shared by every version the mod runs on, so an entry naming an item one of them does not
+     * have has to be something the loader skips rather than a kit that will not build. The decision is what a
+     * unit test can make: a registry that has the item, and one that has not.
+     */
+    @Test
+    void anEntryForAnItemThisVersionLacksIsSkippedRatherThanBuilt()
+    {
+        Kit kit = Kit.fromJson("""
+                {
+                  "name": "ranged",
+                  "items": [
+                    { "item": "minecraft:bow", "slot": 0 },
+                    { "item": "minecraft:not_an_item_at_all", "slot": 1 }
+                  ]
+                }
+                """, "ranged");
+        assertEquals(2, kit.entries().size());
+        java.util.function.Predicate<String> withSpear = id -> !id.equals("minecraft:not_an_item_at_all");
+
+        // The entry is kept in the file either way, so the loader is the one that decides, and it decides on
+        // what this version has rather than on what some other version has.
+        assertTrue(KitEntry.available("minecraft:bow", withSpear));
+        assertFalse(KitEntry.available("minecraft:not_an_item_at_all", withSpear));
+        assertFalse(KitEntry.available("minecraft:spear", id -> false));
     }
 
     @Test
