@@ -89,8 +89,8 @@ final class MaceFightScenarios
         // Its wind charges are taken away, which is the state a mace fighter on the ground is in: with no
         // launch left the mace does nothing of its own, so every hit it lands is one it made off the sword.
         return scenario(a, b, origin, origin.add(0.0D, 0.0D, 1.0D), "expert", 1800, true, false, false, true,
-                SelfTest.fmt("%s has the mace kit without its wind charges and is one block from %s, which wears"
-                        + " the whole netherite kit", a, b), new BreachSwap());
+                SelfTest.fmt("%s has the mace kit without its wind charges and its rockets and is one block from %s,"
+                        + " which wears the whole netherite kit", a, b), new BreachSwap());
     }
 
     /**
@@ -355,6 +355,7 @@ final class MaceFightScenarios
                     // on the ground and there is no launch left to put the target on the floor with.
                     SelfTest.run(server, "clear " + a + " minecraft:wind_charge");
                 }
+                check.prepare(server, a);
                 if (shielding)
                 {
                     SelfTest.shieldKit(b).forEach(command -> SelfTest.run(server, command));
@@ -447,6 +448,11 @@ final class MaceFightScenarios
     /** What one technique looks for. */
     private interface Check
     {
+        /** Anything this technique needs taken from the bot before it is let loose. */
+        default void prepare(MinecraftServer server, String bot)
+        {
+        }
+
         Probe waiting(ServerPlayer bot, ServerPlayer target, Hit hit, int tick);
 
         Probe hit(MinecraftServer server, ServerPlayer bot, ServerPlayer target, Hit hit, int tick);
@@ -533,6 +539,14 @@ final class MaceFightScenarios
         private int hits;
         private float worst;
         private float leastGain = Float.MAX_VALUE;
+
+        public void prepare(MinecraftServer server, String bot)
+        {
+            // On the ground means with nothing left that gets it off the ground. A bot that still has its
+            // rockets puts the wings on once the charges are gone and comes down on the target instead of
+            // trading with it, which is the dive and not what is being measured here.
+            SelfTest.run(server, "clear " + bot + " minecraft:firework_rocket");
+        }
 
         public Probe waiting(ServerPlayer bot, ServerPlayer target, Hit hit, int tick)
         {

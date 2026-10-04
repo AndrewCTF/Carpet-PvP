@@ -102,6 +102,8 @@ public class EntityPlayerMPFake extends ServerPlayer
     private Vec3 pendingKnockback;
     /** What this player's velocity was before the hit being processed, to tell knockback from a repeat. */
     private Vec3 velocityBeforeDamage;
+    /** True from a hit on this player until the motion packet that carries its knockback, or its next tick. */
+    private boolean knockbackDue;
     /** UUID of the most recent attacker, used by the combat-AI revenge logic. */
     public UUID lastAttackerUUID;
     /**
@@ -135,15 +137,22 @@ public class EntityPlayerMPFake extends ServerPlayer
     public void noteDamage()
     {
         velocityBeforeDamage = getDeltaMovement();
+        knockbackDue = true;
     }
 
     /**
-     * Whether the given velocity is one a hit produced, rather than the one it started from. Vanilla
-     * also sends motion packets that only repeat the velocity the player already has.
+     * Whether the given velocity is one a hit on this player produced, rather than the one it started from.
+     * Only the attacker's hit sends the victim its knockback and then puts the victim's velocity back, which
+     * is the one case there is anything to keep for the next tick. Every other motion packet a player is sent
+     * about itself repeats a velocity the server has already given it: a mace sends its own wielder one from
+     * inside the smash, before the Wind Burst that follows has thrown it, and applying that a tick late would
+     * take the burst away again.
      */
     public boolean isKnockback(Vec3 velocity)
     {
-        return velocityBeforeDamage == null || !velocity.equals(velocityBeforeDamage);
+        boolean due = knockbackDue;
+        knockbackDue = false;
+        return due && (velocityBeforeDamage == null || !velocity.equals(velocityBeforeDamage));
     }
 
     /** The per-bot combat-AI driver, ticked each game tick from the action pack. */
@@ -641,6 +650,7 @@ public class EntityPlayerMPFake extends ServerPlayer
             setDeltaMovement(pendingKnockback);
             pendingKnockback = null;
         }
+        knockbackDue = false;
         actionPack.onUpdate();
         if (this.level().getServer().getTickCount() % 10 == 0)
         {
@@ -949,8 +959,23 @@ public class EntityPlayerMPFake extends ServerPlayer
             }
             else if (!BotSettings.shieldStunning)
             {
-                //~ if >=26.3 'this.invulnerableTime = 20' -> 'this.setInvulnerableTime(20)'
-                this.setInvulnerableTime(20);
+                // What the game does with a hit that was blocked in full: it opens the damage cooldown at the
+                // nothing the hit was worth, so that what follows inside it is measured against nothing and
+                // lands whole. That cooldown is not the invulnerability an entity can be given for a time,
+                // which is a separate thing from 26.3 on and lets nothing through at all.
+                //? if >=26.3 {
+                if (this.damageCooldownTime <= 10)
+                {
+                    this.lastHurt = 0.0F;
+                    this.damageCooldownTime = 20;
+                }
+                //?} else {
+                /*if (this.invulnerableTime <= 10)
+                {
+                    this.lastHurt = 0.0F;
+                    this.invulnerableTime = 20;
+                }
+                *///?}
             }
             CriteriaTriggers.ENTITY_HURT_PLAYER.trigger((ServerPlayer)this, source, f, 0, true);
             if(blockedDamage < 3.4028235E37F){

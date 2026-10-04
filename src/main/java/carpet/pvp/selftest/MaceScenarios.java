@@ -51,8 +51,6 @@ final class MaceScenarios
     private static final int KNOCKDOWNS = 1;
     /** How much more damage than it took a fighter has to trade to win a round nobody was put down in. */
     private static final float TRADE_MARGIN = 1.25F;
-    /** Health a fake player jumps back up by when it is put back on its feet after a killing blow. */
-    private static final float KNOCKDOWN_JUMP = 1.5F;
     /** Height the dummy of the miss is lifted to, out of reach of anything a launch reaches. */
     private static final double OUT_OF_ARC = 14.0D;
     /** Height above the ground that only a launch reaches, a jump peaking at 1.25 blocks. */
@@ -108,8 +106,13 @@ final class MaceScenarios
 
     /**
      * A smash out of a measured fall deals what {@link CombatMath} says for that fall and that armour.
-     * The fall distance is the one the bot had on the tick before the hit, since the mace clears its own
-     * counter on the hit, and the enchantments are read off the mace the bot was holding.
+     *
+     * <p>Everything the sum is made of is the game's own reading. The fall distance, the attack damage
+     * attribute and the attack strength are the ones the bot had on the tick before the hit, which is what
+     * {@code Player.attack} swung with: the mace clears the fall counter on the hit, and the attributes of the
+     * item that was in the hand are the ones still in force when another goes in on the tick of the swing. The
+     * enchantments are the ones of the item in the hand on the tick of the hit. The critical hit is the game's
+     * rule and nothing more: a swing made while falling, thrown at full strength.</p>
      */
     static Scenario smashDamage(String a, String b, String c, Vec3 origin)
     {
@@ -117,10 +120,8 @@ final class MaceScenarios
         boolean[] ready = {false};
         float[] before = {20.0F};
         double[] fall = {0.0};
-        int[] since = {0};
-        int[] clicksSeen = {-1};
-        int[] density = {0};
-        int[] breach = {0};
+        float[] charge = {0.0F};
+        double[] base = {1.0};
         float[] grounded = {0.0F};
         return new Scenario(900, List.of(new Bot(a, origin), new Bot(b, dummy, 180.0D)), List.of(), server ->
         {
@@ -140,20 +141,16 @@ final class MaceScenarios
             }
             ServerPlayer bot = SelfTest.player(server, a);
             ServerPlayer target = SelfTest.player(server, b);
-            // What the bot looked like on the tick before this one is what it swung with: the fall distance
-            // it had, the click that charged it, the mace it held and the target's health before the hit.
             double wasFall = fall[0];
-            int wasSince = since[0];
-            int wasDensity = density[0];
-            int wasBreach = breach[0];
+            float wasCharge = charge[0];
+            double wasBase = base[0];
             float hurt = before[0] - target.getHealth();
             ItemStack held = bot.getMainHandItem();
-            int clicks = SelfTest.stats(bot).clicks;
-            since[0] = clicks == clicksSeen[0] ? since[0] + 1 : 0;
-            clicksSeen[0] = clicks;
+            int density = level(server, held, "density");
+            int breach = level(server, held, "breach");
             fall[0] = bot.fallDistance;
-            density[0] = level(server, held, "density");
-            breach[0] = level(server, held, "breach");
+            charge[0] = bot.getAttackStrengthScale(0.5F);
+            base[0] = bot.getAttributeValue(Attributes.ATTACK_DAMAGE);
             before[0] = target.getHealth();
             if (hurt <= 0.0F)
             {
@@ -167,15 +164,13 @@ final class MaceScenarios
                 return SelfTest.pending(SelfTest.fmt("%s hit %s for %.2f off the ground, still waiting for the smash",
                         a, b, hurt));
             }
-            float scale = CombatMath.chargeScale(wasSince, SmashTiming.MACE_ATTACK_SPEED);
-            // A fake player crits on any swing made while falling: Player_fakePlayerCritMixin takes the
-            // charge gate out of canCriticalAttack for bots, so only the fall decides the crit.
-            boolean crit = CombatMath.isCritical(true, false, false, false, false, false, true, false, true);
-            float raw = CombatMath.attackDamage((float) SmashTiming.MACE_BASE_DAMAGE,
-                    CombatMath.maceSmashBonus(wasFall, false, wasDensity), 0.0F, scale, crit);
+            boolean crit = CombatMath.isCritical(true, false, false, false, false, false, true, false,
+                    CombatMath.passesChargeGate(wasCharge));
+            float raw = CombatMath.attackDamage((float) wasBase, CombatMath.maceSmashBonus(wasFall, false, density),
+                    0.0F, wasCharge, crit);
             float armor = target.getArmorValue();
             float toughness = (float) target.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
-            float model = CombatMath.damageAfterDefences(raw, armor, toughness, wasBreach, 0.0F);
+            float model = CombatMath.damageAfterDefences(raw, armor, toughness, breach, 0.0F);
             if (hurt < model * INVULNERABLE_SHARE)
             {
                 // The dummy was still inside the invulnerability window of an earlier hit, so this swing
@@ -185,10 +180,12 @@ final class MaceScenarios
             }
             boolean ok = Math.abs(hurt - model) <= model * DAMAGE_TOLERANCE;
             return new Probe(ok, SelfTest.fmt(
-                    "%s fell %.2f blocks and hit %s for %.2f with a mace of density %d and breach %d at charge %.2f"
-                            + " against %.0f armour and %.0f toughness; CombatMath gives %.2f, a difference of %.2f"
-                            + " (%.1f%%), after %.1f of hits taken off the ground", a, wasFall, b, hurt, wasDensity,
-                    wasBreach, scale, armor, toughness, model, hurt - model, 100.0 * (hurt - model) / model, grounded[0]));
+                    "%s fell %.2f blocks and hit %s for %.2f with a mace of density %d and breach %d, off a base damage"
+                            + " of %.1f at charge %.2f, which the game counts as %s, against %.0f armour and %.0f toughness;"
+                            + " CombatMath gives %.2f, a difference of %.2f (%.1f%%), after %.1f of hits taken off the"
+                            + " ground", a, wasFall, b, hurt, density, breach, wasBase, wasCharge,
+                    crit ? "a critical hit" : "no critical hit", armor, toughness, model, hurt - model,
+                    100.0 * (hurt - model) / model, grounded[0]));
         });
     }
 
@@ -221,6 +218,10 @@ final class MaceScenarios
                 SelfTest.shieldKit(b).forEach(command -> SelfTest.run(server, command));
                 SelfTest.run(server, SelfTest.cmd(b + " equip chest minecraft:netherite_chestplate"));
                 SelfTest.run(server, SelfTest.cmd(b + " use continuous"));
+                // The smash is read off the health it takes, and one out of a whole launch is worth more than
+                // the twenty a player has: the holder would be dead and back on its feet at full health before
+                // anything looked at it, and a smash that killed it would read as no smash at all.
+                topUp(server, b);
                 phase[0] = 1;
                 held[0] = 0;
                 return new Probe(false, SelfTest.fmt("%s is raising its shield", b));
@@ -237,6 +238,10 @@ final class MaceScenarios
                 }
                 maceBot(server, a, "skilled");
                 phase[0] = 2;
+                // The shield was seen up on this very tick, which is what let the bot loose. A bot that takes
+                // it down on its first tick leaves nothing for the next look to see, so that is recorded here
+                // rather than waited for.
+                wasBlocking[0] = true;
                 return new Probe(false, SelfTest.fmt("%s is holding its shield up against %s", b, a));
             }
             if (target.isBlocking())
@@ -328,8 +333,11 @@ final class MaceScenarios
                 // world is not, since the bot has to keep seeing what it launched at.
                 SelfTest.run(server, "tp " + b + " " + SelfTest.coords(dummy.add(0.0D, OUT_OF_ARC, 0.0D)));
                 // And it stays there. A dummy let go fourteen blocks up falls straight back into the arc, onto
-                // the bot that launched at it, which is a hit rather than the miss this scenario is about.
-                SelfTest.run(server, "data merge entity " + b + " {NoGravity:1b,Motion:[0.0d,0.0d,0.0d]}");
+                // the bot that launched at it, which is a hit rather than the miss this scenario is about. It is
+                // held up on the entity itself: the data command only takes a player where Carpet lets it.
+                ServerPlayer held = SelfTest.player(server, b);
+                held.setNoGravity(true);
+                held.setDeltaMovement(Vec3.ZERO);
                 lifted[0] = true;
                 return SelfTest.pending(SelfTest.fmt("%s is %.2f blocks up and %s is out of the arc", a,
                         apex[0] - origin.y, b));
@@ -362,10 +370,9 @@ final class MaceScenarios
         int[] losses = {0};
         int[] down = {0};
         int[] downSword = {0};
-        float[] lastHealth = {20.0F};
-        float[] lastSword = {20.0F};
         float[] maceHits = {0.0F};
         float[] swordHits = {0.0F};
+        StringBuilder rounds = new StringBuilder();
         Probe[] verdict = {null};
         return new Scenario(DUELS * DUEL_TICKS + 900, List.of(), List.of(), server ->
         {
@@ -402,16 +409,15 @@ final class MaceScenarios
             {
                 return SelfTest.pending(SelfTest.fmt("waiting for the fighters of round %d to finish loading", round[0]));
             }
-            // A fake player is put back on its feet with full health a tick after a killing blow instead of
-            // lying down, so a round is scored on the knockdowns: the health sitting at its last heart.
-            // A fake player is put back on its feet with full health a tick after a killing blow, and the
-            // respawn is over before the scenario looks again, so a knockdown is the health jumping back up.
+            // A fake player is put back on its feet a tick after a killing blow instead of lying down, so a
+            // knockdown is read off the tick the fighter died on. Its health is no guide: on a peaceful server a
+            // player heals a point every twenty ticks on top of what its food gives it, the two land on the same
+            // tick often enough, and a health that is two points up on the tick before is not a fighter that
+            // went down.
             float maceHealth = mace.getHealth();
             float swordHealth = sword.getHealth();
-            if (maceHealth - lastHealth[0] > KNOCKDOWN_JUMP) down[0]++;
-            if (swordHealth - lastSword[0] > KNOCKDOWN_JUMP) downSword[0]++;
-            lastHealth[0] = maceHealth;
-            lastSword[0] = swordHealth;
+            if (down[0] < KNOCKDOWNS && died(mace)) down[0]++;
+            if (downSword[0] < KNOCKDOWNS && died(sword)) downSword[0]++;
             if (ticks[0]++ <= DUEL_TICKS && down[0] < KNOCKDOWNS && downSword[0] < KNOCKDOWNS)
             {
                 return SelfTest.pending(SelfTest.fmt("round %d after %d ticks: the mace bot has %.1f health and %d"
@@ -423,22 +429,33 @@ final class MaceScenarios
             // before both sides are put back on their feet has to be judged on.
             float dealt = (float) SelfTest.stats(mace).damageDealt;
             float taken = (float) SelfTest.stats(mace).damageTaken;
+            String outcome;
             if (downSword[0] > down[0])
             {
                 wins[0]++;
+                outcome = "won by knockout";
             }
             else if (down[0] > downSword[0])
             {
                 losses[0]++;
+                outcome = "lost by knockout";
             }
             else if (dealt > taken * TRADE_MARGIN)
             {
                 wins[0]++;
+                outcome = "won on damage";
             }
             else if (taken > dealt * TRADE_MARGIN)
             {
                 losses[0]++;
+                outcome = "lost on damage";
             }
+            else
+            {
+                outcome = "drawn";
+            }
+            rounds.append(SelfTest.fmt("%s%s in %d ticks, %.0f dealt and %.0f taken", rounds.length() > 0 ? "; " : "",
+                    outcome, ticks[0] - 1, dealt, taken));
             maceHits[0] += (float) SelfTest.stats(mace).damageDealt;
             swordHits[0] += (float) SelfTest.stats(sword).damageDealt;
             SelfTest.run(server, SelfTest.cmd(maceName + " disconnect"));
@@ -447,15 +464,13 @@ final class MaceScenarios
             ticks[0] = 0;
             down[0] = 0;
             downSword[0] = 0;
-            lastHealth[0] = 20.0F;
-            lastSword[0] = 20.0F;
             setUp[0] = false;
             if (round[0] >= DUELS)
             {
                 verdict[0] = new Probe(wins[0] >= DUELS_TO_WIN, SelfTest.fmt(
                         "the expert mace bot won %d of %d rounds against the expert sword bot in netherite, %d went the"
                                 + " other way and the rest ran out of time; it put %.0f damage into the sword bot and took"
-                                + " %.0f", wins[0], DUELS, losses[0], maceHits[0], swordHits[0]));
+                                + " %.0f; the rounds: %s", wins[0], DUELS, losses[0], maceHits[0], swordHits[0], rounds));
             }
             return SelfTest.pending(SelfTest.fmt("%d of %d rounds won so far", wins[0], DUELS));
         });
@@ -491,6 +506,12 @@ final class MaceScenarios
         }
         SelfTest.run(server, "bot duel " + maceName + " " + swordName);
         return true;
+    }
+
+    /** Whether a fighter of the round has died since it was spawned for it. */
+    private static boolean died(ServerPlayer fighter)
+    {
+        return fighter instanceof EntityPlayerMPFake fake && fake.diedTick() != Long.MIN_VALUE;
     }
 
     private static String fighter(int round, String side)

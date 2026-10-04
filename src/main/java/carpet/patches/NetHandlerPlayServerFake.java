@@ -40,13 +40,18 @@ public class NetHandlerPlayServerFake extends ServerGamePacketListenerImpl
             awaiting = position;
         }
         // A real client applies the motion a hit sends it. A fake player has none, so the velocity the
-        // attacker knocked it back with is kept and applied by its own tick.
+        // attacker knocked it back with is kept and applied by its own tick. The packet names the entity it
+        // moves, and a client only moves that one: this listener is also sent the motion of every entity the
+        // player is tracking, a fighter that jumps or is thrown by a burst next to it among them, and none of
+        // that is this player's to take.
         if (packetIn instanceof ClientboundSetEntityMotionPacket motion
                 && player instanceof EntityPlayerMPFake fake)
         {
+            //~ if >=26.1 'getId()' -> 'id()'
+            int moved = motion.id();
             //~ if >=26.1 'getMovement()' -> 'movement()'
             Vec3 velocity = motion.movement();
-            if (fake.isKnockback(velocity))
+            if (moved == player.getId() && fake.isKnockback(velocity))
             {
                 fake.setPendingKnockback(velocity);
             }

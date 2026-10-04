@@ -39,10 +39,7 @@ public class CarpetPvpPlugin extends JavaPlugin
             "update_suppression_block", "stackable_shulker_boxes", "structure_block_ignored", "persistent_parrots",
             "lag_free_spawning", "interaction_updates", "punish_wrong_tool_hits", "scarpet_item_use_events",
             "sculk_sensor_range", "summon_natural_lightning", "explosion_state_leak", "scarpet_world_data",
-            "tick_synced_world_borders",
-            // The mace model assumes the critical hit the fake player mixin grants a bot on any falling
-            // swing; without it the style's plans, and the damage it then deals, are a different thing.
-            "mace_smash_damage", "mace_no_fall_damage_on_miss");
+            "tick_synced_world_borders");
 
     private BukkitTask tickTask;
 

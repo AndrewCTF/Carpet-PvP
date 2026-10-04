@@ -1,5 +1,6 @@
 package carpet.pvp.mace;
 
+import carpet.pvp.sim.CombatMath;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
@@ -7,6 +8,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
@@ -39,10 +41,12 @@ public final class MaceGear
     private final Holder<Enchantment> density;
     private final Holder<Enchantment> breach;
     private final Holder<Enchantment> windBurst;
+    private final Holder<Enchantment> protection;
 
     private int densityMace = -1;
     private int breachMace = -1;
     private int plainMace = -1;
+    private int burstMace = -1;
     private int axe = -1;
     private int sword = -1;
     private int charge = -1;
@@ -60,6 +64,7 @@ public final class MaceGear
         density = holder(registries, "density");
         breach = holder(registries, "breach");
         windBurst = holder(registries, "wind_burst");
+        protection = holder(registries, "protection");
         refresh();
     }
 
@@ -69,6 +74,7 @@ public final class MaceGear
         densityMace = -1;
         breachMace = -1;
         plainMace = -1;
+        burstMace = -1;
         axe = -1;
         sword = -1;
         charge = -1;
@@ -90,7 +96,11 @@ public final class MaceGear
                 int dense = level(stack, density);
                 int breachy = level(stack, breach);
                 int burst = level(stack, windBurst);
-                burstLevel = Math.max(burstLevel, burst);
+                if (burst > burstLevel)
+                {
+                    burstMace = slot;
+                    burstLevel = burst;
+                }
                 if (dense > 0)
                 {
                     densityMace = slot;
@@ -155,6 +165,12 @@ public final class MaceGear
     public int burstLevel()
     {
         return burstLevel;
+    }
+
+    /** Slot of the mace that carries Wind Burst, or -1 when none of them does. */
+    public int burstSlot()
+    {
+        return burstMace;
     }
 
     /** Slot of the Breach mace, or -1 when the kit has none. */
@@ -309,6 +325,21 @@ public final class MaceGear
     public boolean chargerIsAxe()
     {
         return chargerSlot() == axe;
+    }
+
+    /**
+     * What the Protection on everything a fighter wears takes off a hit, as the game's protection factor. The
+     * armour value says nothing about it, and against a full set of Protection IV it is nearly two thirds of
+     * every hit, which is the difference between a ground swing that is worth throwing and one that is not.
+     */
+    public float protection(LivingEntity fighter)
+    {
+        int levels = 0;
+        for (EquipmentSlot slot : EquipmentSlot.values())
+        {
+            levels += level(fighter.getItemBySlot(slot), protection);
+        }
+        return CombatMath.epf(levels, 0, false);
     }
 
     /** The base damage a swing charged in this slot carries, which is the item's own attribute. */

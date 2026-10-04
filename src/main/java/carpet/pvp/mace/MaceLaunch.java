@@ -28,6 +28,10 @@ public final class MaceLaunch
     public static final double HEIGHT_SLACK = 0.9;
     /** Ticks a launch is up and down again, which is how long a smash has to be waited for. */
     public static final int ARC_TICKS = 26;
+    /** Speed a wind charge leaves the hand at, the power WindChargeItem.use shoots it with. */
+    public static final double CHARGE_SPEED = 1.5;
+    /** Longest a thrown charge is followed on its way down. */
+    private static final int BURST_TICKS = 12;
 
     private MaceLaunch()
     {
@@ -52,6 +56,39 @@ public final class MaceLaunch
             apex = Math.max(apex, sim.a.y);
         }
         return apex;
+    }
+
+    /**
+     * How far above the ground a fighter's feet are at the moment a wind charge it throws straight down this
+     * tick bursts, or -1 when the fighter is on its feet before the charge gets there.
+     *
+     * <p>The charge leaves from eye height with the thrower's own sinking speed added to it and keeps that
+     * speed, since a wind charge has no gravity and no drag. It does not move on the tick it is thrown: the game
+     * ticks a new entity from the next tick on, and after the fighter that threw it. So a fighter that touches
+     * down on the same tick the charge reaches the ground has landed first, and the burst then goes off under
+     * its feet as if it had been thrown from the ground.</p>
+     */
+    public static double burstGap(double height, double vy)
+    {
+        double charge = height + DuelSim.EYE_HEIGHT;
+        double chargeSpeed = CHARGE_SPEED - Math.min(vy, 0.0);
+        double feet = height + vy;
+        double speed = (vy - DuelSim.GRAVITY) * DuelSim.VERTICAL_DRAG;
+        for (int tick = 0; tick < BURST_TICKS; tick++)
+        {
+            if (feet <= 0.0)
+            {
+                return -1.0;
+            }
+            feet += speed;
+            speed = (speed - DuelSim.GRAVITY) * DuelSim.VERTICAL_DRAG;
+            charge -= chargeSpeed;
+            if (charge <= 0.0)
+            {
+                return feet <= 0.0 ? -1.0 : feet;
+            }
+        }
+        return feet;
     }
 
     /**

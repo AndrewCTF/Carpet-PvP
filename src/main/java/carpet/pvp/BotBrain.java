@@ -27,6 +27,8 @@ public final class BotBrain
 {
     /** Number of ticks a revenge target stays "hot" after the last hit taken. */
     private static final long REVENGE_MEMORY_TICKS = 100L;
+    /** How many target ranges away the fighter a bot is already fighting may get before the bot lets it go. */
+    private static final double KEEP_RANGES = 2.0D;
 
     private final EntityPlayerMPFake bot;
     private final Perception perception = new Perception();
@@ -259,7 +261,24 @@ public final class BotBrain
         {
             return null;
         }
-        return TargetSelector.select(bot, cfg);
+        LivingEntity selected = TargetSelector.select(bot, cfg);
+        return selected != null ? selected : held(cfg);
+    }
+
+    /**
+     * The fighter the bot is already fighting, kept while nobody is inside its target range. A fight does not end
+     * because one side was thrown out of the range it would start one in: a mace's Wind Burst puts its wielder
+     * more than twenty blocks over the target it has just hit, and it comes down on the same target.
+     */
+    private LivingEntity held(BotPvpConfig cfg)
+    {
+        LivingEntity current = target();
+        if (current == null || !current.isAlive() || !TargetSelector.isValidTarget(bot, cfg, current))
+        {
+            return null;
+        }
+        double keep = cfg.targetRange * KEEP_RANGES;
+        return bot.distanceToSqr(current) <= keep * keep ? current : null;
     }
 
     /** The difficulty the current style was built for. */

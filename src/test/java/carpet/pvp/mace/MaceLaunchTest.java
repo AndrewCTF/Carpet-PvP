@@ -71,6 +71,32 @@ class MaceLaunchTest
     }
 
     @Test
+    void aChargeThrownLowBurstsUnderFeetThatAreAlreadyDown()
+    {
+        // Two and a bit blocks up and sinking at a launch's speed: the fighter is on its feet before the
+        // charge is, so the burst is the next launch rather than a break in the fall.
+        assertEquals(-1.0, MaceLaunch.burstGap(2.3, -0.9), 0.0);
+        assertEquals(-1.0, MaceLaunch.burstGap(1.07, -0.3), 0.0);
+    }
+
+    @Test
+    void aChargeThrownFromFurtherUpBurstsBeforeTheFeetTouch()
+    {
+        double gap = MaceLaunch.burstGap(4.0, -0.9);
+        assertTrue(gap >= 0.0 && gap < 0.5, "four blocks up the burst catches the feet just off the ground: " + gap);
+        assertTrue(MaceLaunch.burstGap(6.0, -0.9) > gap, "and from higher up it goes off further under them");
+    }
+
+    @Test
+    void aLongFallHasToThrowItsChargeFromHigherUp()
+    {
+        // Out of twenty blocks the feet outrun a charge thrown from eight: it has to leave the hand at ten.
+        assertEquals(-1.0, MaceLaunch.burstGap(8.0, -1.7), 0.0);
+        double gap = MaceLaunch.burstGap(10.0, -1.7);
+        assertTrue(gap > 0.0 && gap < 3.0, "inside the three blocks a fall is free from: " + gap);
+    }
+
+    @Test
     void theSmashGateIsTheOnesTheModelUses()
     {
         assertEquals(0.25, MaceLaunch.BURST_HEIGHT, 0.0);

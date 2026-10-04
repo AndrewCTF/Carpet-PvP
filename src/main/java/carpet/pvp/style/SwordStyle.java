@@ -178,8 +178,11 @@ public final class SwordStyle implements BotStyle
         if (horizontal(me, seen) > Math.min(cfg.plannerRange, MELEE_REACH + horizon * SPRINT_BLOCKS_PER_TICK))
         {
             // The body keeps the view on the target and swings nothing; the walk is driven after it, by us
-            // while the way is clear and by the navigation controller when it is not.
-            body.hold(now, target);
+            // while the way is clear and by the navigation controller when it is not. The shield comes down for
+            // it: the target is past the range a shield is held up against, and a shield that is up is a walk.
+            shielding = false;
+            body.tick(now, target, DuelSim.action(DuelSim.forward(lastAction), DuelSim.strafe(lastAction), false,
+                    DuelSim.sprint(lastAction), false), false);
             approach.run(cfg, target, now);
             techniques.tick();
             return;
