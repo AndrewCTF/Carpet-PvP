@@ -58,9 +58,11 @@ jobs:
             fi
             echo "matrix=$(jq -cn --arg v "$REQUESTED" '[$v]')" >> "$GITHUB_OUTPUT"
           else
-            echo "matrix=$(ls versions | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+            # The directories that end in -paper are the Paper plugin; it goes out with the mod of the same
+            # Minecraft version, not as a release of its own
+            echo "matrix=$(ls versions | grep -v -- '-paper$' | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
           fi
-          echo "latest=$(ls versions | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
+          echo "latest=$(ls versions | grep -v -- '-paper$' | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
 
   release:
     needs: versions
@@ -157,7 +159,11 @@ jobs:
           fi
 
       - name: Build
-        run: ./gradlew --no-daemon ":${{ matrix.minecraft }}:build" -x test
+        run: |
+          ./gradlew --no-daemon ":${{ matrix.minecraft }}:build" -x test
+          if [ -d "versions/${{ matrix.minecraft }}-paper" ]; then
+            ./gradlew --no-daemon ":${{ matrix.minecraft }}-paper:build" -x test
+          fi
 
       - name: Identify built artifacts
         id: artifacts
@@ -190,8 +196,22 @@ jobs:
             echo "has_sources=false" >> "$GITHUB_OUTPUT"
           fi
 
+          # The Paper plugin of the same Minecraft version, where this tree has one
+          PAPER_LIBS="versions/${{ matrix.minecraft }}-paper/build/libs"
+          PAPER_JAR=""
+          if [ -d "$PAPER_LIBS" ]; then
+            PAPER_JAR=$(find "$PAPER_LIBS" -name "*paper*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
+            if [ -z "$PAPER_JAR" ]; then
+              echo "::error::No Paper plugin jar found in $PAPER_LIBS"
+              exit 1
+            fi
+          fi
+          echo "paper_jar=$PAPER_JAR" >> "$GITHUB_OUTPUT"
+          echo "paper_jar_name=$(basename "$PAPER_JAR")" >> "$GITHUB_OUTPUT"
+
           echo "=== Artifacts ==="
           ls -lh "$LIBS"
+          [ -d "$PAPER_LIBS" ] && ls -lh "$PAPER_LIBS" || true
 
       - name: Generate release notes
         id: notes
@@ -218,6 +238,10 @@ jobs:
             echo "1. Install [Fabric Loader](https://fabricmc.net/use/) (${{ steps.version.outputs.fabric_loader }}+) for Minecraft ${{ steps.version.outputs.minecraft_version }}"
             echo "2. Install [Fabric API](https://modrinth.com/mod/fabric-api) (${{ steps.version.outputs.fabric_api }}+)"
             echo "3. Place \`${{ steps.artifacts.outputs.main_jar_name }}\` in your \`mods\` folder"
+            if [ -n "${{ steps.artifacts.outputs.paper_jar_name }}" ]; then
+              echo ""
+              echo "On a Paper server, put \`${{ steps.artifacts.outputs.paper_jar_name }}\` in the \`plugins\` folder instead: it carries the bots without the rest of the mod."
+            fi
             echo ""
             echo "---"
             echo "*Built from [\`$(git rev-parse --short HEAD)\`](https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)) on $(date -u +"%Y-%m-%d %H:%M UTC")*"
@@ -238,6 +262,7 @@ jobs:
           files: |
             ${{ steps.artifacts.outputs.main_jar }}
             ${{ steps.artifacts.outputs.sources_jar }}
+            ${{ steps.artifacts.outputs.paper_jar }}
           fail_on_unmatched_files: false
 
       - name: Publish to Modrinth

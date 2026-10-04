@@ -7,7 +7,34 @@ on:
     branches: [ "**" ]
 
 jobs:
-  build:
+  # One Stonecutter node per directory under versions/: the Fabric mod per Minecraft version, and the
+  # Paper plugin per Minecraft version in the directories that end in -paper.
+  nodes:
+    runs-on: ubuntu-latest
+    outputs:
+      fabric: ${{ steps.list.outputs.fabric }}
+      paper: ${{ steps.list.outputs.paper }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: List the build nodes
+        id: list
+        run: |
+          for dir in versions/*/; do
+            node="${dir%/}"
+            if [ ! -f "$node/gradle.properties" ]; then
+              echo "::error::$node has no gradle.properties"
+              exit 1
+            fi
+          done
+          fabric=$(ls versions | grep -v -- '-paper$' | tr '\n' ' ')
+          paper=$(ls versions | grep -- '-paper$' | jq -R . | jq -sc .)
+          echo "fabric=$fabric" >> "$GITHUB_OUTPUT"
+          echo "paper=$paper" >> "$GITHUB_OUTPUT"
+          echo "Fabric: $fabric"
+          echo "Paper: $paper"
+
+  fabric:
+    needs: nodes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +47,6 @@ jobs:
             exit 1
           fi
           echo "version=$JAVA_VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Set up JDK ${{ steps.java.outputs.version }}
         uses: actions/setup-java@v4
         with:
@@ -33,24 +59,64 @@ jobs:
         run: |
           java --version
           ./gradlew --version
-      - name: List Minecraft versions
+      - name: Build every node and run the unit tests
+        run: ./gradlew --no-daemon build
+      - name: Self-test the Fabric servers
         run: |
-          # One Stonecutter node per directory under versions/, and the self-test runs one server each
-          for dir in versions/*/; do
-            version="${dir%/}"
-            if [ ! -f "$version/gradle.properties" ]; then
-              echo "::error::$version has no gradle.properties"
-              exit 1
-            fi
-            echo "building and self-testing $version"
-          done
-      - name: Build, test and self-test every Minecraft version
-        run: ./gradlew --no-daemon build runSelfTest
+          tasks=""
+          for node in ${{ needs.nodes.outputs.fabric }}; do tasks="$tasks :$node:runSelfTest"; done
+          ./gradlew --no-daemon $tasks
+      - name: Check the client mixins
+        # The dev client needs a display; the task starts its own Xvfb with Mesa's software renderer.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+          ./gradlew --no-daemon runClientCheck
       - name: Upload self-test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: selftest-reports
+          name: selftest-reports-fabric
+          path: |
+            run/selftest-*/selftest-report.json
+            run/selftest-*/logs/latest.log
+            run/*/clientCheck/logs/latest.log
+          if-no-files-found: ignore
+
+  # A Paper self-test is one server for a long time, so each node gets a runner of its own.
+  paper:
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.nodes.outputs.paper) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Java version
+        id: java
+        run: |
+          JAVA_VERSION=$(grep -E '^\s*java_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          if [ -z "$JAVA_VERSION" ]; then
+            echo "::error::Could not determine Java version from gradle.properties"
+            exit 1
+          fi
+          echo "version=$JAVA_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Set up JDK ${{ steps.java.outputs.version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.java.outputs.version }}
+          cache: gradle
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      - name: Self-test the Paper plugin on ${{ matrix.node }}
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:runSelfTest"
+      - name: Upload self-test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-reports-${{ matrix.node }}
           path: |
             run/selftest-*/selftest-report.json
             run/selftest-*/logs/latest.log
