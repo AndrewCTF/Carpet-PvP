@@ -110,6 +110,54 @@ final class DrillScenarios
         });
     }
 
+    /**
+     * The stun-slam drill is about a shield, and the sword kit its bot is given carries none: the drill
+     * hands the bot its own, and the bot has to be standing behind it.
+     */
+    static Scenario stunslamShield(String a, String b, String c, Vec3 origin)
+    {
+        String[] step = {"setup"};
+        return new Scenario(400, List.of(new Bot(a, origin)), List.of(), SelfTest.NOTHING, server ->
+        {
+            ServerPlayer player = SelfTest.player(server, a);
+            if ("setup".equals(step[0]))
+            {
+                if (SelfTest.warmingUp(server, a))
+                {
+                    return SelfTest.pending("waiting for " + a + " to finish loading");
+                }
+                SelfTest.run(server, "give " + a + " minecraft:diamond_axe");
+                SelfTest.run(server, "give " + a + " minecraft:mace");
+                step[0] = "start";
+                return SelfTest.pending("the player has an axe and a mace");
+            }
+            if ("start".equals(step[0]))
+            {
+                if (MatchScenarios.asPlayer(server, a, "bot drill stunslam") != 1)
+                {
+                    return new Probe(false, "/bot drill stunslam was refused to a player carrying an axe and a mace");
+                }
+                step[0] = "run";
+                return SelfTest.pending("the stun-slam drill has started");
+            }
+            if (!Drills.running(player))
+            {
+                return new Probe(false, "the drill ended before its bot raised a shield");
+            }
+            ServerPlayer bot = server.getPlayerList().getPlayerByName(Drills.runningBotName(player));
+            if (bot == null || !bot.isBlocking())
+            {
+                return SelfTest.pending("waiting for the drill bot to raise its shield");
+            }
+            boolean shield = bot.getOffhandItem().is(Items.SHIELD);
+            boolean sword = bot.getMainHandItem().is(Items.DIAMOND_SWORD);
+            Drills.stop(server, player);
+            return new Probe(shield && sword && !Drills.running(player), SelfTest.fmt(
+                    "the drill bot stands behind a raised shield (shield in the off hand: %s) with the sword kit's sword in hand (%s), and the drill stops when asked",
+                    shield, sword));
+        });
+    }
+
     /** Turns the view of the player onto what it is looking at. */
     private static void look(ServerPlayer player, ServerPlayer bot)
     {
