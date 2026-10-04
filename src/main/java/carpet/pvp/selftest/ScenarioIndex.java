@@ -25,5 +25,8 @@ final class ScenarioIndex
     {
         SCENARIOS.put("bot_death_respawn", LifecycleScenarios::deathRespawn);
         SCENARIOS.put("bot_spawn_kit", BotScenarios::spawnKit);
+        SCENARIOS.put("smp_heals", SmpScenarios::heals);
+        SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
+        SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
     }
 }

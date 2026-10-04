@@ -9,13 +9,17 @@
     { "item": "minecraft:ender_pearl", "count": 3, "slot": 5 },
     { "item": "minecraft:experience_bottle", "count": 16, "slot": 6 },
     { "item": "minecraft:cobweb", "count": 3, "slot": 7 },
-    { "item": "minecraft:bucket", "count": 1, "slot": 8 },
+    { "item": "minecraft:water_bucket", "count": 1, "slot": 8 },
     { "item": "minecraft:totem_of_undying", "count": 1, "slot": 9 },
     { "item": "minecraft:totem_of_undying", "count": 1, "slot": 10 },
-    { "item": "minecraft:netherite_helmet", "slot": "head", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
-    { "item": "minecraft:netherite_chestplate", "slot": "chest", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
-    { "item": "minecraft:netherite_leggings", "slot": "legs", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
-    { "item": "minecraft:netherite_boots", "slot": "feet", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_helmet", "slot": 11, "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_chestplate", "slot": 12, "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_leggings", "slot": 13, "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_boots", "slot": 14, "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_helmet", "slot": "head", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_chestplate", "slot": "chest", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_leggings", "slot": "legs", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
+    { "item": "minecraft:netherite_boots", "slot": "feet", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 }, { "id": "minecraft:mending", "level": 1 } ] },
     { "item": "minecraft:shield", "slot": "offhand" }
   ]
 }

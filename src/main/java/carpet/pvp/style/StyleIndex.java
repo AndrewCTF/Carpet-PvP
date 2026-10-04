@@ -36,6 +36,21 @@ public final class StyleIndex
         KITS.put(CombatStyle.MACE, "mace");
         KITS.put(CombatStyle.CRYSTAL, "crystal");
         KITS.put(CombatStyle.ANCHOR, "crystal");
+
+        STYLES.put(CombatStyle.SMP, SmpStyle::new);
+        OPTIONS.put("smp.eat", "true");
+        OPTIONS.put("smp.splashheal", "true");
+        OPTIONS.put("smp.buff", "true");
+        OPTIONS.put("smp.totem", "true");
+        OPTIONS.put("smp.armor", "true");
+        OPTIONS.put("smp.mend", "true");
+        OPTIONS.put("smp.pearl", "true");
+        OPTIONS.put("smp.web", "true");
+        OPTIONS.put("smp.bucket", "true");
+        OPTIONS.put("smp.guard", "true");
+        OPTIONS.put("smp.retotem", "20");
+        OPTIONS.put("smp.buffwindow", "240");
+        OPTIONS.put("smp.peelback", "12");
     }
 
     public static boolean has(CombatStyle style)
