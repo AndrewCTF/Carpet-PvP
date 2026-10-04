@@ -52,7 +52,7 @@ All of these are behind `commandBot`, which is `"true"` by default.
 
 | Command | Permission | What it does | Details |
 |---|---|---|---|
-| `/carpetlogic ...` | `commandCarpetLogic` | `status`, `open`, `programs`, `programs run`, `programs stop`, `bots`. Runs bot programs and opens the web editor. | [CarpetLogic.md](CarpetLogic.md) |
+| `/carpetlogic ...` | `commandCarpetLogic` | `status`, `open`, `password`, `programs`, `programs run`, `programs stop`, `bots`. Runs bot programs, opens the web editor, and gives an admin the link that sets their password for it. | [CarpetLogic.md](CarpetLogic.md) |
 
 ## Settings
 

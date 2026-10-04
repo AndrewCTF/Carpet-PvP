@@ -104,7 +104,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-There are **107** of them: 53 built into `SelfTest.java` and 54 more registered in
+There are **112** of them: 52 built into `SelfTest.java` and 60 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
@@ -196,20 +196,22 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `logic_on_kill_event` | 1000 | A `when_kill` handler runs when the game reports the kill. |
 | `logic_totem_pop_event` | 1000 | A `when_totem_pop` handler runs only after the bot's own totem has actually popped, and the bot is back at full health afterwards. |
 | `logic_stop_program_stops_fight` | 1000 | `stopProgram` in the middle of a fight leaves the program gone and the bot holding no input, with no target and not navigating. |
+| `logic_admin_login` | 15000 | The web editor's admin sign-in over HTTP: with `carpetLogicAdminLogin` off its routes refuse; with it on an operator sets a password through the console's link, signs in and changes `carpetLogicMaxPrograms` with `POST /api/settings`, and the rule really has the new value. A second use of the link, a wrong password, a token from `/carpetlogic open`, a value the rule's validator refuses and the operator once deopped are all refused. It deops its operator and puts both rules back. |
 
 ### The bots
 
 | Scenario | Ticks | What it proves |
 |---|---|---|
 | `bot_spawn_kit` | 200 | `/bot spawn <n> mace expert` hands the bot the mace kit, turns combat on, applies `EXPERT`, refuses an unknown option and accepts the style name `sword` as `MELEE`. |
+| `bot_stop_stats_trace` | 600 | An expert sword bot fights the player in front of it and is then asked about: `/bot stats` and `/bot trace` both answer, `/bot stop` succeeds, and the fighter really has stopped. |
 | `sword_hits_require_aim` | 700 | A bot with its back to the target lands no hit until its view is within 30° of it, and every rotation step it takes is a whole mouse click. |
-| `sword_duel_damage` | 1000 | An expert sword bot against a passive target lands at least two hits, one of them a crit and one a sprint hit — which is what the sprint-reset W-tap buys. |
 | `sword_shield_break` | 1000 | A skilled bot breaks a shield that is being held up and hurts its owner. |
 | `sword_difficulty_order` | 2400 | Across six sequential expert-against-beginner duels the expert preset wins at least five. |
 | `sword_damage_rate` | 520 | An expert bot against a passive, non-regenerating target in full diamond reaches an 80% hit rate over 320 ticks and drives the target's lowest health to 8 or below, reporting every miss kind and every planner tick. |
 | `sword_ladder` | 1280 | Over twelve concurrent duels, four rungs of three, every preset wins at least two of its three duels against the preset below it. |
 | `sword_catches_runner` | 500 | An expert bot catches a target walking away in a straight line: it closes to 3.5 blocks or less with at least two hits, sprinting a substantial share of the time. |
 | `sword_shield_play` | 900 | With shield play on the bot has its shield up on at least ten ticks and takes at most 0.8× the damage of the identical fight with shield play off — at the cost of its own hits. |
+| `sword_only` | 600 | Two bots with the built-in sword kit fight each other for 300 ticks, and on every tick each has its sword in the main hand, nothing in the off hand, nothing else in its inventory and is not using an item. |
 | `sword_settings` | 1200 | With a diamond sword in slot 0 and a netherite axe in slot 2: `autoWeapon` off holds the sword, `autoWeapon` with `preferSword` on still holds it, `preferSword` off switches to the axe, and `bhop` on leaves the bot off the ground on more ticks than `bhop` off. |
 | `sword_hits_passive_target` | 1400 | All five difficulty presets, run at once 60 blocks apart, each land a first hit on a same-kit passive target within 500 ticks, after closing the 4.6-block gap themselves. |
 | `bot_budget` | 700 | With eight average bots in four duels `botSimBudget` is never exceeded; cutting it to 64 starves fighter-ticks, restoring it makes the bots plan again, and the full budget produced no starved ticks at all. |
@@ -246,7 +248,9 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `mace_smash_damage` | 900 | A smash out of a measured fall does within 15% of what `CombatMath` gives for that fall, that enchantment and that armour. |
 | `mace_stun_slam` | 900 | An axe takes a raised shield down and the mace hit inside the following hundred-tick window takes at least 2.5 health off what the axe left. |
 | `mace_no_fall_damage_on_miss` | 900 | A launch whose target is lifted out of the arc still comes down harmless: the bot spends a second wind charge and lands on full health. |
-| `mace_attribute_swap_probe` | 600 | Whether this Minecraft version lets a mace hit carry an attack cooldown collected under another item: two swings with the same wait, one of them swapping item on the tick of the hit. Passes either way and records the answer the style obeys. |
+| `mace_swap_probe` | 700 | Whether this Minecraft version lets a mace hit carry an attack cooldown collected under another item: the same smash out of the same fall twice, once with the mace in hand and once with it swapped in on the tick of the swing. Passes either way and records the answer the style obeys. |
+| `mace_breach_swap_probe` | 500 | The same two hits on the ground, with the breach mace: in hand, and swapped in on the tick of the swing. Passes either way and records what the swap is worth. |
+| `fake_player_fall_distance` | 400 | A fake player dropped eight blocks with no velocity reads the fall distance a real player reads on the way down, and takes the fall damage `LivingEntity.calculateFallDamage` gives for it. Everything a mace is priced off is that number. |
 | `mace_duel` | 4500 | The expert mace bot against the expert sword bot in netherite, alternating sides over six rounds: a round is a knockout or, failing that, a damage trade of at least 1.25×. The mace bot has to win four. |
 
 ### The smp style
@@ -273,6 +277,7 @@ The built-in list runs first, in the order below, and the index scenarios run af
 |---|---|---|
 | `drill_aim_scores` | 900 | `bot drill aim` is accepted with a diamond sword in hand, the run ends with at least one hit, and the player has their sword back. |
 | `drill_skips_without_needs` | 400 | Empty-handed, `bot drill stunslam`, `bot drill retotem` and an unknown drill name are all refused, no drill starts, and the player still holds nothing new. |
+| `drill_stunslam_shield` | 400 | The stun-slam drill gives its bot a shield of its own, since the sword kit carries none: the bot stands behind a raised shield with the kit's sword in hand, and the drill stops when asked. |
 
 ### `/auto-setup`
 

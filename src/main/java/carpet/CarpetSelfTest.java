@@ -6,6 +6,7 @@ import carpet.logic.program.BotProgram;
 import carpet.logic.program.ProgramExecutor.ProgramInfo;
 import carpet.logic.web.Api;
 import carpet.logic.web.AuthManager;
+import carpet.logic.web.WebServer;
 import carpet.pvp.selftest.SelfTest;
 import carpet.utils.SpawnReporter;
 import com.google.gson.Gson;
@@ -59,6 +60,10 @@ public final class CarpetSelfTest
         };
         SelfTest.botSnapshot = (server, name) -> new Api(server, CarpetLogic.INSTANCE)
                 .handle("GET", "/api/bots", CONSOLE_SESSION, "").body().toString();
+        SelfTest.webEditorUrl = () -> {
+            WebServer web = CarpetLogic.INSTANCE.getWebServer();
+            return web == null ? null : web.url();
+        };
         SelfTest.spawnAttempts = () -> SpawnReporter.spawn_attempts.isEmpty() ? 0L
                 : SpawnReporter.spawn_attempts.values().stream().mapToLong(Long::longValue).sum();
         SelfTest.explosionPositionLeaver = CarpetSelfTest::queueLeftoverPositions;

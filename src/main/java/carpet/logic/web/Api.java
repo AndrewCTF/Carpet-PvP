@@ -46,12 +46,19 @@ public class Api
 
     private final MinecraftServer server;
     private final CarpetLogic logic;
+    private final AdminRules rules;
     private final SecureRandom random = new SecureRandom();
 
     public Api(MinecraftServer server, CarpetLogic logic)
     {
+        this(server, logic, new CarpetAdminRules(server, logic));
+    }
+
+    public Api(MinecraftServer server, CarpetLogic logic, AdminRules rules)
+    {
         this.server = server;
         this.logic = logic;
+        this.rules = rules;
     }
 
     /**
@@ -62,6 +69,11 @@ public class Api
         if (session.owner() == null)
         {
             return null;
+        }
+        if (session.admin())
+        {
+            // An admin signed in with a password and need not be in the game, but must still be an admin.
+            return rules.isAdmin(session.owner()) ? null : "This account may no longer change Carpet rules";
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(session.owner());
         if (owner == null)
@@ -82,7 +94,10 @@ public class Api
         {
             return error(403, denied);
         }
-        if (!"GET".equals(method) && CarpetSettings.carpetLogicViewerMode)
+        // Viewer mode stops the editor from changing or running anything, but not an admin from changing
+        // settings: viewer mode is one of them. Who is an admin is the settings route's own question.
+        boolean changesSettings = "POST /api/settings".equals(method + " " + path) && rules.loginEnabled();
+        if (!"GET".equals(method) && rules.viewerMode() && !changesSettings)
         {
             return error(403, "The web editor is in viewer mode (carpetLogicViewerMode)");
         }
@@ -92,6 +107,7 @@ public class Api
             {
                 case "GET /api/status" -> ok(status(session));
                 case "GET /api/settings" -> ok(settings());
+                case "POST /api/settings" -> changesSettings ? changeSetting(parse(body), session) : error(404, "Unknown API endpoint");
                 case "GET /api/schema" -> ok(logic.getSchema().json());
                 case "GET /api/programs" -> ok(GSON.toJsonTree(logic.getProgramStorage().getAllPrograms()));
                 case "GET /api/presets" -> ok(GSON.toJsonTree(logic.getProgramStorage().getPresets()));
@@ -168,6 +184,8 @@ public class Api
         status.addProperty("version", CarpetSettings.carpetVersion);
         status.addProperty("user", session.ownerName());
         status.addProperty("viewerMode", CarpetSettings.carpetLogicViewerMode);
+        status.addProperty("admin", session.admin());
+        status.addProperty("adminLogin", rules.loginEnabled());
         status.addProperty("activeBots", logic.getBotManager().getBots().size());
         status.addProperty("runningPrograms", logic.getProgramExecutor().getRunningCount());
         status.addProperty("savedPrograms", logic.getProgramStorage().getCount());
@@ -194,7 +212,43 @@ public class Api
         settings.add("difficulties", GSON.toJsonTree(List.of(BotPvpConfig.difficulties())));
         settings.add("kits", GSON.toJsonTree(KitStore.of(server).names()));
         settings.add("combatOptions", GSON.toJsonTree(List.of(BotPvpConfig.keys())));
+        // What the Settings panel draws: every rule it shows, as the rule registry describes it.
+        settings.add("rules", rules.rules());
+        if (rules.locked() != null)
+        {
+            settings.addProperty("locked", rules.locked());
+        }
         return settings;
+    }
+
+    private Response changeSetting(JsonObject request, AuthManager.Session session)
+    {
+        if (!session.admin())
+        {
+            return error(403, "Only an admin who signed in with a password can change settings");
+        }
+        String rule = string(request, "rule");
+        String value = string(request, "value");
+        if (rule == null || value == null)
+        {
+            return error(400, "'rule' and 'value' must both be given");
+        }
+        AdminRules.Change change = rules.set(rule, value, session);
+        JsonObject result = new JsonObject();
+        result.addProperty("success", change.status() == 200);
+        if (change.status() != 200)
+        {
+            result.addProperty("error", change.message());
+        }
+        else if (change.message() != null)
+        {
+            result.addProperty("message", change.message());
+        }
+        if (change.rule() != null)
+        {
+            result.add("rule", change.rule());
+        }
+        return new Response(change.status(), result);
     }
 
     private Response saveProgram(JsonObject request)

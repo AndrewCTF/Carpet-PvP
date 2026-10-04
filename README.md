@@ -134,7 +134,8 @@ See [docs/Bots.md](docs/Bots.md#why-a-bot-behaves-like-a-player) and
 The same jar serves a browser editor on port 9876 that programs a bot as a graph of nodes: move,
 look, use, fight, equip a kit, run a command, branch on a condition, loop, wait for an event. A
 program can take a fight over from the combat AI and give it back when it stops. Ten presets ship
-with it. Programs are stored in the world folder.
+with it. Programs are stored in the world folder. A server can turn on an admin sign-in that lets its
+operators change rules from the editor's Settings panel.
 
 See [docs/CarpetLogic.md](docs/CarpetLogic.md).
 

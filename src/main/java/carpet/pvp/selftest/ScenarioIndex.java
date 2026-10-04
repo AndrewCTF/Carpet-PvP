@@ -82,5 +82,6 @@ final class ScenarioIndex
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
         SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
         SCENARIOS.put("bot_stop_stats_trace", BotCommandScenarios::fightingCommands);
+        SCENARIOS.put("logic_admin_login", AdminLoginScenarios::adminLogin);
     }
 }

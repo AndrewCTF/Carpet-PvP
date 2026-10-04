@@ -1382,6 +1382,16 @@ public class CarpetSettings
     @Rule(desc = "The CarpetLogic web editor can look at bots and programs but not change or run anything", category = CREATIVE)
     public static boolean carpetLogicViewerMode = false;
 
+    @Rule(
+            desc = "Offers an admin sign-in on the CarpetLogic web editor, which lets its Settings panel change rules",
+            extra = {
+                    "An admin is a player who may use /carpet; /carpetlogic password gives one a link to set a web password",
+                    "The editor speaks plain HTTP: put it behind a reverse proxy with TLS before offering it beyond localhost"
+            },
+            category = CREATIVE
+    )
+    public static boolean carpetLogicAdminLogin = false;
+
     @Rule(desc = "Maximum number of bot programs running at the same time", category = CREATIVE,
             validate = Validators.NonNegativeNumber.class)
     public static int carpetLogicMaxPrograms = 4;

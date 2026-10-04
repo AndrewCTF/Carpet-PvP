@@ -11,12 +11,56 @@ Two things are independent of each other:
 - **The web editor.** An HTTP server that serves a page, hands out the schema and takes programs
   back. Purely optional.
 
+## The editor
+
+![The editor with nothing on the canvas yet](images/carpetlogic-editor.png)
+
+The page is one screen:
+
+- **The node library** on the left lists every node under its category. Type in *Find a node*, or
+  press `/` anywhere, to search all of them by name, by category and by what they do; `Enter` adds the
+  first match. A node that is clicked goes after the node that is selected and is wired to it, so
+  clicking one after the other builds a chain from `Start`; a condition goes under the node that is
+  waiting for one. Dragging a node onto the canvas places it without wiring it.
+- **The canvas** in the middle is the program. While it holds nothing but `Start` it shows what to do
+  next and offers the first presets. Drag the background to pan, scroll to zoom, `F` or **Fit** to
+  bring the whole program into view.
+- **The run bar** under the canvas runs the program on the bot chosen there and stops it, and says
+  what that bot's program is doing: `Running · Patrol and Fight · PATROL`, or the error that ended it.
+- **The bots panel** on the right (`B`) spawns a bot and has a card for each one: health in hearts,
+  position, what it holds and fights, its program, and buttons to run on it, turn its combat AI on or
+  off, bring it to you, remove it, and set one combat option. **Matches** lists the finished fights.
+- **The console** at the bottom keeps what programs log and what went wrong. Shut, it shows the last
+  line; an error opens it.
+- **The top bar** holds the program (name, New, Open, Save, Undo, Redo, Clear), the connection,
+  **Settings** and who the session belongs to, with **Sign out**. Beside **Save** it says where the
+  program stands: `Not saved`, `Unsaved changes`, `Saving`, `Saved 12:51`, or `Save failed`, with the
+  reason in the console. Leaving the page with unsaved work asks first.
+
+| | |
+|---|---|
+| ![A preset on the canvas](images/carpetlogic-program.png) | ![The bots panel](images/carpetlogic-bots.png) |
+| ![Finding a node](images/carpetlogic-library.png) | ![Opening a preset](images/carpetlogic-open.png) |
+
+`?` in the top bar lists the keyboard shortcuts: `Ctrl+Enter` runs, `Ctrl+.` stops, `Ctrl+S`, `Ctrl+O`
+and `Ctrl+N` save, open and start a program, `Ctrl+Z` and `Ctrl+Y` undo and redo.
+
+In a window too narrow for all of it the bots panel lies over the canvas instead of beside it, and
+below 820 pixels the library does too and is called with **Nodes** or `/`.
+
+![The editor in a narrow window](images/carpetlogic-editor-narrow.png)
+
+A page that has lost the server says so in a bar under the top bar and keeps trying; one whose
+session has ended, or that never had one, shows how to get in instead of an editor that does nothing.
+
 ## The command
 
 ```
 /carpetlogic                       same as /carpetlogic status
 /carpetlogic status                web server URL, bot count, running programs, saved programs
 /carpetlogic open                  a link to the web editor, with a token
+/carpetlogic password              a link that sets your admin password for the web editor
+/carpetlogic password <player>     the same for another admin; console only
 /carpetlogic programs              list saved programs and their action counts
 /carpetlogic programs run <program> <bot>
 /carpetlogic programs stop <bot>
@@ -34,6 +78,17 @@ The whole command is behind the `commandCarpetLogic` rule, which is `"ops"` by d
 
 If the web server is not running the command says so, and the reason is in the server log. That
 happens when the port is taken, or when the Java runtime has no `jdk.httpserver` module.
+
+`/carpetlogic password` belongs to [the admin sign-in](#the-admin-sign-in) and is refused while
+`carpetLogicAdminLogin` is off. It never takes a password: it answers with a link to the page where
+one is set.
+
+- a player who may change Carpet rules gets the link in their own chat, as with `open`.
+- the console names the admin, `carpetlogic password Steve`, and is told the link to pass on. The
+  admin does not have to be online, but has to be one: "Steve may not change Carpet rules, so cannot
+  be an editor admin. Op them first".
+- a player who names somebody else is refused: "Only the server console can make a password link for
+  somebody else".
 
 ## Security
 
@@ -56,9 +111,10 @@ storage, the bot manager and the executor are separate from the HTTP server, so
 
 ### Tokens
 
-A token is the only credential the web server accepts.
+A token is the only credential the API accepts.
 
-- `/carpetlogic open` mints one: 32 random bytes, base64url, no padding.
+- `/carpetlogic open` mints one: 32 random bytes, base64url, no padding. The admin sign-in, where a
+  server has turned it on, mints the same kind of token for a name and password.
 - The link carries it in the fragment: `http://127.0.0.1:9876/#token=...`. The page reads it on
   load, keeps it in `sessionStorage` for that tab and takes it out of the address bar, so it is not
   sent to the server on any static request.
@@ -69,7 +125,111 @@ A token is the only credential the web server accepts.
 - A token expires after `carpetLogicSessionHours` (24 by default). Expired tokens are dropped when
   they are next used or when a new one is issued.
 - At most 4 live sessions per owner; issuing a fifth drops that owner's oldest.
-- There is no cookie, no login and no password.
+- **Sign out** in the editor ends the session on the server (`POST /api/logout`) and forgets the
+  token in the page.
+- A page opened without a token, or with one that has run out, has no editor to show and says how to
+  get a link:
+
+  ![A page without a session](images/carpetlogic-no-session.png)
+
+- There is no cookie. The only password is the one of the admin sign-in below, which a server does
+  not have unless it turns `carpetLogicAdminLogin` on.
+
+### The admin sign-in
+
+A link from `/carpetlogic open` lets its player build and run programs. It does not let anybody
+change the server's rules: the Settings panel shows them read only. `carpetLogicAdminLogin`, off by
+default, adds a way for the server's admins to sign in to the editor and change rules there.
+
+![The sign-in screen](images/carpetlogic-login.png)
+
+**Who is an admin.** Whoever `/carpet <rule> <value>` would obey: a player whose operator level
+passes `carpetCommandPermissionLevel`. The level is read from the server's operator list, so it holds
+for an admin who is not in the game, and it is read again on every request an admin session makes: a
+player who is deopped has lost the editor's settings at the next click.
+
+**The password.** An admin has a web password that is separate from everything else and is never
+typed in chat or at the console.
+
+1. The admin runs `/carpetlogic password` in game, or the console runs `carpetlogic password <player>`.
+2. The answer is a link, `http://127.0.0.1:9876/#setup=<ticket>&name=Steve`. The ticket is 32 random
+   bytes, works once, lasts 10 minutes and is for that one account; asking again makes the earlier
+   link worthless. Like a token it travels in the fragment and is taken out of the address bar.
+3. The page the link opens asks for the new password twice and sends it with the ticket
+   (`POST /api/password`). A password has 10 to 128 characters.
+4. The server keeps a salted hash and nothing else: PBKDF2-HMAC-SHA256 with 600,000 rounds, the
+   figure OWASP gives for it, and 16 random bytes of salt per account, in
+   `<world>/carpetlogic/admins.json`. The file is written beside itself and moved into place, so a
+   crash cannot leave half of one, and is readable by the server's user only where the file system
+   knows about owners. Neither a password nor a hash is ever logged.
+5. Setting a password signs out the sessions the old one had opened.
+
+![The page a password link opens](images/carpetlogic-set-password.png)
+
+**Signing in.** The page of a visitor without a token shows the sign-in instead of the note about
+`/carpetlogic open`, and an editor opened from a link has **Admin sign in** in its top bar. Name and
+password go to `POST /api/login`; the answer is a token like any other, marked as an admin's, kept in
+`sessionStorage` and valid for `carpetLogicSessionHours`.
+
+- Every failure gets the same answer, `401 Wrong name or password`: a name nobody has, a name
+  without a password, a wrong password, and an account that is no longer an admin. Every one of them
+  costs the server the same work, one hash and one look at the operator list, so the time an answer
+  takes says nothing either.
+- Guessing is slowed down. A name gets 5 attempts; after that each further one has to wait, 5
+  seconds at first and twice as long every time, up to 15 minutes, wherever the attempts come from.
+  An address gets 20 before the same happens to it. A record is forgotten an hour after its last
+  attempt, signing in clears it, and the table holds 4096 names and addresses and takes no new one
+  when it is full. The answer while waiting is `429` with a `Retry-After` header.
+- At most two passwords are hashed at once, so a flood of attempts cannot take the processor from
+  the game.
+- The two routes only take `application/json`, which a page on another site cannot send without the
+  browser asking first, and nothing is answered with CORS headers.
+
+**What signing in unlocks.** The Settings panel becomes editable:
+
+![The Settings panel of an admin](images/carpetlogic-settings-admin.png)
+
+It lists the rules the editor lives by, the rules some nodes need, and the defaults of the bots'
+combat AI, straight from the rule registry: name, description, type, the values it suggests and the
+one it has. A rule that is on or off is a switch, one of a fixed set a list, anything else a field
+with its suggested values under it. A change is made at once through the same code path as `/carpet
+<rule> <value>`, so the rule's validators decide and its observers hear of it, and the row says
+`Saved` or `Not saved:` with the validator's own reason. The change is written to the server log with
+the admin's name and announced to the operators the way `/carpet` announces one. If the settings are
+locked in `carpet.conf` the panel is read only for admins too and says why.
+
+Without an admin session the same panel is read only:
+
+![The Settings panel without an admin session](images/carpetlogic-settings-readonly.png)
+
+Viewer mode does not lock an admin out of the settings: `POST /api/settings` is the one change an
+admin session can still make while `carpetLogicViewerMode` is on, which is how it is turned off
+again. Turning `carpetLogicAdminLogin` itself off from the panel asks first, because it ends the
+session that does it.
+
+**What this protects, and what it does not.**
+
+- The editor speaks plain HTTP. Without TLS, anybody who can read the traffic between the browser
+  and the server reads the password as it is typed in and every session token after it. On the
+  default bind address that traffic never leaves the machine. **A server that offers the editor
+  beyond localhost should put it behind a reverse proxy that speaks HTTPS**, and leave
+  `carpetLogicBindAddress` at `127.0.0.1` so that the proxy is the only way in. The sign-in page says
+  so itself when it was loaded over plain HTTP from another machine.
+- Behind such a proxy every visitor arrives from the proxy's address. The server does not trust a
+  forwarded-for header, so the 20 attempts of an address are then shared by everybody; the limit per
+  name is what holds. Rate limiting by the visitor's real address belongs in the proxy.
+- Somebody who knows an admin's name can keep its sign-in waiting by guessing at it. They get no
+  closer to the password, and the admin loses nothing in game, where rules are changed with
+  `/carpet` as before.
+- An admin session is a session of that player. A program it runs with an `EXECUTE_COMMAND` node
+  runs the command as the player, with the player's permissions, while the player is online. A web
+  password is therefore worth as much as the account's operator rights.
+- A link the console asked for is in the server log, as everything the console is told is. It is
+  worthless once used, and after ten minutes.
+- The hash protects the password of somebody who used it elsewhere, should the file be read; it does
+  not protect the server, whose files the reader already has.
+- With the rule off none of this exists: the two routes answer like any other path without a token,
+  admin sessions are gone, and the password file is not read by anything.
 
 ### What a token can do
 
@@ -82,7 +242,11 @@ Every token is only as good as its owner:
   permissions away: 403 "The player this link was issued to may no longer use /carpetlogic".
 - A token minted from the console has no owner. It is not tied to any player, so it keeps working
   when nobody is online.
-- Viewer mode (`carpetLogicViewerMode`) turns every non-`GET` request into 403, whatever the token.
+- A token from the admin sign-in is tied to the admin's UUID too, but not to their being online: it
+  works while the account may change Carpet rules, and gets 403 "This account may no longer change
+  Carpet rules" once it may not. It is the only kind of token `POST /api/settings` accepts.
+- Viewer mode (`carpetLogicViewerMode`) turns every non-`GET` request into 403, whatever the token,
+  except an admin's `POST /api/settings`.
 
 What a token cannot do, with any token:
 
@@ -127,7 +291,8 @@ Everything CarpetLogic is configured with is an ordinary carpet rule. Change one
 | `carpetLogicBindAddress` | `127.0.0.1`, `0.0.0.0` | `127.0.0.1` | Interface the web editor listens on. Applied at server start. |
 | `carpetLogicSessionHours` | int | `24` | How long a link from `/carpetlogic open` stays valid. |
 | `carpetLogicUpdateInterval` | int 1–1024 | `5` | Ticks between bot status pushes on the event stream. |
-| `carpetLogicViewerMode` | boolean | `false` | The editor can look at bots and programs but not change or run anything. Refuses every non-`GET` API call. |
+| `carpetLogicViewerMode` | boolean | `false` | The editor can look at bots and programs but not change or run anything. Refuses every non-`GET` API call, except an admin changing a setting. |
+| `carpetLogicAdminLogin` | boolean | `false` | Offers the admin sign-in, which lets the Settings panel change rules. See [The admin sign-in](#the-admin-sign-in). |
 | `carpetLogicMaxPrograms` | int | `4` | How many programs may run at the same time. |
 
 Three more rules decide whether particular actions work:
@@ -648,6 +813,11 @@ The combat nodes have scenarios of their own, all of them on a real bot rather t
 `logic_combat_start_stop`, `logic_fight_node`, `logic_combat_option`, `logic_on_kill_event`,
 `logic_totem_pop_event` and `logic_stop_program_stops_fight`.
 
+`logic_admin_login` covers the admin sign-in over HTTP against the running server: an operator sets
+a password through the console's link, signs in and changes a rule, and a second use of the link, a
+wrong password, a token from `/carpetlogic open`, a value the rule refuses and the operator once
+deopped are all refused, as are the routes while the rule is off.
+
 ## The HTTP API
 
 For scripting the editor rather than clicking in it. Everything here runs on the server thread, on
@@ -663,7 +833,12 @@ whose owner is offline, or no longer allowed to use `/carpetlogic`, gets `403`. 
 `carpetLogicViewerMode` gets `403`. A body over 2 MiB gets `413`. A request the server thread does
 not answer within 5 seconds gets `503`.
 
-Errors are always `{"error": "..."}`.
+Errors are always `{"error": "..."}`. While `carpetLogicAdminLogin` is on a `401` also carries
+`"adminLogin": true`, which is how a page without a token learns that it can offer the sign-in.
+
+Two routes take no token, `POST /api/login` and `POST /api/password`, and only while
+`carpetLogicAdminLogin` is on. With the rule off they are answered like any other path: `401` without
+a token, `404 Unknown API endpoint` with one.
 
 ### `GET /api/status`
 
@@ -676,12 +851,17 @@ Response:
   "version": "18",
   "user": "Steve",
   "viewerMode": false,
+  "admin": false,
+  "adminLogin": false,
   "activeBots": 2,
   "runningPrograms": 1,
   "savedPrograms": 7,
   "maxPrograms": 4
 }
 ```
+
+`admin` says whether the token came from the admin sign-in, `adminLogin` whether the server offers
+one.
 
 ### `GET /api/settings`
 
@@ -691,7 +871,8 @@ combat nodes need and the schema cannot know.
 Response keys: `commandCarpetLogic`, `carpetLogicPort`, `carpetLogicBindAddress`,
 `carpetLogicSessionHours`, `carpetLogicUpdateInterval`, `carpetLogicMaxPrograms`,
 `carpetLogicViewerMode`, `fakePlayerNavigation`, `fakePlayerElytraGlide`, `swordBlockHitting`,
-`combatStyles`, `difficulties`, `kits`, `combatOptions`.
+`combatStyles`, `difficulties`, `kits`, `combatOptions`, `rules`, and `locked` when the settings are
+locked.
 
 | Key | What it holds |
 |---|---|
@@ -703,6 +884,88 @@ Response keys: `commandCarpetLogic`, `carpetLogicPort`, `carpetLogicBindAddress`
 The style and difficulty lists are the same ones the schema carries in the resolved `options` of those
 parameters, generated from the bot's enums; the kits cannot be in the schema at all, because they depend on
 the world's folder.
+
+`rules` is what the Settings panel draws: every rule it shows, from the rule registry, in the panel's
+order.
+
+```json
+{
+  "name": "carpetLogicMaxPrograms",
+  "group": "editor",
+  "type": "int",
+  "value": "4",
+  "default": "4",
+  "strict": false,
+  "description": "Maximum number of bot programs running at the same time",
+  "options": [],
+  "extra": []
+}
+```
+
+`group` is `editor` for the `carpetLogic*` rules and `commandCarpetLogic`, `actions` for a rule an
+action of the schema `requires`, and `bots` for the rules of the `pvp` category, the bots' defaults.
+`type` is `boolean`, `int`, `number` or `string`; `value` and `default` are spelled as `/carpet`
+spells them. `strict` means only one of `options` is taken; otherwise they are suggestions. `locked`,
+when present, is the reason no rule can be changed while the server runs.
+
+### `POST /api/settings`
+
+Change one of those rules. Only for a token from the admin sign-in, and only while
+`carpetLogicAdminLogin` is on; with the rule off the route is `404 Unknown API endpoint`.
+
+Request body: `{"rule": "carpetLogicMaxPrograms", "value": "8"}`. The value is text, as `/carpet` takes
+it.
+
+Response: `{"success": true, "rule": { ... }}` with the rule as it now is, and `"message"` when the
+rule had something to say.
+
+| Status | When |
+|---|---|
+| `400` | `rule` or `value` is missing, or the rule refused the value: the error is the validator's reason, and `rule` carries the value it still has |
+| `403` | the token is not an admin's, or its account may no longer change Carpet rules |
+| `404` | the editor has no setting of that name |
+| `409` | the settings are locked in `carpet.conf` |
+
+This is the one non-`GET` an admin's token may still send under `carpetLogicViewerMode`.
+
+### `POST /api/login`
+
+Sign an admin in. No token; `Content-Type: application/json`; at most 4 KiB.
+
+Request body: `{"name": "Steve", "password": "..."}`
+
+Response: `{"token": "...", "user": "Steve", "admin": true}`
+
+| Status | When |
+|---|---|
+| `400` | the body is not a name of 1 to 32 characters without spaces and a password of 1 to 128 |
+| `401` | `Wrong name or password`, for every reason a sign-in can fail |
+| `415` | the content type is not `application/json` |
+| `429` | too many attempts for the name or from the address; `Retry-After` and `"retryAfter"` give the seconds to wait |
+| `503` | too many sign-ins are being checked at once |
+
+### `POST /api/password`
+
+Set an admin's password with the ticket of a link from `/carpetlogic password`. No token;
+`Content-Type: application/json`; at most 4 KiB.
+
+Request body: `{"ticket": "...", "name": "Steve", "password": "..."}`
+
+Response: `{"success": true, "name": "Steve"}`. The ticket is used up, and the account's admin sessions
+are ended.
+
+| Status | When |
+|---|---|
+| `400` | a field is missing, or the password has fewer than 10 or more than 128 characters; the ticket can be used again |
+| `403` | `This link is no longer valid`: the ticket is unknown, used, older than 10 minutes, for another name, or its account is no longer an admin |
+| `429` | too many bad tickets from the address |
+
+### `POST /api/logout`
+
+End the session of the token the request carries. No body. Works under viewer mode and for a token
+whose player has left.
+
+Response: `{"success": true}`. Any event stream the session had open is closed.
 
 ### `GET /api/schema`
 

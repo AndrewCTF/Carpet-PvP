@@ -152,6 +152,11 @@ public final class SelfTest
      * Set by {@code CarpetSelfTest} on Fabric; the snapshot scenario is unsupported elsewhere.
      */
     public static BiFunction<MinecraftServer, String, String> botSnapshot;
+    /**
+     * Where the CarpetLogic web editor of this server listens, or null while it does not. Set by
+     * {@code CarpetSelfTest} on Fabric; the scenario that signs in to it is unsupported elsewhere.
+     */
+    public static Supplier<String> webEditorUrl;
     /** How many mob spawn attempts the spawn reporter has counted so far, or 0 where it has none. */
     public static Supplier<Long> spawnAttempts;
     /**
@@ -189,6 +194,7 @@ public final class SelfTest
             Map.entry("logic_program", "it needs CarpetLogic programs"),
             Map.entry("logic_forever_budget", "it needs CarpetLogic programs"),
             Map.entry("logic_bot_snapshot", "it needs CarpetLogic's web API"),
+            Map.entry("logic_admin_login", "it needs CarpetLogic's web editor and the carpet rules it changes"),
             Map.entry("sword_block", "it needs the carpet swordBlockHitting rule"),
             Map.entry("explosion_rules", "it needs the carpet explosionNoBlockDamage rule"),
             Map.entry("xp_explosions", "it needs the carpet xpFromExplosions rule"),

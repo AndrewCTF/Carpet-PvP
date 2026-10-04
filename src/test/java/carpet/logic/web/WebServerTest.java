@@ -37,11 +37,16 @@ class WebServerTest
     private static final String LOOPBACK = "127.0.0.1";
 
     private static final List<String> ROUTES = List.of("/api/status", "/api/settings", "/api/schema", "/api/programs",
-            "/api/presets", "/api/bots", "/api/matches", "/api/events", "/api/execute", "/api/stop", "/api/anything-else");
+            "/api/presets", "/api/bots", "/api/matches", "/api/events", "/api/execute", "/api/stop", "/api/anything-else",
+            "/api/login", "/api/password", "/api/logout");
 
-    /** The routes that change something, and therefore have to be a POST with a token. */
+    /**
+     * The routes that change something, and therefore have to be a POST with a token. The two of the admin
+     * sign-in are among them here, where there is no sign-in: without one they are routes like any other.
+     */
     private static final List<String> WRITE_ROUTES = List.of("/api/bots/spawn", "/api/bots/remove", "/api/bots/config",
-            "/api/bots/tp", "/api/execute", "/api/stop", "/api/programs");
+            "/api/bots/tp", "/api/execute", "/api/stop", "/api/programs", "/api/settings", "/api/login", "/api/password",
+            "/api/logout");
 
     private final AuthManager auth = new AuthManager();
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
@@ -140,7 +145,7 @@ class WebServerTest
     void nothingIsAnsweredWithCorsHeaders() throws IOException, InterruptedException
     {
         listen(LOOPBACK);
-        for (String path : List.of("/api/status", "/index.html", "/js/node-compiler.js", "/nowhere"))
+        for (String path : List.of("/api/status", "/api/login", "/api/password", "/index.html", "/js/node-compiler.js", "/nowhere"))
         {
             HttpResponse<String> response = request(LOOPBACK, path, null);
             assertTrue(response.headers().map().keySet().stream()
