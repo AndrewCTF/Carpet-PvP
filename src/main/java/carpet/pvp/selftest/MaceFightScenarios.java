@@ -186,8 +186,8 @@ final class MaceFightScenarios
                 SelfTest.run(server, "bot option " + a + " combat true");
                 for (String piece : List.of("helmet", "chestplate", "leggings", "boots"))
                 {
-                    SelfTest.run(server, "player " + b + " equip " + pieceName(piece) + " minecraft:netherite_"
-                            + piece);
+                    SelfTest.run(server, SelfTest.cmd(b + " equip " + pieceName(piece) + " minecraft:netherite_"
+                            + piece));
                 }
                 ServerPlayer dummy = SelfTest.player(server, b);
                 if (dummy.getAttribute(Attributes.MAX_HEALTH) != null)
@@ -337,13 +337,13 @@ final class MaceFightScenarios
                 {
                     for (String piece : List.of("helmet", "chestplate", "leggings", "boots"))
                     {
-                        SelfTest.run(server, "player " + b + " equip " + pieceName(piece) + " minecraft:netherite_"
-                                + piece);
+                        SelfTest.run(server, SelfTest.cmd(b + " equip " + pieceName(piece) + " minecraft:netherite_"
+                                + piece));
                     }
                 }
                 else
                 {
-                    SelfTest.run(server, "player " + b + " equip chest minecraft:netherite_chestplate");
+                    SelfTest.run(server, SelfTest.cmd(b + " equip chest minecraft:netherite_chestplate"));
                 }
                 if (noGroundStun)
                 {
@@ -358,7 +358,7 @@ final class MaceFightScenarios
                 if (shielding)
                 {
                     SelfTest.shieldKit(b).forEach(command -> SelfTest.run(server, command));
-                    SelfTest.run(server, "player " + b + " use continuous");
+                    SelfTest.run(server, SelfTest.cmd(b + " use continuous"));
                 }
                 topUp(server, target);
                 gear = new MaceGear(bot);
