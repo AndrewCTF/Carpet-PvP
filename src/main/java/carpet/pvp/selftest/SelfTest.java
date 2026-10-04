@@ -1328,6 +1328,10 @@ boolean[] walkAsked = {false};
                         swordKit(a, true).forEach(command -> run(server, command));
                         shieldKit(b).forEach(command -> run(server, command));
                         swordCombat(a, "skilled").forEach(command -> run(server, command));
+                        // The shield holder blocks nearly every hit, so what tells a hit got past it is the
+                        // target's health: a fresh fake player heals back the hearts it lost within a second
+                        // of each one, so it has to stop healing or the reading is a race.
+                        run(server, "gamerule natural_health_regeneration false");
                         run(server, cmd(b + " use continuous"));
                         raised[0] = true;
                         return new Probe(false, fmt("%s is holding its shield up against %s", b, a));

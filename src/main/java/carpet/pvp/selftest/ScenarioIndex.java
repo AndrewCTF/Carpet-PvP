@@ -101,5 +101,12 @@ final class ScenarioIndex
         SCENARIOS.put("logic_save_draft_and_autosave", SaveScenarios::saveDraftAndAutosave);
         SCENARIOS.put("logic_expression_if_while", ExpressionScenarios::expressionIfWhile);
         SCENARIOS.put("logic_scarpet_node", ScarpetNodeScenarios::scarpetNode);
+        SCENARIOS.put("nav_straight_line", NavMotionScenarios::straightLine);
+        SCENARIOS.put("bot_patrol_waypoints", BotCommandParityScenarios::patrolWaypoints);
+        SCENARIOS.put("bot_patrol_modes", BotCommandParityScenarios::patrolModes);
+        SCENARIOS.put("bot_turn_rotation", BotCommandParityScenarios::turnRotation);
+        SCENARIOS.put("bot_glide_commands", BotCommandParityScenarios::glide);
+        SCENARIOS.put("bot_permission", BotCommandParityScenarios::permission);
+        SCENARIOS.put("bot_skin_profile", SkinScenarios::profile);
     }
 }

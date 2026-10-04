@@ -639,6 +639,19 @@ public class EntityPlayerMPFake extends ServerPlayer
         }));
     }
 
+    /**
+     * A real player's position is whatever its client last reported, so the server leaves the counting of
+     * its fall distance to the client's movement packets. A fake player has no client and nothing else
+     * counts it, so the server is the authority for it and the game builds the counter itself. Paper
+     * asks this question before counting, and without the answer the counter stays at zero: a bot dropped
+     * off a ledge read no fall distance at all and took no fall damage.
+     */
+    @Override
+    public boolean isClientAuthoritative()
+    {
+        return false;
+    }
+
     @Override
     public void tick() {
         if (pendingKnockback != null)

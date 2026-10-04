@@ -11,6 +11,7 @@ mixins; everything it needs comes from `config.yml` and from the commands the pl
 | Area | What the plugin has |
 |---|---|
 | Fake players | Everything `carpet.pvp` needs: spawn, join, respawn, disconnect, knockback, fall distance, own action pack |
+| Tick order | One task, once a tick, at the top of `tickChildren` — the same place Carpet's own mixin puts its work, so the two platforms drive a bot on the same tick of its life |
 | Navigation | Every option and mode of the action pack's navigation, the same pathfinder and the same search budget |
 | Kits | The built-in kits and the world's kit folder: `list`, `reload`, `give`, `save`, `delete`, `restore` |
 | Combat brain | Sword, crystal, anchor, ranged, mace and smp styles, the difficulties, factions, per-bot options and stats |
@@ -35,6 +36,13 @@ Everything that is Carpet rather than bots, because it is a mod loader feature:
   a real player (the other half of that is in the fake player and does ship), and a bot's critical
   hit is vanilla's own rather than "any swing made while falling". The mace style plans around that
   critical hit, so the two mace damage scenarios are reported unsupported by the self-test.
+- One behaviour of the game needs answering for itself. Paper's `Entity.move` only counts a fall when
+  the server is authoritative for the entity, and `Player.isClientAuthoritative()` answers true: a real
+  player's position is whatever its client last said. A fake player has no client, so on Paper nothing
+  counted its fall at all — a bot dropped off a ledge read no fall distance and took no fall damage,
+  and `nav chase crit` never landed a hit, because the action pack will not swing a critical unless
+  the bot has fallen. The fake player now answers `false`, which is the truth of it: the server moves
+  the bot, so the server counts.
 - `/spawn`, `/spawnplayer` and the rest of Carpet's own command set.
 
 ## Installing
@@ -70,9 +78,13 @@ the same ones, with the same results, as [Commands.md](Commands.md).
 | `/bot <name> ...` | The fake-player controls of Fabric's `/player`: `spawn`, `kill`, `disconnect`, `look`, `turn`, `move`, `hotbar`, `equip`, `unequip`, `equipment`, `itemCd`, `sneak`, `sprint`, `jump`, `swim`, `attack`, `use`, `drop`, `animate`, `mount`, `glide`, `nav ...`, `ai ...`, `faction ...` |
 | `/auto-setup [<mode> [difficulty]]`, `/auto-setup stop` | Sets a whole fight up for a player and hands everything back |
 
-Two spellings differ from Fabric's `/player`, because Brigadier on this Paper build will not parse
-the other shape: `nav patrol` takes two waypoints rather than three, and `turn` takes
-`left`, `right`, `back` or `around <degrees>` rather than a bare angle.
+Every spelling of Fabric's `/player` is here now. `nav patrol` takes up to four waypoints and
+`loop`/`once` mean what they mean there, `turn` takes a rotation as well as `left`, `right`, `back` and
+`around <degrees>`, and the whole `glide` subtree is there: `start`, `stop`, `freeze`, `arrival`,
+`launch`, `freezeAtTarget`, `speed`, `rates`, `usePitch`, `input`, `heading`, `goto` (with `smart`) and
+`status`. One difference is left, and it is a word: `glide` and its leaves are refused while
+`navigation.elytraGlide` is off, and the refusal names that setting where Fabric's names the
+`fakePlayerElytraGlide` rule.
 
 ## Permissions
 
@@ -83,6 +95,14 @@ the other shape: `nav patrol` takes two waypoints rather than three, and `turn` 
 
 They are declared in `paper-plugin.yml`, so `permissions` in the plugin's jar can set them per group
 the way any other plugin's are.
+
+`carpetpvp.bot` is decided by the same gate the shared `/bot` bodies already ask on Fabric, so a
+player who does not hold it is told "You don't have permission to use /bot commands" rather than
+Brigadier's "unknown command", which is what hiding the command behind a Bukkit filter would have
+given. Two senders are let through whatever the permission says: the console, and a bot of this
+server. A bot has to be able to drive bots — `/bot match` and the drills are run as one — and Fabric's
+`commandBot` rule ships as `true`, so nothing stops a bot there either. `/auto-setup` keeps Bukkit's
+own filter, because nothing wraps its bodies in the shared check.
 
 ## config.yml
 
@@ -115,9 +135,17 @@ packages plus `carpet/paper/**` against the dev bundle. Paper names its dev bund
 up to 26.1 and after the build from 26.2 on, which is why the whole coordinate rather than a build
 number is in that file.
 
-A Paper self-test takes about twenty minutes per node against three minutes for a Fabric one: the
-Fabric runs `tick sprint 1d`, and a sprinting Paper server gets through a scenario's nine hundred
-ticks before its chunk system has handed out the ground a few chunks away. The Fabric build excludes `carpet/paper/**`
+A Paper self-test takes about five minutes per node against three or four for a Fabric one. The run
+asks for `/tick rate 80` where a server keeps twenty, which is what the twenty-minute node was: at
+twenty a scenario is mostly waiting for a tick that is coming in fifty milliseconds. It is deliberately
+not the `/tick sprint` the Fabric runs use. Sprinting is unbounded — 368 ticks a second on this
+machine — and Paper's chunk system stops handing out the ground a scenario is standing on somewhere
+above a hundred, and the ranged style's shots, which are lined up over several ticks and released when
+the view has settled, are released before it has settled: `crossbow_cycle` fires 46 shots and lands
+none, and `bow_hits_static` drops from 83% to 50%. Eighty is fast enough to be worth the wait and slow
+enough that the chunk system keeps up and the bots behave as they do at twenty.
+
+The Fabric build excludes `carpet/paper/**`
 and the Paper build excludes everything that needs the mod loader, so the two cannot both compile
 the same file: a change that reaches `carpet.CarpetSettings`, `carpet.fakes`, `carpet.mixins`,
 `carpet.utils` or the scripting packages out of the shared code breaks the Paper node's compile,
