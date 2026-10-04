@@ -1645,7 +1645,8 @@ public class PlayerCommand
         int shadowed = 0;
         for (ServerPlayer player : players)
         {
-            EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
+            EntityPlayerMPFake shadow = EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
+            shadow.getActionPack().copyFrom(((ServerPlayerInterface) player).getActionPack());
             shadowed++;
         }
         return shadowed;

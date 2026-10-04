@@ -1,7 +1,6 @@
 package carpet.helpers;
 
-import carpet.CarpetSettings;
-import carpet.fakes.ServerPlayerInterface;
+import carpet.pvp.BotSettings;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -10,7 +9,6 @@ import java.util.ArrayList;
 import java.util.UUID;
 
 import carpet.patches.EntityPlayerMPFake;
-import carpet.pvp.PvpInitializer;
 import carpet.script.utils.Tracer;
 import carpet.pvp.nav.BotNavMode;
 import carpet.pvp.nav.NavController;
@@ -50,6 +48,13 @@ import net.minecraft.world.phys.Vec3;
 
 public class EntityPlayerActionPack
 {
+    /**
+     * Opens the block window of a player that started using a sword. The window is one of Carpet's
+     * rules and needs its mixin accessor, so it only exists where Carpet does; {@code PvpInitializer}
+     * installs this where that is.
+     */
+    public static java.util.function.BiConsumer<net.minecraft.world.entity.player.Player, InteractionHand> swordBlockStarter = (player, hand) -> {};
+
     private final ServerPlayer player;
 
     private final Map<ActionType, Action> actions = new EnumMap<>(ActionType.class);
@@ -361,11 +366,11 @@ public class EntityPlayerActionPack
         }
 
         Action previous = actions.remove(type);
-        if (previous != null) type.stop(player, previous);
+        if (previous != null) type.stop(player, previous, this);
         if (action != null)
         {
             actions.put(type, action);
-            type.start(player, action); // noop
+            type.start(player, action, this); // noop
         }
         return this;
     }
@@ -492,7 +497,7 @@ public class EntityPlayerActionPack
 
     public EntityPlayerActionPack stopAll()
     {
-        for (ActionType type : actions.keySet()) type.stop(player, actions.get(type));
+        for (ActionType type : actions.keySet()) type.stop(player, actions.get(type), this);
         actions.clear();
         critAwaitingGroundAfterHit = false;
         critPostLandingDelay = 0;
@@ -614,32 +619,32 @@ public class EntityPlayerActionPack
     private NavController.Settings navSettings()
     {
         return new NavController.Settings(
-                CarpetSettings.fakePlayerNavigation,
-                CarpetSettings.fakePlayerElytraGlide,
-                CarpetSettings.fakePlayerNavBreakBlocks,
-                CarpetSettings.fakePlayerNavPlaceBlocks,
-                CarpetSettings.fakePlayerNavAutoTool,
-                CarpetSettings.fakePlayerNavAutoEat,
-                CarpetSettings.fakePlayerNavAutoEatBelow,
-                CarpetSettings.fakePlayerNavAvoidLava,
-                CarpetSettings.fakePlayerNavAvoidFire,
-                CarpetSettings.fakePlayerNavAvoidCobwebs,
-                CarpetSettings.fakePlayerNavBreakCobwebs,
-                CarpetSettings.fakePlayerNavAvoidPowderSnow,
-                CarpetSettings.fakePlayerNavAllowParkour,
-                CarpetSettings.fakePlayerNavAllowPillar,
-                CarpetSettings.fakePlayerNavAllowBreakThrough,
-                CarpetSettings.fakePlayerNavAllowDescendMine,
-                CarpetSettings.fakePlayerNavAllowSprint,
-                CarpetSettings.fakePlayerNavMobAvoidance,
-                CarpetSettings.fakePlayerNavMobAvoidanceRadius,
-                CarpetSettings.fakePlayerNavMaxFallHeight,
-                CarpetSettings.fakePlayerNavAvoidSoulSand,
-                CarpetSettings.fakePlayerNavAllowOpenDoors,
-                CarpetSettings.fakePlayerNavAllowOpenFenceGates,
-                CarpetSettings.fakePlayerNavAllowSwimming,
-                CarpetSettings.fakePlayerNavSearchBudget,
-                CarpetSettings.fakePlayerNavSearchBudgetTotal
+                BotSettings.fakePlayerNavigation,
+                BotSettings.fakePlayerElytraGlide,
+                BotSettings.fakePlayerNavBreakBlocks,
+                BotSettings.fakePlayerNavPlaceBlocks,
+                BotSettings.fakePlayerNavAutoTool,
+                BotSettings.fakePlayerNavAutoEat,
+                BotSettings.fakePlayerNavAutoEatBelow,
+                BotSettings.fakePlayerNavAvoidLava,
+                BotSettings.fakePlayerNavAvoidFire,
+                BotSettings.fakePlayerNavAvoidCobwebs,
+                BotSettings.fakePlayerNavBreakCobwebs,
+                BotSettings.fakePlayerNavAvoidPowderSnow,
+                BotSettings.fakePlayerNavAllowParkour,
+                BotSettings.fakePlayerNavAllowPillar,
+                BotSettings.fakePlayerNavAllowBreakThrough,
+                BotSettings.fakePlayerNavAllowDescendMine,
+                BotSettings.fakePlayerNavAllowSprint,
+                BotSettings.fakePlayerNavMobAvoidance,
+                BotSettings.fakePlayerNavMobAvoidanceRadius,
+                BotSettings.fakePlayerNavMaxFallHeight,
+                BotSettings.fakePlayerNavAvoidSoulSand,
+                BotSettings.fakePlayerNavAllowOpenDoors,
+                BotSettings.fakePlayerNavAllowOpenFenceGates,
+                BotSettings.fakePlayerNavAllowSwimming,
+                BotSettings.fakePlayerNavSearchBudget,
+                BotSettings.fakePlayerNavSearchBudgetTotal
         );
     }
 
@@ -786,7 +791,7 @@ public class EntityPlayerActionPack
             }
             return;
         }
-        if (!CarpetSettings.fakePlayerElytraGlide)
+        if (!BotSettings.fakePlayerElytraGlide)
         {
             setGlideEnabled(false);
             return;
@@ -1161,14 +1166,13 @@ public class EntityPlayerActionPack
         USE(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
-                EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                 if (player.isUsingItem())
                 {
                     // A sword held up blocks for as long as the item is in use, so the block window is
                     // kept open rather than running out while the bot is still holding it up.
-                    PvpInitializer.startSwordBlock(player, player.getUsedItemHand());
+                    swordBlockStarter.accept(player, player.getUsedItemHand());
                     return true;
                 }
                 if (ap.itemUseCooldown > 0)
@@ -1227,7 +1231,7 @@ public class EntityPlayerActionPack
                     ItemStack handItem = player.getItemInHand(hand);
                     if (player.gameMode.useItem(player, player.level(), handItem, hand).consumesAction())
                     {
-                        PvpInitializer.startSwordBlock(player, hand);
+                        swordBlockStarter.accept(player, hand);
                         ap.itemUseCooldown = 3;
                         return true;
                     }
@@ -1236,17 +1240,15 @@ public class EntityPlayerActionPack
             }
 
             @Override
-            void inactiveTick(ServerPlayer player, Action action)
+            void inactiveTick(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
-                EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                 ap.itemUseCooldown = 0;
                 player.releaseUsingItem();
             }
         },
         ATTACK(true) {
             @Override
-            boolean execute(ServerPlayer player, Action action) {
-                EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap) {
 
                 // --- Chase mode: direct entity attack for 100% accuracy ---
                 NavController nav = ap.nav;
@@ -1284,7 +1286,7 @@ public class EntityPlayerActionPack
 
                     // When interval is set, it fully controls hit cadence.
                     // Only enforce weapon-cooldown readiness for interval=0 continuous mode.
-                    boolean enforceWeaponCooldown = !CarpetSettings.spamClickCombat && nav.getChaseAttackInterval() <= 0;
+                    boolean enforceWeaponCooldown = !BotSettings.spamClickCombat && nav.getChaseAttackInterval() <= 0;
 
                     if (ap.attackCritical)
                     {
@@ -1426,7 +1428,7 @@ public class EntityPlayerActionPack
                             return false;
                         }
 
-                        if (!CarpetSettings.spamClickCombat)
+                        if (!BotSettings.spamClickCombat)
                         {
                             // Prevent constant weak hits when spamming attacks in modern combat
                             if (player.getAttackStrengthScale(0.5F) < 0.9F)
@@ -1521,7 +1523,7 @@ public class EntityPlayerActionPack
                     return false;
                 }
                 // In modern combat, avoid spamming weak swings unless spam-click combat is enabled.
-                if (!CarpetSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
+                if (!BotSettings.spamClickCombat && player.getAttackStrengthScale(0.5F) < 0.9F)
                 {
                     return false;
                 }
@@ -1532,9 +1534,8 @@ public class EntityPlayerActionPack
             }
 
             @Override
-            void inactiveTick(ServerPlayer player, Action action)
+            void inactiveTick(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
-                EntityPlayerActionPack ap = ((ServerPlayerInterface) player).getActionPack();
                 if (ap.currentBlock == null) return;
                 player.level().destroyBlockProgress(-1, ap.currentBlock, -1);
                 player.gameMode.handleBlockBreakAction(ap.currentBlock, ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, Direction.DOWN, player.level().getMaxY(), -1);
@@ -1544,7 +1545,7 @@ public class EntityPlayerActionPack
         JUMP(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 if (action.limit == 1)
                 {
@@ -1558,7 +1559,7 @@ public class EntityPlayerActionPack
             }
 
             @Override
-            void inactiveTick(ServerPlayer player, Action action)
+            void inactiveTick(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 player.setJumping(false);
             }
@@ -1566,7 +1567,7 @@ public class EntityPlayerActionPack
         DROP_ITEM(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 player.resetLastActionTime();
                 player.drop(false); // dropSelectedItem
@@ -1576,7 +1577,7 @@ public class EntityPlayerActionPack
         DROP_STACK(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 player.resetLastActionTime();
                 player.drop(true); // dropSelectedItem
@@ -1586,7 +1587,7 @@ public class EntityPlayerActionPack
         SWAP_HANDS(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 player.resetLastActionTime();
                 ItemStack itemStack_1 = player.getItemInHand(InteractionHand.OFF_HAND);
@@ -1598,7 +1599,7 @@ public class EntityPlayerActionPack
         SWING(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 // Plays the arm swing animation without performing any interaction.
                 //~ if >=26.3 'swing(InteractionHand.MAIN_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false)'
@@ -1610,7 +1611,7 @@ public class EntityPlayerActionPack
         SWING_OFF_HAND(true)
         {
             @Override
-            boolean execute(ServerPlayer player, Action action)
+            boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap)
             {
                 // The same arm animation with the other hand, which is what using the off hand looks like.
                 //~ if >=26.3 'swing(InteractionHand.OFF_HAND)' -> 'swingAndResetAttackStrength(InteractionHand.OFF_HAND, SwingAnimation.DEFAULT, false)'
@@ -1627,12 +1628,12 @@ public class EntityPlayerActionPack
             this.preventSpectator = preventSpectator;
         }
 
-        void start(ServerPlayer player, Action action) {}
-        abstract boolean execute(ServerPlayer player, Action action);
-        void inactiveTick(ServerPlayer player, Action action) {}
-        void stop(ServerPlayer player, Action action)
+        void start(ServerPlayer player, Action action, EntityPlayerActionPack ap) {}
+        abstract boolean execute(ServerPlayer player, Action action, EntityPlayerActionPack ap);
+        void inactiveTick(ServerPlayer player, Action action, EntityPlayerActionPack ap) {}
+        void stop(ServerPlayer player, Action action, EntityPlayerActionPack ap)
         {
-            inactiveTick(player, action);
+            inactiveTick(player, action, ap);
         }
     }
 
@@ -1699,13 +1700,13 @@ public class EntityPlayerActionPack
                     // actions are 20 tps, so need to clear status mid tick, allowing entities process it till next time
                     if (!type.preventSpectator || !actionPack.player.isSpectator())
                     {
-                        type.inactiveTick(actionPack.player, this);
+                        type.inactiveTick(actionPack.player, this, actionPack);
                     }
                 }
 
                 if (!type.preventSpectator || !actionPack.player.isSpectator())
                 {
-                    cancel = type.execute(actionPack.player, this);
+                    cancel = type.execute(actionPack.player, this, actionPack);
                 }
 
                 boolean shouldCountThisAttempt = !requiresSuccessToCount || Boolean.TRUE.equals(cancel);
@@ -1720,7 +1721,7 @@ public class EntityPlayerActionPack
                     count++;
                     if (count == limit)
                     {
-                        type.stop(actionPack.player, null);
+                        type.stop(actionPack.player, null, actionPack);
                         done = true;
                         return cancel;
                     }
@@ -1735,7 +1736,7 @@ public class EntityPlayerActionPack
             {
                 if (!type.preventSpectator || !actionPack.player.isSpectator())
                 {
-                    type.inactiveTick(actionPack.player, this);
+                    type.inactiveTick(actionPack.player, this, actionPack);
                 }
             }
             return cancel;
@@ -1746,14 +1747,14 @@ public class EntityPlayerActionPack
             //assuming action run but was unsuccesful that tick, but opportunity emerged to retry it, lets retry it.
             if (!type.preventSpectator || !actionPack.player.isSpectator())
             {
-                type.execute(actionPack.player, this);
+                type.execute(actionPack.player, this, actionPack);
             }
 
             // retry() is only called in contexts where it should count as an attempt
             count++;
             if (count == limit)
             {
-                type.stop(actionPack.player, null);
+                type.stop(actionPack.player, null, actionPack);
                 done = true;
             }
         }

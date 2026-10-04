@@ -44,7 +44,6 @@
                    "LivingEntity_cleanLogsMixin",
                    "MobMixin",
                    
-                   "Player_fakePlayersMixin",
                    "Player_fakePlayerCritMixin",
                    "Player_fakePlayerStrongAttackMixin",
                    "LivingEntity_fallDamageRuleMixin",

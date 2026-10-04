@@ -4,6 +4,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
@@ -22,6 +23,14 @@ public class NetHandlerPlayServerFake extends ServerGamePacketListenerImpl
     @Override
     public void send(final Packet<?> packetIn)
     {
+        // A real client applies the motion a hit sends it. A fake player has none, so the velocity the
+        // attacker knocked it back with is kept and applied by its own tick.
+        if (packetIn instanceof ClientboundSetEntityMotionPacket motion
+                && player instanceof EntityPlayerMPFake fake
+                && fake.isKnockback(motion.movement()))
+        {
+            fake.setPendingKnockback(motion.movement());
+        }
     }
 
     @Override

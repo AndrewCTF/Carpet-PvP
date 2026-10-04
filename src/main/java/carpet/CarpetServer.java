@@ -25,6 +25,7 @@ import carpet.commands.TestCommand;
 import carpet.network.ServerNetworkHandler;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBudget;
+import carpet.pvp.BotSettings;
 import carpet.pvp.selftest.SelfTest;
 import carpet.helpers.HopperCounter;
 import carpet.logging.LoggerRegistry;
@@ -80,6 +81,7 @@ public class CarpetServer
         SettingsManager mgr = new SettingsManager(CarpetSettings.carpetVersion, "carpet", "Carpet Mod");
         settingsManager = mgr;
         settingsManager.parseSettingsClass(CarpetSettings.class);
+        CarpetBotSettings.hook();
         extensions.forEach(CarpetExtension::onGameStarted);
         CarpetScriptServer.parseFunctionClasses();
         CarpetSettings.LOG.info("CARPET PVP LOADED");
@@ -93,9 +95,13 @@ public class CarpetServer
             org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
         }
         CarpetServer.minecraft_server = server;
+        // Touching SelfTest before this would read registries that are not bound yet.
+        CarpetSelfTest.hook();
         SpawnReporter.resetSpawnStats(server, true);
 
         forEachManager(sm -> sm.attachServer(server));
+        // attachServer read the configuration file, so the rules hold their loaded values now.
+        CarpetBotSettings.update();
         extensions.forEach(e -> e.onServerLoaded(server));
         scriptServer = new CarpetScriptServer(server);
         Carpet.MinecraftServer_addScriptServer(server, scriptServer);
@@ -119,7 +125,7 @@ public class CarpetServer
         ScheduleCommand.tick(server);
         CarpetSettings.impendingFillSkipUpdates.set(false);
         extensions.forEach(e -> e.onTick(server));
-        BotBudget.instance().beginTick(CarpetSettings.botSimBudget);
+        BotBudget.instance().beginTick(BotSettings.botSimBudget);
         BotCombatCommand.tick(server);
         SelfTest.tick(server);
     }

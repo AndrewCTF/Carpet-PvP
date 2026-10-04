@@ -30,7 +30,7 @@ final class BotScenarios
             String detail = SelfTest.fmt("%s holds %s, combat %s, difficulty %s; an unknown option was %s; the style name sword gave %s",
                     a, bot.getMainHandItem().getItem(), cfg.combat, cfg.difficulty, refused ? "refused" : "accepted", cfg.combatStyle);
             // the command spawned this bot, so the runner does not know to remove it
-            SelfTest.run(server, "player " + a + " disconnect");
+            SelfTest.run(server, SelfTest.cmd(a + " disconnect"));
             return new Probe(ok, detail);
         });
     }

@@ -3,6 +3,7 @@ package carpet.pvp;
 import carpet.CarpetServer;
 import carpet.CarpetSettings;
 import carpet.fakes.PlayerSwordBlockInterface;
+import carpet.helpers.EntityPlayerActionPack;
 import carpet.logic.CarpetLogic;
 import carpet.network.ServerNetworkHandler;
 import net.fabricmc.api.ModInitializer;
@@ -26,6 +27,9 @@ public final class PvpInitializer implements ModInitializer
     {
         CarpetServer.manageExtension(CarpetLogic.INSTANCE);
         AttackBlockCallback.EVENT.register(PvpInitializer::punishWrongToolHits);
+        // The window a sword opens lives in Carpet's rule and its mixin, so the shared action pack
+        // reaches it through this instead of calling in.
+        EntityPlayerActionPack.swordBlockStarter = PvpInitializer::startSwordBlock;
     }
 
     /** Breaking a block that needs a tool with the wrong one in hand costs a heart, like hitting a player does. */

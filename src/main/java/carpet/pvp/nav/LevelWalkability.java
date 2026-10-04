@@ -2,6 +2,8 @@ package carpet.pvp.nav;
 
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -61,6 +63,8 @@ public final class LevelWalkability implements Walkability
 
     private final ServerLevel level;
     private final Long2IntMap cache = new Long2IntOpenHashMap();
+    /** The chunks a block has been asked of, so each is fetched from the level once. */
+    private final LongSet fetched = new LongOpenHashSet();
     private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
     private long cachedForTime = Long.MIN_VALUE;
     private boolean avoidLava = true;
@@ -265,9 +269,22 @@ public final class LevelWalkability implements Walkability
         return true;
     }
 
-    private boolean loaded(int x, int y, int z)
+/**
+ * Whether the world has anything to say about this position. A chunk that is not resident yet has to be
+ * fetched before its blocks are read: a server that answers for a chunk it has not got hands it as empty
+ * ground, which would have the bot walking off the edge of a course that is really there. Which chunks
+ * have been fetched is remembered, so each one costs a single lookup.
+ */
+private boolean loaded(int x, int y, int z)
     {
-        return y >= level.getMinY() && y <= level.getMaxY() && level.hasChunk(x >> 4, z >> 4);
+        if (y < level.getMinY() || y > level.getMaxY()) return false;
+        int chunkX = x >> 4;
+        int chunkZ = z >> 4;
+        if (fetched.add(BlockPos.asLong(chunkX << 4, 0, chunkZ << 4)))
+        {
+            level.getChunkSource().getChunk(chunkX, chunkZ, true);
+        }
+        return true;
     }
 
     private int code(int x, int y, int z)
