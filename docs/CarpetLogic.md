@@ -43,7 +43,9 @@ happens when the port is taken, or when the Java runtime has no `jdk.httpserver`
 machine the server runs on. Setting it to `0.0.0.0` listens on every interface. Those two are what the
 rule suggests; it will accept any address the machine can resolve.
 
-The bind address and port are read when the server starts, so changing them needs a restart.
+The bind address and port are read when the server starts, so changing them needs a restart. The
+`-Dcarpet.logicPort=<n>` system property overrides `carpetLogicPort` and nothing else, which is how
+the self-test asks the operating system for a free port; `0` means "any free port".
 
 `carpetLogicPort` is 9876 by default. If something else already has that port, the server logs
 `CarpetLogic web editor could not listen on 127.0.0.1:9876` and the web editor stays down:
@@ -205,6 +207,7 @@ It has three sections:
 
 ```json
 {
+  "_comment": "...",
   "variables": {
     "referencePrefix": "$",
     "namePattern": "^[A-Za-z_][A-Za-z0-9_]*$",
@@ -214,7 +217,7 @@ It has three sections:
 }
 ```
 
-Each action has:
+`_comment` is prose for whoever is editing the file. Each action has:
 
 | Field | Meaning |
 |---|---|
@@ -224,24 +227,21 @@ Each action has:
 | `params` | the parameters it takes |
 | `requires` | the carpet rule that must be on for the action to work, or absent |
 | `drivesBody` | the action moves the bot or clicks for it; see [Who drives the bot](#who-drives-the-bot) |
-| `optionsFrom` | the allowed values come from the running server, under that name, rather than being written here |
 
 Each parameter has a `name`, a `type` (`int`, `number`, `bool`, `string`), a `default`, and
 optionally `min`/`max` or the `options` it may take. A missing parameter falls back to its default,
-and a number outside `min`/`max` is clamped.
-
-A `ticks` parameter is how long the step lasts before the next one starts.
-
-Two lists are generated from the combat AI rather than written down, so a style or a preset added to the
-bot appears in CarpetLogic without anyone editing this file:
+and a number outside `min`/`max` is clamped. A parameter may also carry an `optionsFrom` instead of an
+`options` list, naming a list that is generated from the running server rather than written down, so a
+style or a preset added to the bot appears in CarpetLogic without anyone editing this file:
 
 | `optionsFrom` | What it holds |
 |---|---|
-| `combatStyles` | every `BotPvpConfig.CombatStyle`, by the name `/bot spawn` takes (`sword` for the melee style) |
-| `difficulties` | the five `BotPvpConfig.Difficulty` presets |
+| `combatStyles` | every `BotPvpConfig.CombatStyle`, by the name `/bot spawn` takes: `sword`, `crystal`, `anchor`, `ranged`, `mace`, `smp` |
+| `difficulties` | the five `BotPvpConfig.Difficulty` presets, `beginner` to `expert` |
 
-`GET /api/schema` is sent the file with those lists already filled in, so the editor builds its dropdowns
-from the very same values the interpreter checks a parameter against.
+`GET /api/schema` is sent the file with every `optionsFrom` resolved into an `options` array in place,
+so the editor builds its dropdowns from the very same values the interpreter checks a parameter
+against. `combatStyles` and `difficulties` are read by name wherever a node wants them.
 
 The 72 nodes, in full:
 
@@ -267,7 +267,7 @@ The 72 nodes, in full:
 | `Combat/SwordBlock` | `SWORD_BLOCK` | action | `swordBlockHitting` | `ticks` int = `40`, min `1`, max `6000` |
 | `Combat/ShieldBlock` | `SHIELD_BLOCK` | action |  | `ticks` int = `40`, min `1`, max `6000` |
 | `Combat/UseItem` | `USE` | action |  | `mode` string = `once` (`once`, `continuous`, `interval`); `interval` int = `10`, min `1`, max `200`; `ticks` int = `1`, min `1`, max `6000` |
-| `Combat/CombatStart` | `COMBAT_START` | action |  | `style` string = `sword` (every style `/bot spawn` takes); `difficulty` string = `average` (the five presets); `targets` string = `players` (`players`, `mobs`, `bots`, `all`, `none`); `target` string = `` |
+| `Combat/CombatStart` | `COMBAT_START` | action |  | `style` string = `sword` (every style `/bot spawn` takes: `sword`, `crystal`, `anchor`, `ranged`, `mace`, `smp`); `difficulty` string = `average` (the five presets); `targets` string = `players` (`players`, `mobs`, `bots`, `all`, `none`); `target` string = `` |
 | `Combat/CombatStop` | `COMBAT_STOP` | action |  | none |
 | `Combat/Fight` | `FIGHT` | action |  | `style`, `difficulty`, `targets` and `target` as `COMBAT_START`; `timeout` int = `600`, min `1`, max `60000`; `range` number = `16`, min `1`, max `64`; `rangeTicks` int = `60`, min `1`, max `6000` |
 | `Combat/CombatOption` | `SET_COMBAT_OPTION` | action |  | `key` string = `difficulty` (any name `/bot option` takes); `value` string = `average` |
@@ -356,8 +356,8 @@ The five nodes at the bottom drive the bot's combat AI, the same one `/bot spawn
 | `Control/Delay` | `DELAY` | action |  | `ticks` int = `20`, min `1`, max `6000` |
 | `Control/WaitUntil` | `WAIT_UNTIL` | control (`condition`) |  | `timeout` int = `100`, min `1`, max `60000` |
 | `Control/ExecuteCommand` | `EXECUTE_COMMAND` | action |  | `command` string = `say Hello` |
-| `Control/Repeat` | `LOOP` | control (`children`) |  | `count` int = `3`, min `0`, max `10000` |
-| `Control/Forever` | `FOREVER` | control (`children`) |  | none |
+| `Control/Repeat` | `LOOP` | control (`children`) |  | `count` int = `3`, min `0`, max `10000`. `count` 0 does nothing at all |
+| `Control/Forever` | `FOREVER` | control (`children`) |  | none. With no children it waits forever and nothing else in the program runs |
 | `Control/Sequence` | `SEQUENCE` | control (`children`) |  | none |
 | `Control/If-Else` | `IF_THEN_ELSE` | control (`condition`, `children`, `elseChildren`) |  | none |
 
@@ -458,7 +458,8 @@ starts. `ticks` of 0 means no wait at all — the action's cleanup, if it has on
 |---|---|
 | `Control/Delay` | after `ticks` ticks |
 | `ticks` on a step | after that many ticks, then the step's own cleanup (stop attacking, stop using, …) |
-| `Navigation/NavGoto`, `FollowPlayer`, `ChasePlayer`, `Patrol` | when navigation stops, or when `ticks` runs out |
+| `Navigation/NavGoto` | when navigation stops. It takes no `ticks` parameter |
+| `Navigation/FollowPlayer`, `ChasePlayer`, `Patrol` | when navigation stops, or when `ticks` runs out |
 | `Navigation/Wander` | when `ticks` runs out, picking a new destination whenever it runs out of road |
 | `Navigation/FleeFrom` | when the bot is clear of the danger, retested every 10 ticks, or when `ticks` runs out |
 | `Elytra/GlideGoto` | when gliding stops or the goal is within `radius` |
@@ -605,7 +606,9 @@ reopening it in the editor shows the picture rather than a list.
 ### The built-in presets
 
 Ten programs ship in the mod jar. They appear in the editor's preset list and can be run with
-`/carpetlogic programs run <name> <bot>`; they cannot be overwritten.
+`/carpetlogic programs run <name> <bot>`, which looks a name up in the saved programs first and in
+the presets second, ignoring case; `/carpetlogic programs` on its own lists the saved ones only.
+Presets cannot be overwritten.
 
 | Id | Name | What it does |
 |---|---|---|
@@ -694,7 +697,7 @@ Response keys: `commandCarpetLogic`, `carpetLogicPort`, `carpetLogicBindAddress`
 |---|---|
 | `combatStyles` | every combat style `/bot spawn` takes, `sword` for the melee style |
 | `difficulties` | `beginner`, `casual`, `average`, `skilled`, `expert` |
-| `kits` | every kit this server can give out: the five built-in ones and whatever is in the world's `carpet-kits` folder |
+| `kits` | every kit this server can give out: the six built-in ones and whatever is in the world's `carpet-kits` folder |
 | `combatOptions` | every setting name `/bot option` and `/player <name> ai` accept, the per-style options included |
 
 The style and difficulty lists are the same ones the schema carries in the resolved `options` of those
@@ -703,7 +706,8 @@ the world's folder.
 
 ### `GET /api/schema`
 
-The whole of `carpetlogic/actions.json`, verbatim. This is what the editor compiles against.
+The whole of `carpetlogic/actions.json`, verbatim except that each `optionsFrom` is replaced in place by
+the `options` array it resolves to. This is what the editor compiles against.
 
 ### `GET /api/programs`
 
@@ -745,10 +749,50 @@ Response: `{"success": true}` or `{"success": false}` when there is no such prog
 
 ### `GET /api/bots`
 
-An object keyed by bot name, each value the bot's state: `name`, `x`, `y`, `z`, `yaw`, `pitch`,
-`health`, `maxHealth`, `foodLevel`, `gamemode`, `dimension`, `sprinting`, `sneaking`, and one field
-per equipment slot (`mainhand`, `offhand`, `head`, `chest`, `legs`, `feet`, `body`, `saddle`) holding
-the item id or `"empty"`.
+The whole panel state in one object:
+
+```json
+{
+  "bots": { "Bot1": { ... } },
+  "programs": { "Bot1": { "programName": "...", "status": "RUNNING", "currentAction": "MOVE", "error": null, "running": true } },
+  "combatSettings": [ "combat", "autotarget", "..." ],
+  "viewerMode": false
+}
+```
+
+`bots` is keyed by bot name. Each value is the bot's state: `name`, `x`, `y`, `z`, `yaw`, `pitch`,
+`health`, `maxHealth`, `absorption`, `armor`, `alive`, `foodLevel`, `gamemode`, `dimension`,
+`sprinting`, `sneaking`, a nested `equipment` object with one field per slot (`mainhand`, `offhand`,
+`head`, `chest`, `legs`, `feet`, `body`, `saddle`) holding the item id or `"empty"`, a `pvp` object
+with `combat` and `style`, and `target` and `program`, both null for a bot that is not doing either.
+
+`combatSettings` is every setting name `/bot option` takes, which is what the editor's per-bot combat
+dropdown is built from.
+
+### `GET /api/matches`
+
+An array of the last fifty finished fights, newest first. Each entry is `attacker`, `defender`,
+`winner`, `ticks`, `attackerDamage` and `defenderDamage`. Nothing is written here when nobody was
+watching, so a `/bot match` stopped early records nothing.
+
+### `POST /api/bots/config`
+
+Change one setting on one bot. Request body `{"name": "Bot1", "key": "difficulty", "value": "expert"}`.
+`key` and `value` must both be given, non-empty and at most 64 characters, with control characters
+stripped. The value is applied exactly as `/bot option` applies it, and the faction registry is kept
+in step.
+
+Response `{"success": true, "pvp": {"combat": true, "style": "MELEE"}}`.
+
+`404` when there is no such bot, `400` for a malformed body or for a value the bot refuses, with the
+reason.
+
+### `POST /api/bots/tp`
+
+Bring a bot to the owner of the token. Request body `{"name": "Bot1"}`. Response `{"success": true}`.
+
+`400 Only a link opened in game can bring a bot to its owner` for a token that has no player behind
+it, `404` for no such bot.
 
 ### `POST /api/bots/spawn`
 
@@ -813,12 +857,19 @@ before the body is read, so send no body.
 The first message is a full snapshot:
 
 ```
-data: {"type":"botUpdate","bots":{...},"programs":{"Bot1":{"programName":"...","status":"RUNNING","currentAction":"MOVE","error":null,"running":true}}}
+data: {"bots":{...},"programs":{"Bot1":{"programName":"...","status":"RUNNING","currentAction":"MOVE","error":null,"running":true}},"combatSettings":["..."],"viewerMode":false,"type":"botUpdate"}
 
 ```
 
-Then, every `carpetLogicUpdateInterval` ticks, another `botUpdate` with the same shape. Program log
-lines arrive as:
+Then, every `carpetLogicUpdateInterval` ticks, another `botUpdate` with the same shape. Whenever a new
+fight has been recorded, a `matchUpdate` goes out as well:
+
+```
+data: {"type":"matchUpdate","matches":[{"attacker":"Bot1","defender":"Steve","winner":"Bot1","ticks":300,"attackerDamage":45.5,"defenderDamage":12.0}]}
+
+```
+
+Program log lines arrive as:
 
 ```
 data: {"type":"log","level":"WARN","message":"...","timestamp":1730000000000}
@@ -830,3 +881,32 @@ proxies do not drop it. The stream closes when the token expires, when the owner
 loses permission, when the server shuts down, or when the client disconnects.
 
 `503` with "Too many editors are connected" past 16 open streams.
+## What the server does not do
+
+Worth knowing when something does not happen:
+
+- Only `GET` is served for the editor's own files. Any other method on one of them is `405 Method
+  not allowed`; a path with an extension outside `html css js json txt png svg`, or a path containing
+  `..`, is `404 Not found`; `/` is `/index.html`. The responses carry `X-Content-Type-Options:
+  nosniff`, `Cache-Control: no-cache`, `Referrer-Policy: no-referrer` and a strict
+  `Content-Security-Policy`.
+- An unmapped method and path is `404 Unknown API endpoint`. A request that throws is `500 Internal
+  error`, and one that is interrupted by the server shutting down is `503 The server is shutting
+  down`.
+- While no event stream is open, the tick loop gathers nothing for the editor at all.
+- A program name sent to `POST /api/programs` or `POST /api/execute` has its control characters turned
+  into spaces, is stripped, becomes `Untitled` when nothing is left and is cut at 64 characters.
+  `POST /api/execute` builds an unsaved program with the id `_unsaved`.
+- A server-thread interrupt closes every open event stream, and closing the server stops everything
+  the editor was running.
+
+## Related pages
+
+- [Bots.md](Bots.md) — the combat AI a combat node takes over
+- [Practice.md](Practice.md) — the match list this page's `GET /api/matches` serves
+- [Menus.md](Menus.md) — the in-game menu, which is a different way in
+- [Kits.md](Kits.md) — the `kits` list a `GIVE_KIT` node draws on
+- [FakePlayers.md](FakePlayers.md) — `/player` in full
+- [Rules.md](Rules.md) — the `carpetLogic*` rules and their defaults
+- [Commands.md](Commands.md) — every command
+- [SelfTest.md](SelfTest.md) — the `logic_*` scenarios that cover this
