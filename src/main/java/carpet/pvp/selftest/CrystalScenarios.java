@@ -17,6 +17,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -61,6 +63,12 @@ final class CrystalScenarios
     private static final int EXPERT_TICKS = 1400;
     /** Ticks a probe waits on a bot that has stopped making progress before it calls it stalled. */
     private static final int STALL_TICKS = 400;
+    /**
+     * Ticks after the first anchor is clicked that the scenario waits for one of them to cost the fighter
+     * something: one blast is a tick of the action pack's queue and a few more, and the bot may have to walk
+     * in and charge another before it finds one that reaches.
+     */
+    private static final int BLOWN_WAIT = 400;
     /** Ticks the suicide scenario watches a bot refuse for once it has refused the first blast. */
     private static final int WATCHED_TICKS = 200;
 
@@ -92,6 +100,22 @@ final class CrystalScenarios
         return List.of("bot option " + name + " combatstyle crystal",
                 "bot option " + name + " difficulty " + difficulty,
                 "bot option " + name + " combat true");
+    }
+
+    /**
+     * What an anchor fighter is given: a sword, anchors to put down, glowstone to charge them and armour that
+     * can take its own blast. No end crystal and no obsidian, because then the anchor is the only blast this
+     * scenario can watch, which is what it is about.
+     */
+    private static List<String> anchorKit(String name)
+    {
+        return List.of("give " + name + " minecraft:netherite_sword",
+                "give " + name + " minecraft:respawn_anchor 16",
+                "give " + name + " minecraft:glowstone 16",
+                "player " + name + " equip head minecraft:netherite_helmet",
+                "player " + name + " equip chest minecraft:netherite_chestplate",
+                "player " + name + " equip legs minecraft:netherite_leggings",
+                "player " + name + " equip feet minecraft:netherite_boots");
     }
 
     /** The same for the anchor half of the crystal style. */
@@ -619,25 +643,24 @@ final class CrystalScenarios
     /** A respawn anchor bot places an anchor, charges it and sets it off, and the target pays for it. */
     static Scenario anchor(String a, String b, String c, Vec3 origin)
     {
-        // The bot fights from the top of a stone ledge, where no crystal base is within its reach, and the
-        // fighter it is after is on the bedrock floor below it: the only placement in reach is an anchor.
-        List<String> course = new ArrayList<>(arena((int) origin.x, (int) origin.z, 13));
-        course.add(SelfTest.fill((int) origin.x, SURFACE, (int) origin.z, (int) origin.x + 5,
-                SURFACE + 3, (int) origin.z + 5, "minecraft:stone"));
+        // A small walled platform of bedrock with nothing on it but the fighter: the bot carries no end
+        // crystal and no obsidian, so an anchor is the only blast it has, and it has to walk the fighter into
+        // its own blast rather than set one off from where it started.
+        List<String> course = new ArrayList<>(arena((int) origin.x, (int) origin.z, 9));
         // A respawn anchor sets fire as well as blasting, and the crystal model has no fire in it, so the
-        // scenario takes the burning out of the picture and leaves only what the scenario is about.
-        course.add("effect give " + a + " minecraft:fire_resistance 1 0 true");
-        course.add("effect give " + b + " minecraft:fire_resistance 1 0 true");
-        Vec3 ledge = new Vec3((int) origin.x + 2.5, SURFACE + 4.0, (int) origin.z + 2.5);
-        return new Scenario(800, List.of(new Bot(a, ledge), new Bot(b, spot(origin, 8, 8))), course,
+        // scenario takes the burning out of the picture and leaves only what the scenario is about. A
+        // duration of seconds is not a duration at all: only "infinite" lasts the duel.
+        course.add("effect give " + a + " minecraft:fire_resistance infinite");
+        course.add("effect give " + b + " minecraft:fire_resistance infinite");
+        return new Scenario(800, List.of(new Bot(a, spot(origin, 1, 1)), new Bot(b, spot(origin, 6, 6))), course,
                 server ->
                 {
-                    crystalKit(a).forEach(command -> SelfTest.run(server, command));
+                    anchorKit(a).forEach(command -> SelfTest.run(server, command));
                     anchorCombat(a).forEach(command -> SelfTest.run(server, command));
                 }, new AnchorProbe(a, b));
     }
 
-    /** Watches the anchor bot until it has blown one, and takes it off the server either way. */
+    /** Watches the anchor bot until it has blown one. */
     private static final class AnchorProbe implements Function<MinecraftServer, Probe>
     {
         private final String bot;
@@ -648,6 +671,9 @@ final class CrystalScenarios
         private int armedAt = -1;
         private int gone;
         private String problem;
+        private Probe verdict;
+        private int blown;
+        private int blownAt = -1;
 
         AnchorProbe(String bot, String target)
         {
@@ -693,20 +719,53 @@ final class CrystalScenarios
                 seen = stats.anchorsPlaced;
                 armedAt = tick;
             }
-            if (stats.anchorsBlown >= 1)
+            if (verdict != null)
             {
-                SelfTest.run(server, QUIET);
-                SelfTest.run(server, "player " + bot + " disconnect");
-                return new Probe(victim.getHealth() < 20.0F, SelfTest.fmt(
-                        "%s placed %d anchors and set %d of them off, with %d crystals and %d blocks along the"
-                                + " way; %s has %.1f health; %d refusals, %d backed-off ticks, %d searches",
-                        bot, stats.anchorsPlaced, stats.anchorsBlown, stats.crystalsPlaced, stats.blocksPlaced,
-                        target, victim.getHealth(), stats.refusedBlasts, stats.backedOff, stats.plannerCalls));
+                return verdict;
+            }
+            if (stats.anchorsBlown > blown)
+            {
+                // The bot has clicked an anchor. Its blast goes off a tick later, out of the action pack's
+                // queue, so the difficulty has to stay at normal until the fighter has paid for it: on a
+                // peaceful server the whole of a blast is taken away and the click would be for nothing.
+                if (blownAt < 0)
+                {
+                    blownAt = tick;
+                }
+                blown = stats.anchorsBlown;
+            }
+            if (blown > 0)
+            {
+                // A power five anchor blast kills an unarmoured fighter outright, and a fake player is back at
+                // full health a tick later, so health alone is not everything it cost: dying counts as paying.
+                // Only the blast counts: a fighter knocked off the ledge pays for the fall, not the anchor.
+                DamageSource source = victim.getLastDamageSource();
+                boolean blasted = source != null && source.is(DamageTypeTags.IS_EXPLOSION);
+                boolean killed = victim instanceof EntityPlayerMPFake fallen && fallen.diedTick() > 0L;
+                boolean paid = blasted && (killed || victim.getHealth() < 20.0F);
+                if (paid || tick - blownAt > BLOWN_WAIT)
+                {
+                    SelfTest.run(server, QUIET);
+                    verdict = new Probe(paid, SelfTest.fmt(
+                            "%s placed %d anchors and set %d of them off, with %d crystals and %d blocks along"
+                                    + " the way; %d ticks after the first click %s is on %.1f health, %s, and its"
+                                    + " last damage was %s; %d refusals, %d backed-off ticks, %d searches",
+                            bot, stats.anchorsPlaced, stats.anchorsBlown, stats.crystalsPlaced,
+                            stats.blocksPlaced, tick - blownAt, target, victim.getHealth(),
+                            killed ? "which a blast finished off" : "which a blast left standing",
+                            source == null ? "nothing" : source.getMsgId(), stats.refusedBlasts,
+                            stats.backedOff, stats.plannerCalls));
+                }
+                else
+                {
+                    return SelfTest.pending(SelfTest.fmt("%d anchors down and blown, %s is still on %.1f",
+                            stats.anchorsBlown, target, victim.getHealth()));
+                }
+                return verdict;
             }
             if (tick - armedAt > STALL_TICKS * 2)
             {
                 SelfTest.run(server, QUIET);
-                SelfTest.run(server, "player " + bot + " disconnect");
                 problem = SelfTest.fmt("%s stalled after %d anchors, %d crystals, %d blocks and"
                         + " %d searches in %d ticks", bot, stats.anchorsPlaced, stats.crystalsPlaced,
                         stats.blocksPlaced, stats.plannerCalls, tick - armedAt);

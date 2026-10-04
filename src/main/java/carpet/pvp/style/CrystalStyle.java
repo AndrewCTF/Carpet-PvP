@@ -465,6 +465,14 @@ public final class CrystalStyle implements BotStyle
             }
             if (hitNow(target))
             {
+                // An anchor only goes off if the click reaches it: a charged anchor that is still standing
+                // after the click has not been set off, so nothing is booked and the bot tries again rather
+                // than count a blast that never happened.
+                if (plan.anchor && hand.isBlock(cell, Blocks.RESPAWN_ANCHOR))
+                {
+                    stand(target);
+                    return;
+                }
                 stats.blasts++;
                 if (plan.anchor)
                 {
@@ -600,10 +608,10 @@ public final class CrystalStyle implements BotStyle
         Box theirs = Box.player(seen.x, seen.y, seen.z);
         float selfExposure = SeenPercent.of(view, centre[0], centre[1], centre[2], own);
         float theirExposure = SeenPercent.of(view, centre[0], centre[1], centre[2], theirs);
-        float selfDamage = damage(self, own, centre, power(), selfExposure);
-        float theirDamage = damage(enemy, theirs, centre, power(), theirExposure);
         boolean blockable = hand.carried(Items.OBSIDIAN) > 0 && gapCell() != null;
         boolean steppable = stepCell() != null;
+        float selfDamage = damage(self, own, centre, power(), selfExposure);
+        float theirDamage = damage(enemy, theirs, centre, power(), theirExposure);
         return CrystalTactics.judge(selfDamage, self.health, theirDamage, enemy.health, enemy.totem,
                 blockable, steppable);
     }

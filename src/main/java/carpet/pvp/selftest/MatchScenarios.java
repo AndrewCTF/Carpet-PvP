@@ -46,6 +46,7 @@ final class MatchScenarios
     static Scenario ffa(String a, String b, String c, Vec3 origin)
     {
         double[] dealt = new double[FFA.size()];
+        double[] counted = new double[FFA.size()];
         Set<String>[] hurtBy = sets(FFA.size());
         Probe[] verdict = {null};
         String[] step = {"setup"};
@@ -68,13 +69,13 @@ final class MatchScenarios
             {
                 return verdict[0];
             }
-            gather(FFA, dealt, hurtBy);
+            gather(FFA, dealt, counted, hurtBy);
             if (MatchManager.active())
             {
                 return SelfTest.pending("the match is running: " + MatchManager.status());
             }
             sweep(server);
-            gather(FFA, dealt, hurtBy);
+            gather(FFA, dealt, counted, hurtBy);
             int hitting = 0;
             int hit = 0;
             for (int i = 0; i < FFA.size(); i++)
@@ -100,6 +101,7 @@ final class MatchScenarios
     static Scenario teams(String a, String b, String c, Vec3 origin)
     {
         double[] dealt = new double[TEAMS.size()];
+        double[] counted = new double[TEAMS.size()];
         Set<String>[] from = sets(TEAMS.size());
         List<String> friendlyHits = new ArrayList<>();
         Probe[] verdict = {null};
@@ -123,7 +125,7 @@ final class MatchScenarios
             {
                 return verdict[0];
             }
-            gather(TEAMS, dealt, from);
+            gather(TEAMS, dealt, counted, from);
             for (String name : TEAMS)
             {
                 CombatTrace fight = CombatTraces.fight(name);
@@ -141,7 +143,7 @@ final class MatchScenarios
                 return SelfTest.pending("the match is running: " + MatchManager.status());
             }
             sweep(server);
-            gather(TEAMS, dealt, from);
+            gather(TEAMS, dealt, counted, from);
             MatchHistory.Match newest = MatchHistory.matches().isEmpty() ? null : MatchHistory.matches().get(0);
             boolean recorded = newest != null && newest.ticks() > 0 && isTeam(newest.winner());
             int hitting = 0;
@@ -369,14 +371,23 @@ final class MatchScenarios
     /**
      * Reads the damage every bot's trace holds so far: what it dealt, and which of the others it was hit
      * by. A trace outlives the bot, so this still works once a match has taken the bots off.
+     *
+     * <p>This is asked for on every tick of a match, and a trace's own total only ever goes up, so what is
+     * added each time is the difference against the last time it was asked: adding the running total on every
+     * tick would count the same damage again and again and end up with tens of thousands of health points
+     * for a match nobody ever dealt.</p>
      */
-    private static void gather(List<String> bots, double[] dealt, Set<String>[] hurtBy)
+    private static void gather(List<String> bots, double[] dealt, double[] counted, Set<String>[] hurtBy)
     {
         for (int i = 0; i < bots.size(); i++)
         {
             CombatTrace fight = CombatTraces.fight(bots.get(i));
             if (fight == null) continue;
-            dealt[i] += fight.damageDealt();
+            double total = fight.damageDealt();
+            // A trace that ended and a new one that has not been hit yet starts over, so a smaller total is
+            // a fresh fight rather than damage that was taken back.
+            dealt[i] += Math.max(0.0D, total - counted[i]);
+            counted[i] = total;
             for (CombatTrace.Event event : fight.events())
             {
                 if (event.kind() == CombatTrace.Kind.TAKEN && !event.other().isEmpty())

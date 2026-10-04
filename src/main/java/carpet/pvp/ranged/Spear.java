@@ -9,6 +9,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.KineticWeapon;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The thrust of a charged spear.
@@ -94,14 +95,18 @@ public final class Spear
     /**
      * How fast the bot and the target close on each other along the direction the bot is looking, which is what
      * the game measures: the attacker's motion along the view, less the target's, never below nothing.
+     *
+     * <p>The game reads that motion off {@code getKnownSpeed}, which is the velocity of a block a second, and
+     * the gate on the damage is written in the same unit: a relative speed of 4.6 is a closing speed of 4.6
+     * blocks a second. A per tick velocity here would be twenty times too small and the thrust would never be
+     * worth committing to.</p>
      */
     public double closingSpeed(LivingEntity target)
     {
-        double mine = SpearMath.along(bot.getDeltaMovement().x, bot.getDeltaMovement().y, bot.getDeltaMovement().z,
-                bot.getYRot(), bot.getXRot());
-        double theirs = SpearMath.along(target.getDeltaMovement().x, target.getDeltaMovement().y,
-                target.getDeltaMovement().z, bot.getYRot(), bot.getXRot());
-        return SpearMath.closingSpeed(mine, theirs);
+        Vec3 mine = bot.getKnownSpeed();
+        Vec3 theirs = target.getKnownSpeed();
+        return SpearMath.closingSpeed(SpearMath.along(mine.x, mine.y, mine.z, bot.getYRot(), bot.getXRot()),
+                SpearMath.along(theirs.x, theirs.y, theirs.z, bot.getYRot(), bot.getXRot()));
     }
 
     /**
