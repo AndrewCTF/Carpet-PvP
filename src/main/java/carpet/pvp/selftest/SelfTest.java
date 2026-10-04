@@ -1026,14 +1026,17 @@ public final class SelfTest
             case "nav_smooth":
                 {
                 // A diagonal goal across open ground: the bot has to walk it in a straight line rather than
-                // block by block, so what it covers has to match the distance between the two ends.
+                // block by block, so what it covers has to match the distance between the two ends. The ground
+                // the goal stands on is kept loaded: a bot asked to walk to a block whose chunk has not arrived
+                // yet cannot plan a route, and nav goto gives up rather than waiting for one.
                 int x0 = (int) origin.x;
                 int z0 = (int) origin.z;
                 Vec3 start = new Vec3(x0 + 0.5D, SURFACE_Y, z0 + 0.5D);
                 Vec3 smoothGoal = new Vec3(x0 + 40.0D, SURFACE_Y, z0 + 40.0D);
                 double[] last = {x0 + 0.5D, SURFACE_Y, z0 + 0.5D};
                 double[] walked = {0.0D};
-                return new Scenario(900, List.of(new Bot(a, start)), List.of(),
+                return new Scenario(900, List.of(new Bot(a, start)),
+                        List.of(forceload(x0, z0, x0 + 46, z0 + 46)),
                         server -> run(server, "player " + a + " nav goto " + coords(smoothGoal)), server ->
                 {
                     ServerPlayer bot = player(server, a);

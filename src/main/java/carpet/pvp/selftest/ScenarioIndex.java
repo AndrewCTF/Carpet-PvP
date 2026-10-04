@@ -61,5 +61,6 @@ final class ScenarioIndex
         SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);
         SCENARIOS.put("sword_shield_play", SwordScenarios::shieldPlay);
         SCENARIOS.put("sword_settings", SwordScenarios::swordSettings);
+        SCENARIOS.put("sword_hits_passive_target", PassiveTargetScenarios::hitsPassiveTarget);
     }
 }

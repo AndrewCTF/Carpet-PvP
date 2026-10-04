@@ -378,7 +378,8 @@ public final class SwordStyle implements BotStyle
             observed = currentTarget;
             model.reset();
         }
-        boolean swung = seen.ticksSinceSwing == 0 && perception.targetHistory().size() > 1;
+        /** A swing shows up as the target's swing count being back at the start of its cooldown. */
+        boolean swung = seen.ticksSinceSwing <= 1 && perception.targetHistory().size() > 1;
         double toward = closing(seen);
         model.observe(sim, 1, DuelSim.action(toward > WALKING_SPEED ? 1 : 0, 0, false,
                 toward > WALKING_SPEED, swung));
@@ -462,7 +463,10 @@ public final class SwordStyle implements BotStyle
         fighter.vx = snapshot.vx;
         fighter.vy = snapshot.vy;
         fighter.vz = snapshot.vz;
-        fighter.sinYaw = -Math.sin(yaw);
+        // The simulation keeps the facing as (-sinYaw, cosYaw), which is where the game looks from the yaw,
+        // so the sine goes in as it stands: a bot whose target is to its west looks along -x, and a plan that
+        // walks forward has to walk towards the target rather than away from it.
+        fighter.sinYaw = Math.sin(yaw);
         fighter.cosYaw = Math.cos(yaw);
         fighter.onGround = snapshot.onGround;
         fighter.sprinting = snapshot.sprinting;
