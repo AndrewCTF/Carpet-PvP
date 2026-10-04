@@ -26,7 +26,11 @@ class BotOptionLayoutTest
         {
             int dot = key.indexOf('.');
             assertTrue(dot > 0, key + " is not named <style>.<option>");
-            String style = BotPvpConfig.CombatStyle.valueOf(key.substring(0, dot).toUpperCase(Locale.ROOT)).name();
+            String prefix = key.substring(0, dot);
+            // Every option belongs to a style there is: the sword style is the MELEE constant, the rest are
+            // named as their constants are.
+            BotPvpConfig.CombatStyle.valueOf(prefix.equals("sword") ? "MELEE" : prefix.toUpperCase(Locale.ROOT));
+            String style = prefix.toUpperCase(Locale.ROOT);
             String option = key.substring(dot + 1).replace('_', ' ');
             assertEquals(style + ": " + option, BotOptionLayout.title(key), key);
         }

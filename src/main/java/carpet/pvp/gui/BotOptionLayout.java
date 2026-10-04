@@ -217,7 +217,9 @@ public final class BotOptionLayout
         if (dot < 0) return key;
         // A style option belongs to one style, so it is called by that style and its own words:
         // ranged.bow reads as "Ranged: bow" and crystal.retotem_delay as "Crystal: retotem delay".
-        String style = BotPvpConfig.CombatStyle.valueOf(key.substring(0, dot).toUpperCase(Locale.ROOT)).name();
+        // The name is taken as it is written: the sword style's options are sword.<option>, and its constant
+        // is MELEE, so there is no constant to look the name up in.
+        String style = key.substring(0, dot).toUpperCase(Locale.ROOT);
         return style + ": " + key.substring(dot + 1).replace('_', ' ');
     }
 
