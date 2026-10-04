@@ -75,6 +75,12 @@ final class ScenarioIndex
         SCENARIOS.put("mace_swap_probe", MaceSwapScenarios::swapProbe);
         SCENARIOS.put("mace_breach_swap_probe", MaceSwapScenarios::breachSwapProbe);
         SCENARIOS.put("mace_duel", MaceScenarios::duel);
+        SCENARIOS.put("mace_swap_smash", MaceFightScenarios::swapSmash);
+        SCENARIOS.put("mace_breach_swap", MaceFightScenarios::breachSwap);
+        SCENARIOS.put("mace_elytra_dive", MaceFightScenarios::elytraDive);
+        SCENARIOS.put("mace_stun_slam_one_fall", MaceFightScenarios::stunSlamOneFall);
+        SCENARIOS.put("mace_wind_burst_chain", MaceFightScenarios::windBurstChain);
+        SCENARIOS.put("sword_breach_swap", MaceFightScenarios::swordBreachSwap);
         SCENARIOS.put("sword_hits_passive_target", PassiveTargetScenarios::hitsPassiveTarget);
         SCENARIOS.put("smp_heals", SmpScenarios::heals);
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);

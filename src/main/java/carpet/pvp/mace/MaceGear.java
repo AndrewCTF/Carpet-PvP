@@ -7,9 +7,12 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 
@@ -25,6 +28,10 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 public final class MaceGear
 {
     private static final int HOTBAR = 9;
+    /** The attack damage a player has with nothing in its hand, which an item's modifiers are added to. */
+    private static final double BARE_HAND_DAMAGE = 1.0D;
+    /** Attributes.ATTACK_SPEED of a player with nothing in its hand, which an item's modifiers take from. */
+    private static final double BARE_HAND_SPEED = 4.0D;
     private static final Item[] AXES = {Items.NETHERITE_AXE, Items.DIAMOND_AXE, Items.IRON_AXE, Items.STONE_AXE,
             Items.GOLDEN_AXE, Items.WOODEN_AXE};
 
@@ -207,6 +214,24 @@ public final class MaceGear
         return elytra;
     }
 
+    /**
+     * Slot of the chest piece the wings are exchanged with, which is where the elytra's own slot ends up once
+     * it is worn: using the elytra out of the hotbar puts it on the chest and hands the chest piece back, and
+     * using that again takes the wings off.
+     */
+    public int chestpieceSlot()
+    {
+        for (int slot = 0; slot < HOTBAR; slot++)
+        {
+            ItemStack stack = bot.getInventory().getItem(slot);
+            if (swappable(stack) && !stack.is(Items.ELYTRA))
+            {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
     /** Slot of the firework rockets, or -1. */
     public int rocketSlot()
     {
@@ -261,7 +286,7 @@ public final class MaceGear
                 ? breachMace : densityMace;
     }
 
-    /** True while the bot can throw its wind charges: the stack is there, has one left and is ready. */
+    /** When the cooldown of a launch or a ground hit is out of the way. */
     public boolean chargeReady()
     {
         return charge >= 0 && charges() > 0 && !bot.getCooldowns().isOnCooldown(bot.getInventory().getItem(charge));
@@ -284,6 +309,56 @@ public final class MaceGear
     public boolean chargerIsAxe()
     {
         return chargerSlot() == axe;
+    }
+
+    /** The base damage a swing charged in this slot carries, which is the item's own attribute. */
+    public double damageOf(int slot)
+    {
+        return attribute(slot, Attributes.ATTACK_DAMAGE, BARE_HAND_DAMAGE);
+    }
+
+    /** The attack speed a swing charged in this slot is collected under, which is the item's own attribute. */
+    public double speedOf(int slot)
+    {
+        return attribute(slot, Attributes.ATTACK_SPEED, BARE_HAND_SPEED);
+    }
+
+    /**
+     * The base damage of the item the hand changes off on the tick of a hit, which is what a smash or a ground
+     * swap is charged against. Read off the stack rather than assumed, so a kit that hands out something other
+     * than a netherite sword is priced at what it actually swings with.
+     */
+    public double chargerDamage()
+    {
+        return damageOf(chargerSlot());
+    }
+
+    /** The attack speed of the item a swap smash's or a ground hit's cooldown is collected under. */
+    public double chargerSpeed()
+    {
+        return speedOf(chargerSlot());
+    }
+
+    /** The base damage of the axe that takes a raised shield down. */
+    public double axeDamage()
+    {
+        return damageOf(axe);
+    }
+
+    /** The attack speed of the axe that takes a raised shield down. */
+    public double axeSpeed()
+    {
+        return speedOf(axe);
+    }
+
+    private double attribute(int slot, Holder<Attribute> attribute, double base)
+    {
+        if (slot < 0)
+        {
+            return base;
+        }
+        ItemAttributeModifiers modifiers = bot.getInventory().getItem(slot).get(DataComponents.ATTRIBUTE_MODIFIERS);
+        return modifiers == null ? base : modifiers.compute(attribute, base, EquipmentSlot.MAINHAND);
     }
 
     private static boolean swappable(ItemStack stack)

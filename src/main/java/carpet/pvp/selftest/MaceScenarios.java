@@ -322,7 +322,14 @@ final class MaceScenarios
                 // the two apart without having to guess what the bot did.
                 if (apex[0] < origin.y + LAUNCH_HEIGHT) return SelfTest.pending(a + " has not launched yet");
                 spentBefore[0] = charges(bot);
-                SelfTest.run(server, "tp " + b + " ~ ~" + SelfTest.fmt("%.0f", OUT_OF_ARC) + " ~");
+                // Absolute coordinates on purpose: a relative /tp is measured against the command source, and
+                // the console sits at the world's spawn point, so "~ ~14 ~" would put the dummy at the origin of
+                // the map rather than fourteen blocks over its own head. Out of the arc is the point; out of the
+                // world is not, since the bot has to keep seeing what it launched at.
+                SelfTest.run(server, "tp " + b + " " + SelfTest.coords(dummy.add(0.0D, OUT_OF_ARC, 0.0D)));
+                // And it stays there. A dummy let go fourteen blocks up falls straight back into the arc, onto
+                // the bot that launched at it, which is a hit rather than the miss this scenario is about.
+                SelfTest.run(server, "data merge entity " + b + " {NoGravity:1b,Motion:[0.0d,0.0d,0.0d]}");
                 lifted[0] = true;
                 return SelfTest.pending(SelfTest.fmt("%s is %.2f blocks up and %s is out of the arc", a,
                         apex[0] - origin.y, b));

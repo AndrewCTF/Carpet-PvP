@@ -14,7 +14,6 @@ import carpet.pvp.mace.MaceChoice.Technique;
 import carpet.pvp.mace.MaceGear;
 import carpet.pvp.mace.MaceLaunch;
 import carpet.pvp.mace.MaceSwap;
-import carpet.pvp.sim.AttributeSwap;
 import carpet.pvp.sim.CombatMath;
 import carpet.pvp.sim.DuelSim;
 import carpet.pvp.sim.EngagePlanner;
@@ -72,8 +71,13 @@ public final class MaceStyle implements BotStyle
     private static final double DIVE_CLOSE = 1.5;
     /** Height above the ground within which the bot throws the charge that saves it from the fall. */
     private static final double SAVE_HEIGHT = 2.3;
-    /** Wind charges one flight may throw below the ground, the chain or the save, but never both. */
-    private static final int FLIGHT_CHARGES = 1;
+    /**
+     * Wind charges one flight may throw at its own feet below the apex. The save is worth two: the burst off a
+     * fall is far stronger than the launch that started the flight, so the bot is often higher after one than
+     * before, and the impulse behind the second one is what makes that landing harmless. A chain is only taken
+     * when nothing has been spent, so a charge is never asked for both.
+     */
+    private static final int FLIGHT_CHARGES = 2;
     /** How far off a target the bot still counts a launch as able to land on it. */
     private static final double CHAIN_RANGE = 4.5;
     /** Ticks ahead the bot steers the target's movement to, the rest of the descent is too close to call. */
@@ -99,20 +103,47 @@ public final class MaceStyle implements BotStyle
     private static final double FORCED_GAP = 2.6;
     /** Ticks of cooldown a mace needs before a swing crits, the gate of its own attack speed. */
     private static final int MACE_GATE_TICKS = CombatMath.minTicksForGate(SmashTiming.MACE_ATTACK_SPEED);
-    /** Height above the target an elytra dive climbs to before it turns in, in blocks. */
+    /**
+     * Height above the target a dive turns in at, and the height the model is asked to price it from, since the
+     * planner cannot open a glide from the ground: a dive is the one entry a player starts off the floor, which
+     * is why it is only the bot's when the climb gets it higher than a wind charge launch does.
+     */
     private static final double DIVE_HEIGHT = 7.0;
     /**
-     * Gap a dive is opened at. A climb takes longer than the fight it is meant to win, so it is only worth
-     * starting against a target far enough away that the launch would cost the bot several of them.
+     * How far off a dive may be started. Players take off next to the opponent, so there is no lower bound:
+     * what decides the range is that the climb has to end over the target, which it only does from the range a
+     * wind charge launch is thrown from anyway. Past that the climb is a way of losing the fight on the way up.
      */
-    private static final double DIVE_NEAR = 11.0;
-    private static final double DIVE_FAR = 34.0;
+    private static final double DIVE_FAR = 7.0;
+    /** Rockets a dive needs before it can be called worth starting. */
+    private static final int DIVE_ROCKETS = 2;
+    /**
+     * Ticks a dive is charged for before it is compared with anything else. The planner opens a glide off the
+     * height the climb reaches, so what it reports is what the drop is worth and nothing about getting up
+     * there; the climb is ticks spent in the target's reach with an empty hand, and a wind charge launch is
+     * worth none of them, so this is what keeps a dive from looking free.
+     */
+    private static final int DIVE_CLIMB_TICKS = 24;
+    /** View pitch a glide climbs under, in degrees looking up, which is Minecraft's negative. */
+    private static final float CLIMB_PITCH = -50.0F;
+    /**
+     * How far the target may get away during a climb before the bot gives it up. A glide climbs faster than a
+     * sword bot walks, but not faster than one that is running, and a dive against a target that is leaving is
+     * a hundred ticks of being hit by it with nothing in the bot's hand.
+     */
+    private static final double DIVE_ABANDON = 12.0;
     /** Ticks one dive may spend putting the wings on, lighting rockets and getting above the target. */
     private static final int CLIMB_TIMEOUT = 120;
     /** Ticks between two rockets, which is how long a launched firework takes to go off. */
     private static final int ROCKET_GAP = 3;
     /** Ticks the wings stay folded before the bot is sure it is really falling onto the target. */
     private static final int FOLD_SETTLE = 2;
+    /**
+     * Fall distance below which the bot has stopped falling rather than arrived at the target. A smash leaves
+     * the attacker hanging where the hit was made, so a chain that follows one up a block or two is still a
+     * chain, and the bot should not read the hang as a launch that has missed.
+     */
+    private static final double HANGING_FALL = 0.3;
     /** Gap within which a dive closes its wings and drops the rest of the way. */
     private static final double DIVE_CLOSE_DROP = 2.0;
     /** Ticks the axe of a stun slam inside one fall is allowed to take to reach a blocking target. */
@@ -170,7 +201,7 @@ public final class MaceStyle implements BotStyle
     private int sinceClick;
     private int clicks;
     /** Height the duel model's own ground sits at, which is zero, relative to the world the bot is in. */
-    private double ground0;
+    private double ground0 = Double.NaN;
 
     public MaceStyle(EntityPlayerMPFake bot, BotBody body, BotPvpConfig cfg, Random random)
     {
@@ -279,36 +310,38 @@ public final class MaceStyle implements BotStyle
             breakShield(body, cfg, target, me, seen);
             return;
         }
-        if (stunWindow && horizontal(me, seen) <= cfg.meleeRange)
+        if (stunWindow)
         {
-            // Inside its own reach a launch has nothing to arc over, so the bot spends the window the axe
-            // opened on the mace it is already holding rather than standing off to start one.
+            // The shield is down for a hundred ticks and a launch would spend them getting up, so the bot walks
+            // in and spends the window on the mace it is already holding.
             maceRush(body, cfg, target, me, seen);
             return;
         }
         boolean winding = winding(cfg, me, seen);
-        if (breachGround(cfg, me, seen))
+        if (!launching)
         {
-            breachExchange(body, cfg, target, me, seen);
-            return;
-        }
-        if (beginDive(cfg, me, seen))
-        {
-            // A dive is opened with the wings still in the bag and the bot still on the ground, so it starts
-            // with the same wind charge launch every other entry does and puts the elytra on in the air.
-            entry = EngagePlanner.WIND_CHARGE;
-            entryTicks = MaceLaunch.ARC_TICKS;
-            entryFall = MaceLaunch.APEX[0] / 2.0;
-            launching = true;
-            phase = Phase.AIM;
-            aimTicks = 0;
-            aim(body, target, me, seen);
-            return;
-        }
-        if (winding || planCountdown-- <= 0)
-        {
-            planCountdown = winding ? 0 : PLAN_INTERVAL;
-            plan(cfg, me, seen);
+            // The entry that was chosen is the entry that gets flown: re-planning while one is under way would
+            // overwrite it, and a dive in particular is chosen over a launch and would lose to the next tick's.
+            // A stun window is not spent on a launch either: it is a hundred ticks of the target's shield being
+            // down and nothing else in this kit opens one.
+            if (winding)
+            {
+                // Standing off for a launch: only the entries that need height are on the table, and a standoff
+                // with nothing to launch and a charged hand is over, because otherwise the bot would hold that
+                // range for ever.
+                // Inside the range a launch cannot arc over the bot is not standing off at all: it walks in
+                // and trades, so walking in is one of the answers the model is asked for there.
+                boolean standoff = horizontal(me, seen) >= FORCED_GAP;
+                if (!plan(cfg, me, seen, standoff) && sinceClick >= launchGate(cfg))
+                {
+                    winding = false;
+                }
+            }
+            else if (planCountdown-- <= 0)
+            {
+                planCountdown = PLAN_INTERVAL;
+                plan(cfg, me, seen, false);
+            }
         }
         if (launching)
         {
@@ -318,12 +351,19 @@ public final class MaceStyle implements BotStyle
             }
             return;
         }
-        if (winding && (sinceClick < MACE_GATE_TICKS || horizontal(me, seen) >= FORCED_GAP))
+        if (winding && (sinceClick < launchGate(cfg) || horizontal(me, seen) >= FORCED_GAP))
         {
-            // The launch wants a charged mace and every swing would spend the charge again, so the bot
+            // The launch wants a charged hand and every swing would spend the charge again, so the bot
             // stands at the range the model launches from and lets its cooldown come up. It only gives up
             // the standoff when the target is inside its own reach, where a launch could not reach at all.
             hold(cfg, body, target, me, seen);
+            return;
+        }
+        if (breachGround(cfg, me, seen))
+        {
+            // The launch rhythm comes first, so a Breach swap on the ground can never stand between this bot
+            // and the launch the model just asked for.
+            breachExchange(body, cfg, target, me, seen);
             return;
         }
         melee.engage(body, perception, cfg, target, pack);
@@ -353,13 +393,13 @@ public final class MaceStyle implements BotStyle
 
     /**
      * Whether the fight has come down to trading on the ground: a Breach mace in the kit, a charger to collect
-     * the cooldown under, armour for Breach to cut, and no wind charge left to launch with. A charge in hand
-     * makes the launch worth more than any ground hit, so the swap waits for the last of them.
+     * the cooldown under, armour for Breach to cut, and the target inside the range a click reaches. The
+     * swap costs nothing but the hotbar change the game gives one tick of room for, so it is not held back for
+     * a launch to come first, and a bot with wind charges left is trading exactly like one without.
      */
     private boolean breachGround(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen)
     {
-        if (!allowed(cfg, Technique.BREACH_SWAP) || stunWindow || launching || !me.onGround || dread > 0
-                || gear.charges() > 0)
+        if (!allowed(cfg, Technique.BREACH_SWAP) || stunWindow || launching || !me.onGround || dread > 0)
         {
             return false;
         }
@@ -368,20 +408,22 @@ public final class MaceStyle implements BotStyle
     }
 
     /**
-     * The ground exchange: the hand holds the sword, whose thirteen tick cadence is what the fight runs on,
-     * and the Breach mace goes in for the tick of each charged swing so the hit is made through armour it has
-     * cut while carrying the sword's base damage. The hotbar change lands on the next body tick, which is the
-     * tick before the swing, and the sword goes back in on the one after it.
+     * The ground exchange: the hand holds the item the cooldown is collected under, whose thirteen tick cadence
+     * is what the fight runs on, and the Breach mace goes in for the tick of each charged swing so the hit is
+     * made through armour it has cut while carrying the charger's base damage. The hotbar change lands on the
+     * next body tick, which is the tick before the swing, and the charger goes back in on the one after it.
      */
     private void breachExchange(BotBody body, BotPvpConfig cfg, LivingEntity target, Perception.Snapshot me,
             Perception.Snapshot seen)
     {
         int breaker = ground.hitSlot(seen.armor, seen.armorToughness, seen.epf);
-        boolean out = breaker >= 0 && breaker == body.currentSlot();
         fill(sim.a, me);
         fillCharger(sim.a);
-        boolean swing = out && sinceClick >= sim.a.gateTicks && body.canHit(target);
-        want(body, swing ? ground.chargeSlot() : breaker);
+        // A hotbar change lands on the next tick, so the Breach mace has to be asked for on the tick before the
+        // swing: the swing is made with the mace in the hand and the charger's charge behind it.
+        boolean inReach = breaker >= 0 && body.canHit(target);
+        boolean swing = inReach && body.currentSlot() == breaker && sinceClick >= sim.a.gateTicks;
+        want(body, inReach ? breaker : ground.chargeSlot());
         // The exchange closes to reach and then stands its ground: backing off would take the bot out of the
         // window the exchange is for and hand the fight back to the launch it has no charge left for.
         double near = horizontal(me, seen);
@@ -390,19 +432,28 @@ public final class MaceStyle implements BotStyle
     }
 
     /**
-     * Whether a dive is worth opening. It needs the wings and something to climb with, and it is only worth
-     * the climb when the target is far enough away that walking to it would cost more than the flight.
+     * Whether this bot could dive at this target at all: the wings, enough rockets to climb with, and a target
+     * it can get above rather than one that is already above it.
+     *
+     * <p>No wind charges left is part of it, and that is what a dive really is for. A launch costs no exposure
+     * at all and lands something every time, so a bot that still has charges spends them; once they are gone the
+     * mace does nothing on the ground and the only way left to put the target on the floor is to come down on it
+     * from above. Whether to spend the climb on this particular target is then the model's question, and
+     * {@link #plan} asks it from the height the climb reaches.</p>
      */
-    private boolean beginDive(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen)
+    private boolean canDive(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen)
     {
-        if (!allowed(cfg, Technique.ELYTRA) || stunWindow || !me.onGround || dread > 0
-                || (gear.elytraSlot() < 0 && !gear.wearingElytra())
-                || (gear.rocketSlot() < 0 && gear.rockets() < 1) || !allowed(cfg, Technique.ROCKET))
+        if (!allowed(cfg, Technique.ELYTRA) || !allowed(cfg, Technique.ROCKET) || stunWindow || launching
+                || !me.onGround || dread > 0 || gear.rocketSlot() < 0 || gear.rockets() < DIVE_ROCKETS
+                || gear.charges() > 0)
         {
             return false;
         }
-        double gap = horizontal(me, seen);
-        return gap >= DIVE_NEAR && gap <= DIVE_FAR && gear.charges() > 0 && !winding(cfg, me, seen);
+        if (gear.elytraSlot() < 0 && !gear.wearingElytra())
+        {
+            return false;
+        }
+        return horizontal(me, seen) <= DIVE_FAR && seen.y < me.y + DREAD_HEIGHT;
     }
 
     /**
@@ -505,17 +556,25 @@ public final class MaceStyle implements BotStyle
     /**
      * Asks the model which entry beats walking in and remembers it until the bot has launched. A plan that
      * costs more simulated ticks than this bot has a share of is dropped and the ground phase goes on.
+     *
+     * <p>While the bot is standing off, walking in is not one of the answers: a ground swing there would spend
+     * the very charge the launch is waiting for, and a pearl is not one either, since the standoff only exists
+     * inside the range a wind charge reaches from. What is left is the two entries that need height. A model
+     * that is asked for a free swing it is not going to throw answers "walk in and hit" forever, which is how a
+     * bot ends up holding a charged hand at three and a half blocks for ever; asking it instead for the entries
+     * the standoff exists for is what puts the bot back in the air.</p>
+     *
+     * @param standingOff whether the bot is holding its charge for a launch rather than willing to swing
+     * @return whether an entry was found worth flying
      */
-    private void plan(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen)
+    private boolean plan(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen, boolean standingOff)
     {
-        System.out.println("[macedbg] PLAN gap=" + horizontal(me, seen) + " starved=" + stats.starvedTicks
-                + " calls=" + stats.plannerCalls + " entry=" + entry + " sinceClick=" + sinceClick);
         BotBudget budget = BotBudget.instance();
         int share = budget.join();
         if (share < PLAN_TICKS)
         {
             stats.starvedTicks++;
-            return;
+            return false;
         }
         fill(sim.a, me);
         fill(sim.b, seen);
@@ -525,15 +584,66 @@ public final class MaceStyle implements BotStyle
         budget.spend(PLAN_TICKS);
         stats.plannerCalls++;
         stats.simulatedTicks += PLAN_TICKS;
-        EngagePlanner.Option best = EngagePlanner.best(options);
-        if (best == null || best == options[EngagePlanner.WALK_IN] || !wanted(cfg, best.approach))
+        EngagePlanner.Option best = null;
+        if (standingOff && canDive(cfg, me, seen))
         {
-            return;
+            best = dive(sim, best);
+        }
+        for (int approach = 0; approach < EngagePlanner.APPROACHES; approach++)
+        {
+            if (standingOff && approach != EngagePlanner.WIND_CHARGE && approach != EngagePlanner.ELYTRA)
+            {
+                continue;
+            }
+            EngagePlanner.Option option = options[approach];
+            if (!option.feasible || !wanted(cfg, approach) || (best != null && option.score() <= best.score()))
+            {
+                continue;
+            }
+            best = option;
+        }
+        if (best == null || best.approach == EngagePlanner.WALK_IN || !wanted(cfg, best.approach))
+        {
+            return false;
         }
         entry = best.approach;
         entryTicks = best.ticks;
         entryFall = best.fallDistance;
         launching = true;
+        return true;
+    }
+
+    /**
+     * Prices the dive against what the other entries are worth right now. The planner cannot open a glide off
+     * the ground, so the dive is asked from the height a climb reaches and what comes back is compared with the
+     * best of the entries that can be started where the bot is standing: that is the question the task is, of
+     * whether a fall from higher up is worth the ticks the climb costs.
+     *
+     * @param best the best entry so far, or null when there is not one
+     * @return the best entry including the dive
+     */
+    private EngagePlanner.Option dive(DuelSim sim, EngagePlanner.Option best)
+    {
+        BotBudget budget = BotBudget.instance();
+        if (budget.join() < PLAN_TICKS)
+        {
+            stats.starvedTicks++;
+            return best;
+        }
+        double standing = sim.a.y;
+        sim.a.y = sim.b.y + DIVE_HEIGHT;
+        EngagePlanner.Option[] options = EngagePlanner.choose(sim, 0, gear.breachLevel(), threat, PLAN_TICKS);
+        sim.a.y = standing;
+        budget.spend(PLAN_TICKS);
+        stats.plannerCalls++;
+        stats.simulatedTicks += PLAN_TICKS;
+        EngagePlanner.Option dive = options[EngagePlanner.ELYTRA];
+        if (!dive.feasible)
+        {
+            return best;
+        }
+        double score = dive.score() * dive.ticks / (dive.ticks + DIVE_CLIMB_TICKS);
+        return best == null || score > best.score() ? dive : best;
     }
 
     /** Whether this bot's difficulty knows the given entry and it has what it takes to fly it. */
@@ -543,19 +653,21 @@ public final class MaceStyle implements BotStyle
         {
             case EngagePlanner.WIND_CHARGE -> allowed(cfg, Technique.WIND_CHARGE) && gear.chargeSlot() >= 0;
             case EngagePlanner.PEARL -> allowed(cfg, Technique.PEARL) && gear.pearlSlot() >= 0;
-            case EngagePlanner.ELYTRA -> allowed(cfg, Technique.ELYTRA) && gear.wearingElytra();
+            case EngagePlanner.ELYTRA -> allowed(cfg, Technique.ELYTRA)
+                    && (gear.wearingElytra() || gear.elytraSlot() >= 0);
             default -> false;
         };
     }
 
-    /**
-     * Standing off for a launch: the mace stays out, the gap is held at the range the model launches from
-     * and nothing is swung, so the cooldown the smash needs is still there when the arc comes down.
+/**
+     * Standing off for a launch: the gap is held at the range the model launches from and nothing is swung, so
+     * the charge the smash will be made off is still there when the arc comes down. The hand holds that item,
+     * which is the charger's when the bot swaps the mace in on the hit and the mace itself when it does not.
      */
     private void hold(BotPvpConfig cfg, BotBody body, LivingEntity target, Perception.Snapshot me,
             Perception.Snapshot seen)
     {
-        want(body, heldMace(cfg, me, seen));
+        want(body, charging(cfg, me, seen));
         double gap = horizontal(me, seen);
         int forward = gap > HOLD_RANGE ? 1 : gap < HOLD_RANGE - 1.0 ? -1 : 0;
         body.tick(seen, target, DuelSim.action(forward, 0, false, false, false), false);
@@ -587,6 +699,32 @@ public final class MaceStyle implements BotStyle
                     return false;
                 }
                 body.tick(seen, target, DuelSim.action(0, 0, false, false, false), false);
+                return true;
+            }
+            case EngagePlanner.ELYTRA -> {
+                if (!bot.onGround())
+                {
+                    phase = Phase.CLIMB;
+                    return true;
+                }
+                if (!gear.wearingElytra())
+                {
+                    // The wings go on from the hotbar: using the elytra exchanges it with the worn chest
+                    // piece, which is the only way a bot that is not already wearing them ever opens a glide.
+                    int elytra = gear.elytraSlot();
+                    if (elytra < 0)
+                    {
+                        launching = false;
+                        return false;
+                    }
+                    want(body, elytra);
+                    if (elytra == body.currentSlot())
+                    {
+                        actions.useMainHand();
+                    }
+                }
+                // A glide only starts off the ground, so the bot jumps with the wings on.
+                body.tick(seen, target, DuelSim.action(0, 0, true, false, false), false);
                 return true;
             }
             case EngagePlanner.WIND_CHARGE -> {
@@ -668,11 +806,17 @@ public final class MaceStyle implements BotStyle
         if (stats.hits > hitsAtLaunch)
         {
             hitsAtLaunch = stats.hits;
-            // A smash launches the attacker back up when the mace carries Wind Burst, and the bot may follow
-            // that with one more hit before it comes down; any further one has to wait for its cooldown.
+            // A smash leaves the attacker hanging where the hit was made, and one carrying Wind Burst throws
+            // the target up, so the bot may follow it with a second hit out of the same fall; any further one
+            // has to wait for its cooldown.
             bounceLeft = 1;
             chained = true;
-            fallStunAxe = -1;
+            // The axe of a stun slam is one hit in a fall like any other, so this would close the window it
+            // has just opened. Only the hit that is not the axe ends the pair.
+            if (fallStunAxe <= 0)
+            {
+                fallStunAxe = -1;
+            }
         }
         fill(sim.a, me);
         fill(sim.b, seen);
@@ -683,6 +827,10 @@ public final class MaceStyle implements BotStyle
         boolean close = DuelSim.inReach(sim.a, sim.b);
         boolean bounce = allowed(cfg, Technique.BOUNCE) && bounceLeft > 0 && gear.burstLevel() > 0;
 
+        // The axe of a stun slam has to be in the hand before the shield window opens, since it is the axe hit
+        // that takes the shield down and the mace follows it out of the same fall.
+        boolean window = fallStunAxe < 0 && allowed(cfg, Technique.FALL_STUN_SLAM) && gear.axeSlot() >= 0
+                && smash && allowed(cfg, Technique.READ) && seen.blocking;
         if (fallStun(cfg, body, target, me, seen, smash, close))
         {
             return;
@@ -692,7 +840,7 @@ public final class MaceStyle implements BotStyle
         boolean due = smash && close && (charged || bounce) && body.canHit(target);
         // The swap is the hotbar change on the tick of the hit, so the mace is asked for as soon as the swing
         // is due and the charger is put straight back on the tick after it.
-        want(body, due ? mace : charging(cfg, me, seen));
+        want(body, due ? mace : window ? gear.axeSlot() : charging(cfg, me, seen));
         if (bounce && due)
         {
             bounceLeft--;
@@ -700,15 +848,14 @@ public final class MaceStyle implements BotStyle
         // The launch has missed once the bot is on the way down with enough fall for a smash and the target
         // is out of its reach, which is a question about where the bot is and not about which tick the model
         // expected it to arrive: the arc it actually flew is not the arc the model planned.
-        boolean missed = !chained && flightTicks > 2 && !close && me.vy < 0.0 && smash;
+        boolean missed = !chained && flightTicks > 2 && !close && me.vy < 0.0 && smash
+                && me.fallDistance > HANGING_FALL;
         // The charge that keeps the fall harmless goes into the hand while there is still room for the hotbar
         // change to land, and leaves it in the last blocks, where the burst can still reach the bot.
         double above = heightAboveGround(me);
-        boolean winding = winding(cfg, me, seen, due, close, missed, above);
-        System.out.println("[macedbg] t=" + flightTicks + " above=" + String.format(java.util.Locale.ROOT, "%.2f", above)
-                + " fall=" + me.fallDistance + " vy=" + me.vy + " g=" + me.onGround + " close=" + close
-                + " wind=" + winding + " missed=" + missed + " fc=" + flightCharges + " slot=" + body.currentSlot()
-                + " cslot=" + gear.chargeSlot() + " ready=" + gear.chargeReady());
+        // An open shield window is worth more than the charge that saves the fall, and off its own launch the
+        // fall is harmless anyway, so while the axe is wanted the hand is the axe's for as long as it takes.
+        boolean winding = !window && winding(cfg, me, seen, due, close, missed, above);
         boolean prepare = winding && above <= SAVE_HEIGHT + HOTBAR_TICK;
         boolean throwIt = winding && above <= SAVE_HEIGHT;
         if (prepare)
@@ -727,8 +874,6 @@ public final class MaceStyle implements BotStyle
             actions.glide(false);
             actions.fold();
         }
-        System.out.println("[macedbg] FEND t=" + flightTicks + " airborne=" + airborne + " onGround=" + me.onGround
-                + " chained=" + chained + " hits=" + stats.hits + " hp=" + bot.getHealth());
         if ((airborne && me.onGround) || flightTicks > FLIGHT_TIMEOUT)
         {
             phase = Phase.MELEE;
@@ -753,13 +898,21 @@ public final class MaceStyle implements BotStyle
         }
         if (fallStunAxe > 0)
         {
-            // The axe landed a moment ago, so the mace goes in now. The swing is charged at the axe's rate and
-            // carries the axe's base damage, because that is what the hand still holds.
-            fillCharger(sim.a);
+            if (fallStunAxe > SmashTiming.AXE_DISABLE_TICKS)
+            {
+                // The shield is back up and the window the axe opened is gone.
+                fallStunAxe = 0;
+                return false;
+            }
+            // The axe landed a moment ago, so the mace goes in now. It is asked for on every tick until it
+            // lands, because the axe has just been swung and the bot may still be a block or two above its
+            // reach; the swing is charged at the axe's rate and carries the axe's base damage, because that is
+            // what the hand still holds.
+            fillAxe(sim.a);
             boolean due = close && body.canHit(target);
             want(body, heldMace(cfg, me, seen));
             body.tick(leading(me, seen), target, DuelSim.action(steer(me, seen), 0, false, false, due), false);
-            fallStunAxe = 0;
+            fallStunAxe = due ? 0 : fallStunAxe + 1;
             return true;
         }
         if (fallStunAxe == 0 || !allowed(cfg, Technique.READ) || !seen.blocking || !close
@@ -767,7 +920,7 @@ public final class MaceStyle implements BotStyle
         {
             return false;
         }
-        fillCharger(sim.a);
+        fillAxe(sim.a);
         if (sinceClick < sim.a.gateTicks || !body.canHit(target))
         {
             return false;
@@ -788,40 +941,59 @@ public final class MaceStyle implements BotStyle
             Perception.Snapshot seen)
     {
         climbTicks++;
+        if (folded > 0)
+        {
+            // The wings are folded for the drop, and nothing opens them again until this dive has landed: a
+            // smash does not count while they are out, which is the whole reason they came off.
+            dive(body, cfg, target, me, seen);
+            return;
+        }
         if (bot.isFallFlying())
         {
-            if (folded > 0)
+            if (overhead(me, seen))
             {
-                dive(body, cfg, target, me, seen);
-                return;
-            }
-            if (seen.y - me.y <= 0.0 && horizontal(me, seen) <= DIVE_CLOSE_DROP)
-            {
-                // Above the target and on top of it. The wings have to go, because a smash does not count
-                // while they are open; using the chest plate that is in the hand puts them back where they
-                // were and the fold state makes the fall start counting on this very tick.
-                if (gear.wearingChestpiece() && actions.useMainHand())
+                // Above the target by enough to be worth dropping onto it. The wings have to go, because a
+                // smash does not count while they are open, and they only go by using the chest piece they were
+                // exchanged with: that goes back on the chest and the elytra lands in the hand.
+                int chest = gear.chestpieceSlot();
+                if (chest >= 0 && chest != body.currentSlot())
                 {
-                    actions.fold();
+                    want(body, chest);
+                    body.tick(leading(me, seen), target, DuelSim.action(steer(me, seen), 0, false, false, false), false);
+                    return;
                 }
-                else
+                if (chest < 0 || actions.useMainHand())
                 {
                     actions.fold();
                 }
                 folded = FOLD_SETTLE;
                 return;
             }
+            if (horizontal(me, seen) > DIVE_ABANDON)
+            {
+                // The target is leaving faster than the climb can catch it, so there is nothing to come down on.
+                phase = Phase.MELEE;
+                launching = false;
+                actions.fold();
+                return;
+            }
             rocket(body);
-            body.tick(leading(me, seen), target, DuelSim.action(steer(me, seen), 0, false, false, false), false);
+            // A glide only climbs while the bot looks up, but its heading still has to be the target's or the
+            // climb walks it away from the fight: the aim carries the yaw to the target and the pitch up.
+            body.tick(seen, target, DuelSim.action(steer(me, seen), 0, false, false, false), false,
+                    climbAim(me, seen));
             return;
         }
         if (bot.onGround())
         {
+            // The wings come off on the landing tick: a glide that keeps them out leaves the bot sailing along
+            // the floor with nothing it can do, which is what a dive that could not get above its target is.
+            actions.fold();
             phase = Phase.MELEE;
             launching = false;
             return;
         }
-        // Still climbing off the launch. The wings go on the first tick they are reachable.
+        // Still getting off the ground. The wings go on the first tick they are reachable.
         if (gear.elytraSlot() >= 0 && !gear.wearingElytra())
         {
             want(body, gear.elytraSlot());
@@ -833,6 +1005,27 @@ public final class MaceStyle implements BotStyle
         }
         actions.deploy();
         body.tick(seen, target, DuelSim.action(steer(me, seen), 0, false, false, false), false);
+    }
+
+    /**
+     * Whether the bot is high enough over the target to be worth dropping onto it, which is what a dive is
+     * for: the wings are folded the moment there is more fall left than there was height.
+     */
+    private boolean overhead(Perception.Snapshot me, Perception.Snapshot seen)
+    {
+        // The height is what the dive is worth, and it has to be turned in from over the target rather than
+        // from beside it: a drop from seven blocks up only reaches a few blocks away.
+        return seen.y - me.y <= -DIVE_HEIGHT && horizontal(me, seen) <= DIVE_CLOSE_DROP;
+    }
+
+    /** The target's heading with the view tilted up, which is what a glide climbs under. */
+    private BotBody.Aim climbAim(Perception.Snapshot me, Perception.Snapshot seen)
+    {
+        double dx = seen.x - me.x;
+        double dz = seen.z - me.z;
+        float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
+        float radius = (float) Math.toDegrees(Math.atan2(0.45, Math.max(Math.hypot(dx, dz), 0.1)));
+        return new BotBody.Aim(yaw, CLIMB_PITCH, radius);
     }
 
     /** One rocket, as often as a launched firework allows. */
@@ -866,6 +1059,7 @@ public final class MaceStyle implements BotStyle
         body.tick(leading(me, seen), target, DuelSim.action(steer(me, seen), 0, false, false, due), false);
         if (bot.onGround() || climbTicks > CLIMB_TIMEOUT)
         {
+            actions.fold();
             phase = Phase.MELEE;
             launching = false;
             folded = 0;
@@ -901,16 +1095,23 @@ public final class MaceStyle implements BotStyle
     private boolean winding(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen, boolean due,
             boolean close, boolean missed, double above)
     {
-        if (flightCharges >= FLIGHT_CHARGES || !missed || me.onGround || me.vy >= 0.0
-                || gear.chargeSlot() < 0 || above > SAVE_HEIGHT + HOTBAR_TICK)
+        if (me.onGround || me.vy >= 0.0 || gear.chargeSlot() < 0 || above > SAVE_HEIGHT + HOTBAR_TICK)
         {
             return false;
         }
-        if (allowed(cfg, Technique.SAFE_LANDING))
+        if (missed && allowed(cfg, Technique.SAFE_LANDING))
         {
+            // A save is worth spending on every descent that needs one. The charge it bursts off is far
+            // stronger than the launch that started the flight, because it goes off into a fall, so the bot
+            // is often higher after one than before: its own impulse only lasts forty ticks, and the landing
+            // after that is not free.
             return true;
         }
-        return allowed(cfg, Technique.CHAIN) && horizontal(me, seen) <= CHAIN_RANGE
+        // A hit has already been made out of this flight and the target is still inside the chain range, so
+        // what is on offer is a second arc onto it: the smash leaves the attacker hanging and the Wind Burst
+        // throws the target up, and a charge at the feet is what puts the bot back on top of it.
+        return flightCharges < FLIGHT_CHARGES && chained && allowed(cfg, Technique.CHAIN)
+                && horizontal(me, seen) <= CHAIN_RANGE
                 && MaceChoice.chainWorthIt(MaceLaunch.APEX[0] - above, gear.densityLevel(), seen.armor,
                         seen.armorToughness, 0.0F);
     }
@@ -963,25 +1164,40 @@ public final class MaceStyle implements BotStyle
                 picks(cfg));
     }
 
-    /**
+/**
      * The slot the hand is given between hits: the item the cooldown is collected under, which is the sword
      * or the axe wherever the swap pays and the mace itself otherwise, since a mace held through can always
-     * make its own smash.
-     */
-    /**
-     * The slot the hand is given between hits. A mace held through can always make its own smash, and the
-     * bot only leaves the mace out of the hand for the launch wind-up, where the model wants the mace's own
-     * thirty four tick charge and not a faster item's.
+     * make its own smash. A wind charge has to leave the hand for the launch wind-up, and that is the one
+     * place the bot asks for it, so the charger's charge survives the launch and the smash is made off it.
      */
     private int charging(BotPvpConfig cfg, Perception.Snapshot me, Perception.Snapshot seen)
     {
-        return heldMace(cfg, me, seen);
+        return swapping(cfg) ? gear.chargerSlot() : heldMace(cfg, me, seen);
     }
 
-    /** Whether the bot may charge the launch under a faster item and swap to the mace on the hit. */
+    /**
+     * Whether the bot may charge a launch under a faster item and swap the mace in on the tick of the hit. It
+     * needs the technique, a charger to collect the cooldown under, and the measurement of the swap on this
+     * version saying the smash it buys is worth more than holding the mace through.
+     */
     private boolean swapping(BotPvpConfig cfg)
     {
-        return false;
+        return allowed(cfg, Technique.SWAP) && MaceSwap.allowed() && gear.chargerSlot() >= 0;
+    }
+
+    /**
+     * The ticks the hand has to be left alone before a launch is worth starting. A launch is paid for with the
+     * charge of the item the hit will be made off, which is the charger's own when the bot swaps and the mace's
+     * own when it does not, so the standoff is as long as that charge takes and no longer.
+     */
+    private int launchGate(BotPvpConfig cfg)
+    {
+        if (!swapping(cfg))
+        {
+            return MACE_GATE_TICKS;
+        }
+        fillCharger(sim.a);
+        return sim.a.gateTicks;
     }
 
     /** A technique the bot's difficulty knows and whose option has not been switched off. */
@@ -1045,13 +1261,20 @@ public final class MaceStyle implements BotStyle
 
     /**
      * The mace the bot would swing, priced at the base damage and the charge of the item the hand holds
-     * between hits. When the swap is on that is the sword, whose eight base damage and thirteen tick cadence
-     * are both better than the mace's six and thirty four, and the mace's own fall bonus and Density are added
-     * on top of them by {@link SmashTiming#damageDealt}.
+     * between hits. When the swap is on that is the sword, whose base damage and cadence are both better than
+     * the mace's, and the mace's own fall bonus and Density are added on top of them by
+     * {@link SmashTiming#damageDealt}.
      */
     private void fillMace(DuelSim.Fighter fighter, BotPvpConfig cfg)
     {
         fillMaceLevels(fighter);
+        if (swapping(cfg))
+        {
+            // The swing that lands the smash is made off the charger's base damage and charge, so that is what
+            // the model has to price the launch at.
+            fillCharger(fighter);
+            return;
+        }
         fighter.setLoadout(SmashTiming.MACE_BASE_DAMAGE, SmashTiming.MACE_ATTACK_SPEED, 0.0F, fighter.armor,
                 fighter.toughness, fighter.epf, fighter.knockbackResistance);
         fighter.ticksSinceSwing = sinceClick;
@@ -1067,17 +1290,15 @@ public final class MaceStyle implements BotStyle
     /** The loadout of the item a swing's base damage and cooldown come from when the hand changes on the hit. */
     private void fillCharger(DuelSim.Fighter fighter)
     {
-        double damage = gear.chargerIsAxe() ? AttributeSwap.AXE_BASE_DAMAGE : AttributeSwap.SWORD_BASE_DAMAGE;
-        double speed = gear.chargerIsAxe() ? AttributeSwap.AXE_ATTACK_SPEED : AttributeSwap.SWORD_ATTACK_SPEED;
-        fighter.setLoadout(damage, speed, 0.0F, fighter.armor, fighter.toughness, fighter.epf,
-                fighter.knockbackResistance);
+        fighter.setLoadout(gear.chargerDamage(), gear.chargerSpeed(), 0.0F, fighter.armor, fighter.toughness,
+                fighter.epf, fighter.knockbackResistance);
         // The cooldown the model charges at is the bot's own, which only its clicks reset.
         fighter.ticksSinceSwing = sinceClick;
     }
 
     private void fillAxe(DuelSim.Fighter fighter)
     {
-        fighter.setLoadout(SmashTiming.AXE_BASE_DAMAGE, 1.0, 0.0F, fighter.armor, fighter.toughness, fighter.epf,
+        fighter.setLoadout(gear.axeDamage(), gear.axeSpeed(), 0.0F, fighter.armor, fighter.toughness, fighter.epf,
                 fighter.knockbackResistance);
         fighter.ticksSinceSwing = sinceClick;
     }
@@ -1101,9 +1322,20 @@ public final class MaceStyle implements BotStyle
      * The height of the surface under the bot, found by looking down the way a player who wants to land
      * would look, up to {@link #GROUND_SCAN} blocks. What the duel model calls its ground is y = 0, so
      * everything it is told about a fighter is relative to this.
+     *
+     * <p>A launch carries the bot further up than the scan looks, and a chain of them further still, so the
+     * last surface found is held while the bot is still above it. Without that the height of the bot would
+     * stop growing at {@link #GROUND_SCAN} blocks and read the same from there on, which is the height every
+     * decision of a flight is made from: when to save the fall, when to steer and how long the descent is
+     * going to take. The held height is dropped as soon as the bot is under it, which is what falling off
+     * an edge does, and a bot that has never found one falls back to the scan.</p>
      */
     private double groundOf(Perception.Snapshot me)
     {
+        if (ground0 > me.y)
+        {
+            ground0 = Double.NaN;
+        }
         BlockPos feetPos = BlockPos.containing(me.x, me.y - 0.05, me.z);
         for (int down = 0; down <= GROUND_SCAN; down++)
         {
@@ -1111,10 +1343,13 @@ public final class MaceStyle implements BotStyle
             BlockState state = bot.level().getBlockState(pos);
             if (!state.isAir() && state.isFaceSturdy(bot.level(), pos, Direction.UP))
             {
-                return pos.getY();
+                // The walkable surface is the top face of the block, one above the block itself, and the model
+                // counts height from the surface, so that is the zero the duel model is given.
+                ground0 = pos.getY() + 1.0;
+                break;
             }
         }
-        return me.y - GROUND_SCAN - 1.0;
+        return Double.isNaN(ground0) ? me.y - GROUND_SCAN - 1.0 : ground0;
     }
 
     private static double horizontal(Perception.Snapshot a, Perception.Snapshot b)

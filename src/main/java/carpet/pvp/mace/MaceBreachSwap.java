@@ -44,17 +44,16 @@ public final class MaceBreachSwap
         return gear.chargerSlot();
     }
 
-    /** The base damage a swapped ground hit carries, which is the charging item's. */
+    /** The base damage a swapped ground hit carries, which is the charging item's own attribute. */
     public double baseDamage()
     {
-        return gear.chargerSlot() == gear.axeSlot() ? AttributeSwap.AXE_BASE_DAMAGE : AttributeSwap.SWORD_BASE_DAMAGE;
+        return gear.chargerDamage();
     }
 
     /** The attack speed of the item a swapped hit's cooldown is collected under. */
     public double chargeSpeed()
     {
-        return baseDamage() == AttributeSwap.AXE_BASE_DAMAGE ? AttributeSwap.AXE_ATTACK_SPEED
-                : AttributeSwap.SWORD_ATTACK_SPEED;
+        return gear.chargerSpeed();
     }
 
     /** How much the swap would add to a fully charged hit against this armour and protection. */

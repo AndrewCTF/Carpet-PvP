@@ -85,6 +85,7 @@ public final class StyleIndex
         OPTIONS.put("smp.peelback", "12");
         OPTIONS.put("mace.breachswap", "true");
         OPTIONS.put("mace.read", "true");
+        OPTIONS.put("sword.breachswap", "true");
     }
 
     public static boolean has(CombatStyle style)

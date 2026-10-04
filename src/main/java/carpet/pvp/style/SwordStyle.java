@@ -7,6 +7,10 @@ import carpet.pvp.BotBudget;
 import carpet.pvp.BotPvpConfig;
 import carpet.pvp.BotStats;
 import carpet.pvp.Perception;
+import carpet.pvp.mace.MaceBreachSwap;
+import carpet.pvp.mace.MaceChoice;
+import carpet.pvp.mace.MaceChoice.Technique;
+import carpet.pvp.mace.MaceGear;
 import carpet.pvp.sim.CombatMath;
 import carpet.pvp.sim.DuelSim;
 import carpet.pvp.sim.OpponentModel;
@@ -70,6 +74,9 @@ public final class SwordStyle implements BotStyle
 
     private final MeleeApproach approach;
     private final SwordLoadout loadout;
+    /** The Breach swap, which is only used by a bot whose hotbar has a Breach mace in it. */
+    private final MaceBreachSwap breach;
+    private final MaceGear gear;
 
     private Techniques techniques;
     private RollingHorizon planner;
@@ -98,6 +105,8 @@ public final class SwordStyle implements BotStyle
         this.random = random;
         this.approach = new MeleeApproach(body);
         this.loadout = new SwordLoadout(body);
+        this.gear = new MaceGear(bot);
+        this.breach = new MaceBreachSwap(body, gear);
         reconfigure(cfg, random);
     }
 
@@ -178,6 +187,10 @@ public final class SwordStyle implements BotStyle
         approach.stop(pack);
         observeOpponent(perception, seen);
         int action = plan(cfg, me, seen, perception);
+        if (DuelSim.attack(action))
+        {
+            breachSwap(body, cfg, seen);
+        }
         body.tick(now, target, action, wantsBlock(body, me, seen, action));
         techniques.tick();
     }
@@ -214,6 +227,36 @@ public final class SwordStyle implements BotStyle
         now.z = seen.z + (seen.z - before.z) * delay / steps;
         now.vx = (seen.x - before.x) / steps;
         now.vz = (seen.z - before.z) / steps;
+    }
+
+    /**
+     * Puts the Breach mace into the hand for the tick of a charged swing and leaves the sword to be asked for
+     * again on the next one, so the hit goes through armour the mace has cut while carrying the sword's base
+     * damage and its charge. The hotbar change lands on the next body tick, which is the tick before the
+     * swing, so it costs nothing but the one the game already allows.
+     *
+     * <p>A bot only knows this from {@code skilled} on, and only a hotbar with a Breach mace in it and a sword
+     * to charge under has anything to swap, so a kit without one simply never asks.</p>
+     */
+    private void breachSwap(BotBody body, BotPvpConfig cfg, Perception.Snapshot seen)
+    {
+        if (!MaceChoice.allows(cfg.difficulty, Technique.BREACH_SWAP) || !cfg.flag("sword.breachswap"))
+        {
+            return;
+        }
+        // The kit is read here rather than kept: a bot can be handed one at any time, and nine slots of a
+        // hotbar are nothing to read on a tick that is throwing a swing anyway.
+        gear.refresh();
+        if (!breach.available())
+        {
+            return;
+        }
+        int breaker = breach.hitSlot(seen.armor, seen.armorToughness, seen.epf);
+        int wanted = breaker >= 0 ? breaker : breach.chargeSlot();
+        if (wanted >= 0 && wanted != body.currentSlot() && wanted != body.pendingSlot())
+        {
+            body.requestSlot(wanted);
+        }
     }
 
     /** Spends this bot's share of the server's simulation budget on the next action. */
