@@ -92,8 +92,10 @@ import java.util.function.Function;
  */
 public final class SelfTest
 {
+    // scarpet_world_data runs second on purpose: save() writes every dirty chunk on the server thread, and
+    // after fifty scenarios that is long enough for the watchdog to call the server hung.
     private static final List<String> SCENARIOS = List.of(
-            "spawn", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow",
+            "spawn", "scarpet_world_data", "nav_goto", "nav_come", "nav_patrol", "nav_stop", "nav_follow",
             "chase_attack", "chase_crit", "script_run", "fill_updates", "logic_program", "logic_forever_budget",
             "spawn_exact_name", "spawn_gamemode", "shield_disable", "kit_give", "kit_roundtrip", "sword_block",
             "explosion_rules", "xp_explosions", "scarpet_events", "scarpet_explosion", "update_suppression_block", "stackable_shulker_boxes",
@@ -102,7 +104,7 @@ public final class SelfTest
             "nav_tick_budget", "nav_smooth",
             "sword_hits_require_aim", "sword_duel_damage", "sword_shield_break", "sword_difficulty_order", "bot_budget",
             "animate_use", "item_cd", "kit_folder", "kill",
-            "interaction_updates", "punish_wrong_tool_hits", "scarpet_item_use_events", "sculk_sensor_range", "summon_natural_lightning", "explosion_state_leak", "scarpet_world_data", "tick_synced_world_borders");
+            "interaction_updates", "punish_wrong_tool_hits", "scarpet_item_use_events", "sculk_sensor_range", "summon_natural_lightning", "explosion_state_leak", "tick_synced_world_borders");
 
     /** What every built-in kit has to put on the player it is given to. */
     record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
