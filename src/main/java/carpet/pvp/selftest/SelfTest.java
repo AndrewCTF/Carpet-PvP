@@ -221,6 +221,8 @@ public final class SelfTest
             Map.entry("logic_scarpet_node", "it needs CarpetLogic programs and Scarpet"),
             Map.entry("sword_block", "it needs the carpet swordBlockHitting rule"),
             Map.entry("fake_sword_block", "it needs the carpet swordBlockHitting rule"),
+            Map.entry("mace_stun_slam_one_fall", "it needs the fake player critical hit mixin"),
+            Map.entry("autosetup_login_recovers", "a fake player that logs out on Paper leaves no session file to recover"),
             Map.entry("explosion_rules", "it needs the carpet explosionNoBlockDamage rule"),
             Map.entry("xp_explosions", "it needs the carpet xpFromExplosions rule"),
             Map.entry("scarpet_events", "it needs scarpet damage events"),
