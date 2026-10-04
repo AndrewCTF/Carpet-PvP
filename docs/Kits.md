@@ -150,21 +150,28 @@ this kit carries eight netherite pieces.
 | Slot | Item | Count | Enchantments |
 |---|---|---|---|
 | 0 (main hand) | `minecraft:bow` | 1 | Power 5 |
-| 1 | `minecraft:crossbow` | 1 | Quick Charge 3 |
-| 2 | `minecraft:arrow` | 64 | |
-| 3 | `minecraft:diamond_sword` | 1 | Sharpness 3 |
-| 4 | `minecraft:golden_apple` | 4 | |
-| 5 | `minecraft:cooked_beef` | 16 | |
+| 1 | `minecraft:bow` | 1 | Flame 1, for setting a tnt minecart off |
+| 2 | `minecraft:crossbow` | 1 | Quick Charge 3 |
+| 3 | `minecraft:arrow` | 64 | |
+| 4 | `minecraft:diamond_sword` | 1 | Sharpness 3 |
+| 5 | `minecraft:trident` | 1 | Loyalty 3, so it comes back |
+| 6 | `minecraft:netherite_spear` | 1 | Sharpness 4. Not on 1.21.11, and skipped there |
+| 7 | `minecraft:tnt_minecart` | 1 | |
+| 8 | `minecraft:rail` | 8 | |
+| 9 | `minecraft:golden_apple` | 4 | |
+| 10 | `minecraft:cooked_beef` | 16 | |
 | head | `minecraft:diamond_helmet` | 1 | Protection 4 |
 | chest | `minecraft:diamond_chestplate` | 1 | Protection 4 |
 | legs | `minecraft:diamond_leggings` | 1 | Protection 4 |
 | feet | `minecraft:diamond_boots` | 1 | Protection 4 |
 | offhand | `minecraft:shield` | 1 | |
 
-The `ranged` style also knows how to throw a trident, thrust a spear and lay a tnt minecart, and
-its `ranged.trident`, `ranged.spear` and `ranged.tntcart` options turn those on. Nothing in this kit
-gives it one of those, so on a server with the stock kit it only uses the bow, the crossbow and the
-sword.
+The kit carries one of everything the `ranged` style knows how to use, so every technique has
+something to act on: two bows (the second with Flame, which is the only thing a player can set a
+tnt minecart off with), a crossbow, a trident, a spear, and a rail and a minecart for the trap. A
+kit file is shared by every version of the mod, and a spear only exists on 26.x: an entry naming an
+item a version does not have is skipped with one line in the log, so on 1.21.11 this kit is the
+same kit without the spear and everything else works.
 
 Slot 0 is always the main inventory index 0, so the first weapon listed is the one the player ends
 up holding: `overwrite()` sets the selected slot to 0 after the kit goes on.

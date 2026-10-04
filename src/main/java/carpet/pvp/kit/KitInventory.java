@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Putting kits on players, and taking them off again.
@@ -24,6 +26,8 @@ import java.util.UUID;
  */
 public final class KitInventory
 {
+    private static final Logger LOG = LoggerFactory.getLogger(KitInventory.class);
+
     /** Armour and offhand, in the order a snapshot stores them. */
     private static final EquipmentSlot[] EQUIPMENT = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET, EquipmentSlot.OFFHAND
@@ -57,10 +61,22 @@ public final class KitInventory
     public static void overwrite(ServerPlayer player, Kit kit, RegistryAccess registries)
     {
         // Every stack and slot is worked out before the player is touched: a kit that does not fit
-        // must not cost them their inventory.
+        // must not cost them their inventory. An entry the registry of this version does not have is
+        // skipped with one line: kit files are shared by every version, and an item one of them lacks
+        // should cost that kit the item and nothing else.
+        List<KitEntry> entries = new ArrayList<>(kit.entries().size());
         List<ItemStack> stacks = new ArrayList<>(kit.entries().size());
-        for (KitEntry entry : kit.entries()) stacks.add(entry.createStack(registries));
-        List<KitSlot> slots = plan(kit);
+        for (KitEntry entry : kit.entries())
+        {
+            if (!entry.available(registries))
+            {
+                LOG.warn("Kit {}: skipping {}, which this version does not have", kit.name(), entry.item());
+                continue;
+            }
+            entries.add(entry);
+            stacks.add(entry.createStack(registries));
+        }
+        List<KitSlot> slots = plan(entries);
 
         Inventory inventory = player.getInventory();
         inventory.clearContent();
@@ -79,17 +95,17 @@ public final class KitInventory
      * Resolves the automatic slots of a kit. Entries that name a slot keep it, the rest take the
      * lowest free inventory slot, so that a kit reads top to bottom whichever way round it is.
      */
-    private static List<KitSlot> plan(Kit kit)
+    private static List<KitSlot> plan(List<KitEntry> entries)
     {
         boolean[] taken = new boolean[Inventory.INVENTORY_SIZE];
-        for (KitEntry entry : kit.entries())
+        for (KitEntry entry : entries)
         {
             if (!entry.slot().isAutomatic() && !entry.slot().isEquipment()) taken[entry.slot().index()] = true;
         }
 
-        List<KitSlot> slots = new ArrayList<>(kit.entries().size());
+        List<KitSlot> slots = new ArrayList<>(entries.size());
         int next = 0;
-        for (KitEntry entry : kit.entries())
+        for (KitEntry entry : entries)
         {
             if (entry.slot().isEquipment())
             {
@@ -102,7 +118,7 @@ public final class KitInventory
                 continue;
             }
             while (next < taken.length && taken[next]) next++;
-            if (next >= taken.length) throw new IllegalArgumentException("kit " + kit.name() + " does not fit in the inventory");
+            if (next >= taken.length) throw new IllegalArgumentException("a kit does not fit in the inventory");
             taken[next] = true;
             slots.add(KitSlot.ofIndex(next++));
         }

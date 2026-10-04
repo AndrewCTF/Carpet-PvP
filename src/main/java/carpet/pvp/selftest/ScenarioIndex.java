@@ -84,5 +84,7 @@ final class ScenarioIndex
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
         SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
         SCENARIOS.put("bot_stop_stats_trace", BotCommandScenarios::fightingCommands);
+        SCENARIOS.put("tnt_cart_damage", TntCartBlastScenarios::blastDamage);
+        SCENARIOS.put("ranged_expert_uses_techniques", RangedExpertScenarios::expertUsesTechniques);
     }
 }
