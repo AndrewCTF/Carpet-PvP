@@ -38,6 +38,7 @@ final class ScenarioIndex
         SCENARIOS.put("gui_spawn", GuiScenarios::spawn);
         SCENARIOS.put("gui_no_item_theft", GuiScenarios::noItemTheft);
         SCENARIOS.put("gui_kit_editor_roundtrip", GuiScenarios::kitEditorRoundtrip);
+        SCENARIOS.put("gui_quick_fight", QuickFightScenarios::quickFight);
         SCENARIOS.put("logic_combat_start_stop", CombatNodeScenarios::combatStartStop);
         SCENARIOS.put("logic_fight_node", CombatNodeScenarios::fightNode);
         SCENARIOS.put("logic_combat_option", CombatNodeScenarios::combatOption);
@@ -48,6 +49,7 @@ final class ScenarioIndex
         SCENARIOS.put("autosetup_each_mode", AutoSetupScenarios::eachMode);
         SCENARIOS.put("autosetup_crash_safe", AutoSetupScenarios::crashSafe);
         SCENARIOS.put("autosetup_rules_restored", AutoSetupScenarios::rulesRestored);
+        SCENARIOS.put("autosetup_login_recovers", AutoSetupRestoreScenarios::loginRecovers);
         SCENARIOS.put("ranged_kit", RangedScenarios::rangedKit);
         SCENARIOS.put("bow_hits_static", RangedScenarios::bowHitsStatic);
         SCENARIOS.put("bow_hits_moving", RangedScenarios::bowHitsMoving);
@@ -89,6 +91,14 @@ final class ScenarioIndex
         SCENARIOS.put("smp_heals", SmpScenarios::heals);
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
         SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
+        SCENARIOS.put("fake_block_front", BlockingScenarios::front);
+        SCENARIOS.put("fake_block_behind", BlockingScenarios::behind);
+        SCENARIOS.put("fake_block_explosion", BlockingScenarios::explosion);
+        SCENARIOS.put("fake_block_axe", BlockingScenarios::axeBreaks);
+        SCENARIOS.put("fake_sword_block", BlockingScenarios::swordBlock);
         SCENARIOS.put("bot_stop_stats_trace", BotCommandScenarios::fightingCommands);
+        SCENARIOS.put("logic_admin_login", AdminLoginScenarios::adminLogin);
+        SCENARIOS.put("logic_save_draft_and_autosave", SaveScenarios::saveDraftAndAutosave);
+        SCENARIOS.put("logic_expression_if_while", ExpressionScenarios::expressionIfWhile);
     }
 }

@@ -11,13 +11,114 @@ Two things are independent of each other:
 - **The web editor.** An HTTP server that serves a page, hands out the schema and takes programs
   back. Purely optional.
 
+## The editor
+
+![The editor with nothing on the canvas yet](images/carpetlogic-editor.png)
+
+The page is one screen:
+
+- **The node library** on the left lists every node under its category. Type in *Find a node*, or
+  press `/` anywhere, to search all of them by name, by category and by what they do; `Enter` adds the
+  first match. A node that is clicked goes after the node that is selected and is wired to it, so
+  clicking one after the other builds a chain from `Start`; a condition goes under the node that is
+  waiting for one. Dragging a node onto the canvas places it without wiring it.
+- **The canvas** in the middle is the program. While it holds nothing but `Start` it shows what to do
+  next and offers the first presets. Drag the background to pan, scroll to zoom, `F` or **Fit** to
+  bring the whole program into view.
+- **A node's settings** open over the canvas's top right corner when one node is selected: every
+  parameter as a field, with what it takes and, for an [expression](#expressions), the names it can
+  use and what is wrong with it. The small fields on the node itself still work for a quick change.
+- **The run bar** under the canvas runs the program on the bot chosen there and stops it, and says
+  what that bot's program is doing: `Running · Patrol and Fight · PATROL`, or the error that ended it.
+- **The bots panel** on the right (`B`) spawns a bot and has a card for each one: health in hearts,
+  position, what it holds and fights, its program, and buttons to run on it, turn its combat AI on or
+  off, bring it to you, remove it, and set one combat option. **Matches** lists the finished fights.
+- **The console** at the bottom keeps what programs log and what went wrong. Shut, it shows the last
+  line; an error opens it.
+- **The top bar** holds the program (name, New, Open, Save, the Autosave switch, Undo, Redo, Clear),
+  the connection, **Settings** and who the session belongs to, with **Sign out**. Beside **Save** it
+  says where the program stands; see [Saving](#saving).
+
+| | |
+|---|---|
+| ![A preset on the canvas](images/carpetlogic-program.png) | ![The bots panel](images/carpetlogic-bots.png) |
+| ![Finding a node](images/carpetlogic-library.png) | ![The saved programs, two of them in a subfolder](images/carpetlogic-open.png) |
+
+`?` in the top bar lists the keyboard shortcuts: `Ctrl+Enter` runs, `Ctrl+.` stops, `Ctrl+S`, `Ctrl+O`
+and `Ctrl+N` save, open and start a program, `Ctrl+Z` and `Ctrl+Y` undo and redo.
+
+In a window too narrow for all of it the bots panel lies over the canvas instead of beside it, and
+below 820 pixels the library does too and is called with **Nodes** or `/`.
+
+![The editor in a narrow window](images/carpetlogic-editor-narrow.png)
+
+A page that has lost the server says so in a bar under the top bar and keeps trying; one whose
+session has ended, or that never had one, shows how to get in instead of an editor that does nothing.
+
+## Saving
+
+A program is a file in a folder on the server, and the editor puts it there by itself.
+
+**Where.** `<world>/carpetlogic/programs/`, one file per program, named after the program:
+`Patrol and Fight` is `Patrol-and-Fight.json`. The Open dialog shows the folder's path as it is on the
+server, and after a save the console and the toolbar's tooltip say which file the program went to.
+See [How they are stored](#how-they-are-stored) for how a name becomes a file name.
+
+**Save always saves.** A program that does not compile yet, say an If / Else with nothing wired to
+its condition, is saved as a *draft*: the file holds the graph and the reason, the toolbar and the
+Open dialog say `does not run yet` with that reason, and Run and `/carpetlogic programs run` refuse it
+with the same words. Nothing is lost by closing the tab on unfinished work.
+
+**Autosave.** With the switch on, which it is until somebody turns it off, the open program is saved
+
+- two seconds after the last change,
+- before Run, so what runs is what is saved,
+- when the page is hidden or left, and before another program is opened.
+
+A new program is saved as soon as it has a first node or a name. The server gives a program without
+a name one, `Untitled`, then `Untitled 2`, and keeps names apart: a second `Walk` becomes `Walk 2`,
+and the page takes the name the server answers with. A save that changes nothing writes nothing, and
+one session may write sixty times a minute. The switch is remembered in the browser. With it off,
+only **Save** and `Ctrl+S` save, and leaving the page with unsaved work asks first.
+
+| The toolbar says | When |
+|---|---|
+| ![Not saved](images/carpetlogic-save-new.png) | nothing on the canvas yet |
+| ![Not saved, in a warning tone](images/carpetlogic-save-unsaved.png) | there is work the server does not have, and autosave is off |
+| ![Saving](images/carpetlogic-save-saving.png) | a save is on its way |
+| ![Saved, with the time](images/carpetlogic-save-saved.png) | the server has the program as it is on the canvas |
+| ![Autosaved, with the time](images/carpetlogic-save-autosaved.png) | the same, saved without being asked |
+| ![Saved, does not run yet](images/carpetlogic-save-draft.png) | saved as a draft; the tooltip has the reason |
+| ![Save failed](images/carpetlogic-save-failed.png) | the server refused, with the reason in the tooltip and the console; it is tried again after 5 seconds, then 10, 20, 40, and every minute from there |
+| ![Kept in this browser](images/carpetlogic-save-offline.png) | the server cannot be reached; it is saved as soon as it answers |
+
+**Nothing is dropped.** Every change the server does not have yet is also kept in the browser. If the
+tab is closed before the server has it, because the server was away, the save failed or the
+program was too large to send while the page closed, the next visit offers it back:
+
+![Unsaved work offered back](images/carpetlogic-save-kept.png)
+
+In viewer mode the server takes no writes, so the editor sends none: the toolbar says so and the work
+stays in the browser.
+
+**Two tabs.** Each save says which copy it started from, by the `updatedAt` of the file. A save from
+an older copy is refused, nothing is overwritten, and the page asks which copy stays:
+
+![The choice between two copies](images/carpetlogic-save-conflict.png)
+
+**Folders.** A program can be moved into a subfolder of the programs folder from the Open dialog,
+one level deep, and back. A file put into the folder by hand, or a subfolder made there, shows up the
+next time the dialog is opened or **Refresh** is pressed; no restart is needed.
+
 ## The command
 
 ```
 /carpetlogic                       same as /carpetlogic status
 /carpetlogic status                web server URL, bot count, running programs, saved programs
 /carpetlogic open                  a link to the web editor, with a token
-/carpetlogic programs              list saved programs and their action counts
+/carpetlogic password              a link that sets your admin password for the web editor
+/carpetlogic password <player>     the same for another admin; console only
+/carpetlogic programs              the programs folder, the saved programs and which are drafts
 /carpetlogic programs run <program> <bot>
 /carpetlogic programs stop <bot>
 /carpetlogic bots                  list active bots with health and position
@@ -34,6 +135,17 @@ The whole command is behind the `commandCarpetLogic` rule, which is `"ops"` by d
 
 If the web server is not running the command says so, and the reason is in the server log. That
 happens when the port is taken, or when the Java runtime has no `jdk.httpserver` module.
+
+`/carpetlogic password` belongs to [the admin sign-in](#the-admin-sign-in) and is refused while
+`carpetLogicAdminLogin` is off. It never takes a password: it answers with a link to the page where
+one is set.
+
+- a player who may change Carpet rules gets the link in their own chat, as with `open`.
+- the console names the admin, `carpetlogic password Steve`, and is told the link to pass on. The
+  admin does not have to be online, but has to be one: "Steve may not change Carpet rules, so cannot
+  be an editor admin. Op them first".
+- a player who names somebody else is refused: "Only the server console can make a password link for
+  somebody else".
 
 ## Security
 
@@ -56,9 +168,10 @@ storage, the bot manager and the executor are separate from the HTTP server, so
 
 ### Tokens
 
-A token is the only credential the web server accepts.
+A token is the only credential the API accepts.
 
-- `/carpetlogic open` mints one: 32 random bytes, base64url, no padding.
+- `/carpetlogic open` mints one: 32 random bytes, base64url, no padding. The admin sign-in, where a
+  server has turned it on, mints the same kind of token for a name and password.
 - The link carries it in the fragment: `http://127.0.0.1:9876/#token=...`. The page reads it on
   load, keeps it in `sessionStorage` for that tab and takes it out of the address bar, so it is not
   sent to the server on any static request.
@@ -69,7 +182,111 @@ A token is the only credential the web server accepts.
 - A token expires after `carpetLogicSessionHours` (24 by default). Expired tokens are dropped when
   they are next used or when a new one is issued.
 - At most 4 live sessions per owner; issuing a fifth drops that owner's oldest.
-- There is no cookie, no login and no password.
+- **Sign out** in the editor ends the session on the server (`POST /api/logout`) and forgets the
+  token in the page.
+- A page opened without a token, or with one that has run out, has no editor to show and says how to
+  get a link:
+
+  ![A page without a session](images/carpetlogic-no-session.png)
+
+- There is no cookie. The only password is the one of the admin sign-in below, which a server does
+  not have unless it turns `carpetLogicAdminLogin` on.
+
+### The admin sign-in
+
+A link from `/carpetlogic open` lets its player build and run programs. It does not let anybody
+change the server's rules: the Settings panel shows them read only. `carpetLogicAdminLogin`, off by
+default, adds a way for the server's admins to sign in to the editor and change rules there.
+
+![The sign-in screen](images/carpetlogic-login.png)
+
+**Who is an admin.** Whoever `/carpet <rule> <value>` would obey: a player whose operator level
+passes `carpetCommandPermissionLevel`. The level is read from the server's operator list, so it holds
+for an admin who is not in the game, and it is read again on every request an admin session makes: a
+player who is deopped has lost the editor's settings at the next click.
+
+**The password.** An admin has a web password that is separate from everything else and is never
+typed in chat or at the console.
+
+1. The admin runs `/carpetlogic password` in game, or the console runs `carpetlogic password <player>`.
+2. The answer is a link, `http://127.0.0.1:9876/#setup=<ticket>&name=Steve`. The ticket is 32 random
+   bytes, works once, lasts 10 minutes and is for that one account; asking again makes the earlier
+   link worthless. Like a token it travels in the fragment and is taken out of the address bar.
+3. The page the link opens asks for the new password twice and sends it with the ticket
+   (`POST /api/password`). A password has 10 to 128 characters.
+4. The server keeps a salted hash and nothing else: PBKDF2-HMAC-SHA256 with 600,000 rounds, the
+   figure OWASP gives for it, and 16 random bytes of salt per account, in
+   `<world>/carpetlogic/admins.json`. The file is written beside itself and moved into place, so a
+   crash cannot leave half of one, and is readable by the server's user only where the file system
+   knows about owners. Neither a password nor a hash is ever logged.
+5. Setting a password signs out the sessions the old one had opened.
+
+![The page a password link opens](images/carpetlogic-set-password.png)
+
+**Signing in.** The page of a visitor without a token shows the sign-in instead of the note about
+`/carpetlogic open`, and an editor opened from a link has **Admin sign in** in its top bar. Name and
+password go to `POST /api/login`; the answer is a token like any other, marked as an admin's, kept in
+`sessionStorage` and valid for `carpetLogicSessionHours`.
+
+- Every failure gets the same answer, `401 Wrong name or password`: a name nobody has, a name
+  without a password, a wrong password, and an account that is no longer an admin. Every one of them
+  costs the server the same work, one hash and one look at the operator list, so the time an answer
+  takes says nothing either.
+- Guessing is slowed down. A name gets 5 attempts; after that each further one has to wait, 5
+  seconds at first and twice as long every time, up to 15 minutes, wherever the attempts come from.
+  An address gets 20 before the same happens to it. A record is forgotten an hour after its last
+  attempt, signing in clears it, and the table holds 4096 names and addresses and takes no new one
+  when it is full. The answer while waiting is `429` with a `Retry-After` header.
+- At most two passwords are hashed at once, so a flood of attempts cannot take the processor from
+  the game.
+- The two routes only take `application/json`, which a page on another site cannot send without the
+  browser asking first, and nothing is answered with CORS headers.
+
+**What signing in unlocks.** The Settings panel becomes editable:
+
+![The Settings panel of an admin](images/carpetlogic-settings-admin.png)
+
+It lists the rules the editor lives by, the rules some nodes need, and the defaults of the bots'
+combat AI, straight from the rule registry: name, description, type, the values it suggests and the
+one it has. A rule that is on or off is a switch, one of a fixed set a list, anything else a field
+with its suggested values under it. A change is made at once through the same code path as `/carpet
+<rule> <value>`, so the rule's validators decide and its observers hear of it, and the row says
+`Saved` or `Not saved:` with the validator's own reason. The change is written to the server log with
+the admin's name and announced to the operators the way `/carpet` announces one. If the settings are
+locked in `carpet.conf` the panel is read only for admins too and says why.
+
+Without an admin session the same panel is read only:
+
+![The Settings panel without an admin session](images/carpetlogic-settings-readonly.png)
+
+Viewer mode does not lock an admin out of the settings: `POST /api/settings` is the one change an
+admin session can still make while `carpetLogicViewerMode` is on, which is how it is turned off
+again. Turning `carpetLogicAdminLogin` itself off from the panel asks first, because it ends the
+session that does it.
+
+**What this protects, and what it does not.**
+
+- The editor speaks plain HTTP. Without TLS, anybody who can read the traffic between the browser
+  and the server reads the password as it is typed in and every session token after it. On the
+  default bind address that traffic never leaves the machine. **A server that offers the editor
+  beyond localhost should put it behind a reverse proxy that speaks HTTPS**, and leave
+  `carpetLogicBindAddress` at `127.0.0.1` so that the proxy is the only way in. The sign-in page says
+  so itself when it was loaded over plain HTTP from another machine.
+- Behind such a proxy every visitor arrives from the proxy's address. The server does not trust a
+  forwarded-for header, so the 20 attempts of an address are then shared by everybody; the limit per
+  name is what holds. Rate limiting by the visitor's real address belongs in the proxy.
+- Somebody who knows an admin's name can keep its sign-in waiting by guessing at it. They get no
+  closer to the password, and the admin loses nothing in game, where rules are changed with
+  `/carpet` as before.
+- An admin session is a session of that player. A program it runs with an `EXECUTE_COMMAND` node
+  runs the command as the player, with the player's permissions, while the player is online. A web
+  password is therefore worth as much as the account's operator rights.
+- A link the console asked for is in the server log, as everything the console is told is. It is
+  worthless once used, and after ten minutes.
+- The hash protects the password of somebody who used it elsewhere, should the file be read; it does
+  not protect the server, whose files the reader already has.
+- With the rule off none of this exists: the two routes answer like any other path without a token,
+  admin sessions are gone, and the password file is not read by anything.
 
 ### What a token can do
 
@@ -82,7 +299,11 @@ Every token is only as good as its owner:
   permissions away: 403 "The player this link was issued to may no longer use /carpetlogic".
 - A token minted from the console has no owner. It is not tied to any player, so it keeps working
   when nobody is online.
-- Viewer mode (`carpetLogicViewerMode`) turns every non-`GET` request into 403, whatever the token.
+- A token from the admin sign-in is tied to the admin's UUID too, but not to their being online: it
+  works while the account may change Carpet rules, and gets 403 "This account may no longer change
+  Carpet rules" once it may not. It is the only kind of token `POST /api/settings` accepts.
+- Viewer mode (`carpetLogicViewerMode`) turns every non-`GET` request into 403, whatever the token,
+  except an admin's `POST /api/settings`.
 
 What a token cannot do, with any token:
 
@@ -127,7 +348,8 @@ Everything CarpetLogic is configured with is an ordinary carpet rule. Change one
 | `carpetLogicBindAddress` | `127.0.0.1`, `0.0.0.0` | `127.0.0.1` | Interface the web editor listens on. Applied at server start. |
 | `carpetLogicSessionHours` | int | `24` | How long a link from `/carpetlogic open` stays valid. |
 | `carpetLogicUpdateInterval` | int 1–1024 | `5` | Ticks between bot status pushes on the event stream. |
-| `carpetLogicViewerMode` | boolean | `false` | The editor can look at bots and programs but not change or run anything. Refuses every non-`GET` API call. |
+| `carpetLogicViewerMode` | boolean | `false` | The editor can look at bots and programs but not change or run anything. Refuses every non-`GET` API call, except an admin changing a setting. |
+| `carpetLogicAdminLogin` | boolean | `false` | Offers the admin sign-in, which lets the Settings panel change rules. See [The admin sign-in](#the-admin-sign-in). |
 | `carpetLogicMaxPrograms` | int | `4` | How many programs may run at the same time. |
 
 Three more rules decide whether particular actions work:
@@ -145,26 +367,54 @@ as the kit and option commands, which are behind `commandBot` rather than behind
 
 ### How they are stored
 
-One JSON file per program:
+One JSON file per program, named after it, in the programs folder or in a subfolder one level down:
 
 ```
-<world>/carpetlogic/programs/<id>.json
+<world>/carpetlogic/programs/<name>.json
+<world>/carpetlogic/programs/<folder>/<name>.json
 ```
 
 | Field | Meaning |
 |---|---|
-| `id` | 1–64 characters of letters, digits, `_` and `-`. It names the file, so it may not contain anything else. |
+| `id` | 1–64 characters of letters, digits, `_` and `-`. It is what the editor and the API know the program by, and it stays the same when the program is renamed or moved. |
 | `name` | the display name, up to 64 characters |
 | `description` | free text |
-| `actions` | the compiled action tree |
-| `graphData` | the editor's node graph, stored verbatim so reopening the program shows the same picture |
-| `createdAt`, `updatedAt` | epoch milliseconds |
+| `actions` | the compiled action tree; empty for a draft |
+| `error` | why the graph does not compile, for a draft; absent for a program that runs |
+| `graphData` | the editor's node graph, so reopening the program shows the same picture. Members that are `null` are not kept. |
+| `createdAt`, `updatedAt` | epoch milliseconds. `updatedAt` is what a stale save is told by. |
 | `isPreset` | never true in a saved file |
 
-The folder is read when the server starts and on `/carpet reload`. A file with no valid id, or one
-whose actions do not fit the schema, is skipped with a warning in the log — the other programs
-still load. The built-in presets live in the mod jar instead (`/carpetlogic/presets.json`) and are
-listed separately; a program may not be saved over a preset's id.
+**The file name** is the program's name with every run of characters other than letters, digits, `_`
+and `-` turned into one `-`, cut at 64 characters: no separator, no dot, nothing that could leave the
+folder. A name with nothing left is `program`; a name Windows keeps for a device (`CON`, `NUL`, …)
+gets `-program` after it. **Renaming the program renames the file**, in the same save. The other
+choice, a file name fixed at the first save, would leave most programs in a file called `Untitled`,
+because autosave makes the first save before a name has been typed; the file a person looks for
+should carry the name the editor shows. What stays stable is the `id` inside the file.
+
+No two programs share a file name, in any folder and whatever the case, and none takes a preset's id:
+a name that would is given the first free number, `Walk 2`. So a name finds one program, and
+`/carpetlogic programs run Walk <bot>` needs no folder. Where files made by hand break this, the
+command takes the program in the programs folder itself before one in a subfolder, and `Drills/Walk`
+names the one in `Drills`.
+
+**Programs saved before** as `<id>.json` keep loading, by the id inside them, and move to a file
+named after them the next time they are saved.
+
+**Files made by hand.** The folder is read when the server starts, on `/carpet reload`, and every time
+the editor lists the programs. A file without an `id` is given one from where it is,
+`file-<folder>-<name>`, the same one every time. A copy of another program's file carries that
+program's id; the file a save would have written keeps it and the copy gets one from where it is. A
+file whose name is missing is named after the file.
+
+**What does not stop the folder being read:** a draft; a file whose actions do not fit this server's
+schema, which is listed as a draft with that reason so that it can be opened and put right, and is
+not rewritten; a file that is not JSON, is larger than 4 MiB or carries an invalid id or a preset's,
+which is skipped with a warning in the log. At most 2000 files are read.
+
+The built-in presets live in the mod jar instead (`/carpetlogic/presets.json`) and are listed
+separately; a program may not be saved over a preset's id.
 
 ### The compiled action tree
 
@@ -174,12 +424,14 @@ listed separately; a program may not be saved over a preset's id.
   "params": { "direction": "forward", "ticks": 20 },
   "children": [],
   "elseChildren": [],
-  "condition": null
+  "condition": null,
+  "conditions": []
 }
 ```
 
-`type` names an action from the schema. `params` holds its parameters. The three list fields exist
-only for the action types whose schema entry lists the matching slot.
+`type` names an action from the schema. `params` holds its parameters. The other four fields exist
+only for the action types whose schema entry lists the matching slot; `conditions` is what a
+condition that combines others is made of.
 
 A program is validated before it runs and before it is saved: known types, only declared
 parameters with values of the right type, children and conditions only where the type has a slot
@@ -360,6 +612,22 @@ The five nodes at the bottom drive the bot's combat AI, the same one `/bot spawn
 | `Control/Forever` | `FOREVER` | control (`children`) |  | none. With no children it waits forever and nothing else in the program runs |
 | `Control/Sequence` | `SEQUENCE` | control (`children`) |  | none |
 | `Control/If-Else` | `IF_THEN_ELSE` | control (`condition`, `children`, `elseChildren`) |  | none |
+| `Control/If` | `IF` | control (`children`, `elseChildren`) |  | `condition` expr (bool) = `health < 10` |
+| `Control/While` | `WHILE` | control (`children`) |  | `condition` expr (bool) = `$count < 3`. With no children it waits for as long as the condition holds |
+| `Control/WaitFor` | `WAIT_FOR` | action |  | `condition` expr (bool) = `has_target`; `timeout` int = `200`, min `1`, max `60000` |
+| `Control/ForEach` | `FOR_EACH` | control (`children`) |  | `variable` string = `item`; `list` expr (list) = `range(3)` |
+| `Control/Break` | `BREAK` | control |  | none. Only inside a loop |
+| `Control/Continue` | `CONTINUE` | control |  | none. Only inside a loop |
+| `Control/StopProgram` | `STOP_PROGRAM` | control |  | none |
+
+A loop is `Repeat`, `Forever`, `While` or `For Each`. `For Each` runs its body once per item of a
+list with the item in the variable it names; `range(5)` gives the numbers 0 to 4, and
+`list('sword', 'axe')` any values. `Break` leaves the innermost loop and the program carries on after
+it; `Continue` gives up the rest of the round, and the loop decides about the next one as it would
+have at the end of the body. Either outside a loop is refused when the program is checked, with
+"BREAK is not inside a loop"; the body of an `On Event` is a sequence of its own, so a `Break` there
+needs a loop there. `Stop Program` ends the program as `COMPLETED`, wherever it is. Nothing can be
+wired after any of the three.
 
 ### Variables
 
@@ -367,6 +635,7 @@ The five nodes at the bottom drive the bot's combat AI, the same one `/bot spawn
 |---|---|---|---|---|
 | `Variables/Set` | `SET_VARIABLE` | action |  | `name` string = `counter`; `value` number = `0` |
 | `Variables/Add` | `ADD_VARIABLE` | action |  | `name` string = `counter`; `amount` number = `1` |
+| `Variables/SetTo` | `SET` | action |  | `name` string = `count`; `value` expr (any) = `$count + 1` |
 
 ### Events
 
@@ -378,6 +647,10 @@ The five nodes at the bottom drive the bot's combat AI, the same one `/bot spawn
 
 | Node | Type | Kind | Rule it needs | Parameters |
 |---|---|---|---|---|
+| `Conditions/All` | `CONDITION_ALL` | condition (`conditions`) |  | none. True when every condition wired into its four sockets is |
+| `Conditions/Any` | `CONDITION_ANY` | condition (`conditions`) |  | none. True when at least one is |
+| `Conditions/Not` | `CONDITION_NOT` | condition (`condition`) |  | none. True when the condition wired into it is not |
+| `Conditions/Expression` | `CONDITION_EXPRESSION` | condition |  | `expression` expr (bool) = `health < 10 and has_target` |
 | `Conditions/Health` | `CONDITION_HEALTH` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `10`, min `0`, max `1024` |
 | `Conditions/IsFighting` | `CONDITION_IS_FIGHTING` | condition |  | none |
 | `Conditions/HasTarget` | `CONDITION_HAS_TARGET` | condition |  | none |
@@ -431,7 +704,8 @@ range, out of reach or nearly dead is the same fact the fight node is waiting on
 
 ## Variables
 
-`SET_VARIABLE` and `ADD_VARIABLE` store a number under a name.
+`SET_VARIABLE` and `ADD_VARIABLE` store a number under a name. `SET` stores whatever its expression
+gives: a number, text, true or false, or a list.
 
 | Property | Value |
 |---|---|
@@ -440,14 +714,125 @@ range, out of reach or nearly dead is the same fact the fight node is waiting on
 | Variables per program | 64 |
 | A variable never set | reads as `0` |
 
-Any `int` or `number` parameter can hold `"$name"` instead of a number, and is then read from the
-program's variables and clamped to its own `min`/`max`.
+Any `int` or `number` parameter can hold `"$name"` instead of a number, or any other
+[expression](#expressions), and is then worked out when its step runs and clamped to its own
+`min`/`max`.
 
-`CONDITION_VARIABLE` compares one. A name that does not match the pattern stops the program with
+`CONDITION_VARIABLE` compares one, and stops the program with "The variable 'who' holds text, not a
+number" when it is not a number; so does `ADD_VARIABLE`. A name that does not match the pattern stops the program with
 "'X' is not a variable name: it must match ^[A-Za-z_][A-Za-z0-9_]*$", and the 65th variable stops it
 with "A program may hold at most 64 variables".
 
 Variables live as long as the program does. They are not saved with it.
+
+## Expressions
+
+Wherever a node takes a number it also takes an expression, and four nodes take nothing else: `If`,
+`While`, `Wait For` and `Set To`, plus the `Expression` condition for the older `If / Else` and
+`Wait Until`. One expression replaces a node per comparison:
+
+```
+health < 10 and has_target
+$kills % 5 == 0
+if(target_distance < 3, 'close', 'far')
+clamp(20 - health, 0, 20) * 2
+bot_name + ' has ' + count('golden_apple') + ' apples'
+```
+
+**Values** are numbers, `true`/`false`, text in single or double quotes, and lists. **Variables** are
+`$name`; one that was never set reads as `0`.
+
+**Operators**, loosest first: `or` (`||`), `and` (`&&`), `not` (`!`), one comparison (`<`, `<=`, `>`,
+`>=`, `==`, `!=`; they do not chain), `+` `-`, `*` `/` `%`, a leading `-`, and brackets. `and` and `or`
+stop at the side that decides. `+` adds two numbers and joins when either side is text. Two numbers
+are equal when they differ by less than a billionth. Dividing by zero stops the program with
+`Division by zero`; it does not give infinity.
+
+**Names** the bot answers. They are read when the expression is worked out, every time.
+
+| Name | Gives | What it is |
+|---|---|---|
+| `health` | number | The bot's health points; 20 is a full bar. |
+| `max_health` | number | The most health points the bot can have. |
+| `food` | number | The bot's food level; 20 is full. |
+| `armor` | number | How many armor points the bot is wearing. |
+| `x` | number | The bot's east-west position. |
+| `y` | number | The bot's height. |
+| `z` | number | The bot's north-south position. |
+| `yaw` | number | The way the bot faces, left to right, in degrees. |
+| `pitch` | number | How far the bot looks up or down, in degrees. |
+| `held_count` | number | How many items are in the bot's main hand. |
+| `hotbar_slot` | number | The hotbar slot the bot has selected, 1 to 9. |
+| `target_distance` | number | How far away the bot's target is; infinity when it has none. |
+| `target_health` | number | The target's health points; infinity when there is no target. |
+| `tick` | number | How many ticks have passed since the program started. |
+| `random` | number | A new random number from 0 up to, but not including, 1 each time it is read. |
+| `held_item` | text | The id of the item in the main hand, like diamond_sword; air when empty. |
+| `offhand_item` | text | The id of the item in the off hand; air when empty. |
+| `target_held_item` | text | The id of the item the target holds; air when there is no target. |
+| `target_name` | text | The target's name; empty when there is no target. |
+| `bot_name` | text | The bot's own name. |
+| `on_ground` | bool | True while the bot stands on the ground. |
+| `in_water` | bool | True while the bot is in water. |
+| `gliding` | bool | True while the bot is flying with an elytra. |
+| `blocking` | bool | True while the bot is raising a shield. |
+| `using_item` | bool | True while the bot is eating, drawing a bow or using another item. |
+| `sprinting` | bool | True while the bot is sprinting. |
+| `sneaking` | bool | True while the bot is sneaking. |
+| `alive` | bool | True while the bot is alive. |
+| `has_target` | bool | True when the bot has someone to fight. |
+| `fighting` | bool | True while the combat AI is on and the bot has a target it is engaging. |
+| `target_blocking` | bool | True while the target is raising a shield. |
+
+**Functions.** The steps are what a call costs out of the tick's budget, on top of one step for every
+part of the expression that is worked out.
+
+| Function | Gives | Steps | What it does |
+|---|---|---|---|
+| `min(a, b, ...)` | number | 1 | The smallest of two or more numbers. |
+| `max(a, b, ...)` | number | 1 | The largest of two or more numbers. |
+| `abs(n)` | number | 1 | A number without its minus sign. |
+| `floor(n)` | number | 1 | A number rounded down to a whole number. |
+| `ceil(n)` | number | 1 | A number rounded up to a whole number. |
+| `round(n)` | number | 1 | A number rounded to the nearest whole number; halves go up. |
+| `sqrt(n)` | number | 1 | The square root of a number that is not negative. |
+| `clamp(n, low, high)` | number | 1 | A number held between a lowest and a highest value. |
+| `if(condition, then, otherwise)` | any | 1 | The second value when the condition is true, otherwise the third; only the one that is used is worked out. |
+| `len(value)` | number | 1 | How many characters a text has, or how many items a list has. |
+| `contains(value, item)` | bool | 1 | True when a text holds a piece of text, or a list holds an item. |
+| `get(list, index)` | any | 1 | The item at a place in a list; the first item is at 0. |
+| `list(...)` | list | 1 | Makes a list out of any number of values. |
+| `range(n)` | list | 1 | The whole numbers from 0 up to one less than n, as a list. |
+| `text(value)` | text | 1 | Any value written out as text. |
+| `number(value)` | number | 1 | A number, or text that holds a number, as a number. |
+| `distance(x, y, z)` | number | 1 | How far the bot is from a spot in the world. |
+| `player_distance(name)` | number | 2 | How far the bot is from the named player. |
+| `count(item)` | number | 2 | How many of an item the bot carries. |
+| `block(x, y, z)` | text | 5 | The id of the block at a spot in the world. |
+| `entities(type, radius)` | number | 20 | How many entities of a type are within a radius of the bot. |
+
+`entities` takes an entity type's id (`zombie`, `player`), `any` for every living thing or `hostile`
+for monsters, counts within at most 64 blocks, and does not count the bot. `block` answers `unloaded`
+where the world is not loaded, rather than loading it.
+
+**Where the mistake is shown.** Select a node and its settings open beside the canvas as fields: what
+each takes is written under it, the names above are offered as they are typed (`Tab` takes the first),
+after `$` the program's own variables are, and a mistake is said under the field the moment it is
+made, and on the node. The page checks an expression with the same rules and the same words the server
+does, from one table of cases both are tested against.
+
+![An expression with a mistake in it](images/carpetlogic-expression.png)
+
+A program with a mistake in a field is saved as a draft with that mistake as the reason, and Run
+refuses it. The server checks again: `POST /api/execute` answers `400` with
+`MOVE.ticks: Unknown name 'helth' at 0`. What can only go wrong while it runs, such as a variable that
+holds text where a number is needed, stops the program with the step and the parameter named:
+`DELAY.ticks: Expected a number but got text`.
+
+**Limits.** An expression has at most 1024 characters, 256 parts and 32 levels of nesting; a list at
+most 256 items, counting the lists inside it and everything in them, and a text 1024 characters. Working one out is paid for from the same 1000 steps a tick
+that the nodes are, one step a part plus the function's steps, so `While entities('zombie', 8) == 0`
+runs some forty times a tick and is then put off to the next, like any loop.
 
 ## Waiting
 
@@ -648,6 +1033,17 @@ The combat nodes have scenarios of their own, all of them on a real bot rather t
 `logic_combat_start_stop`, `logic_fight_node`, `logic_combat_option`, `logic_on_kill_event`,
 `logic_totem_pop_event` and `logic_stop_program_stops_fight`.
 
+`logic_save_draft_and_autosave` covers saving over HTTP against the running server: a draft is written
+to a file named after it with its graph and the reason, comes back the same after the folder is read
+again, and is refused by `programs run`; saving it again writes nothing; a save from an older copy is
+refused; the version that compiles is saved over it under a new name, its file is renamed, and it
+runs.
+
+`logic_admin_login` covers the admin sign-in over HTTP against the running server: an operator sets
+a password through the console's link, signs in and changes a rule, and a second use of the link, a
+wrong password, a token from `/carpetlogic open`, a value the rule refuses and the operator once
+deopped are all refused, as are the routes while the rule is off.
+
 ## The HTTP API
 
 For scripting the editor rather than clicking in it. Everything here runs on the server thread, on
@@ -663,7 +1059,12 @@ whose owner is offline, or no longer allowed to use `/carpetlogic`, gets `403`. 
 `carpetLogicViewerMode` gets `403`. A body over 2 MiB gets `413`. A request the server thread does
 not answer within 5 seconds gets `503`.
 
-Errors are always `{"error": "..."}`.
+Errors are always `{"error": "..."}`. While `carpetLogicAdminLogin` is on a `401` also carries
+`"adminLogin": true`, which is how a page without a token learns that it can offer the sign-in.
+
+Two routes take no token, `POST /api/login` and `POST /api/password`, and only while
+`carpetLogicAdminLogin` is on. With the rule off they are answered like any other path: `401` without
+a token, `404 Unknown API endpoint` with one.
 
 ### `GET /api/status`
 
@@ -676,12 +1077,18 @@ Response:
   "version": "18",
   "user": "Steve",
   "viewerMode": false,
+  "admin": false,
+  "adminLogin": false,
   "activeBots": 2,
   "runningPrograms": 1,
   "savedPrograms": 7,
-  "maxPrograms": 4
+  "maxPrograms": 4,
+  "programsFolder": "world/carpetlogic/programs"
 }
 ```
+
+`admin` says whether the token came from the admin sign-in, `adminLogin` whether the server offers
+one.
 
 ### `GET /api/settings`
 
@@ -691,7 +1098,8 @@ combat nodes need and the schema cannot know.
 Response keys: `commandCarpetLogic`, `carpetLogicPort`, `carpetLogicBindAddress`,
 `carpetLogicSessionHours`, `carpetLogicUpdateInterval`, `carpetLogicMaxPrograms`,
 `carpetLogicViewerMode`, `fakePlayerNavigation`, `fakePlayerElytraGlide`, `swordBlockHitting`,
-`combatStyles`, `difficulties`, `kits`, `combatOptions`.
+`combatStyles`, `difficulties`, `kits`, `combatOptions`, `rules`, and `locked` when the settings are
+locked.
 
 | Key | What it holds |
 |---|---|
@@ -704,6 +1112,88 @@ The style and difficulty lists are the same ones the schema carries in the resol
 parameters, generated from the bot's enums; the kits cannot be in the schema at all, because they depend on
 the world's folder.
 
+`rules` is what the Settings panel draws: every rule it shows, from the rule registry, in the panel's
+order.
+
+```json
+{
+  "name": "carpetLogicMaxPrograms",
+  "group": "editor",
+  "type": "int",
+  "value": "4",
+  "default": "4",
+  "strict": false,
+  "description": "Maximum number of bot programs running at the same time",
+  "options": [],
+  "extra": []
+}
+```
+
+`group` is `editor` for the `carpetLogic*` rules and `commandCarpetLogic`, `actions` for a rule an
+action of the schema `requires`, and `bots` for the rules of the `pvp` category, the bots' defaults.
+`type` is `boolean`, `int`, `number` or `string`; `value` and `default` are spelled as `/carpet`
+spells them. `strict` means only one of `options` is taken; otherwise they are suggestions. `locked`,
+when present, is the reason no rule can be changed while the server runs.
+
+### `POST /api/settings`
+
+Change one of those rules. Only for a token from the admin sign-in, and only while
+`carpetLogicAdminLogin` is on; with the rule off the route is `404 Unknown API endpoint`.
+
+Request body: `{"rule": "carpetLogicMaxPrograms", "value": "8"}`. The value is text, as `/carpet` takes
+it.
+
+Response: `{"success": true, "rule": { ... }}` with the rule as it now is, and `"message"` when the
+rule had something to say.
+
+| Status | When |
+|---|---|
+| `400` | `rule` or `value` is missing, or the rule refused the value: the error is the validator's reason, and `rule` carries the value it still has |
+| `403` | the token is not an admin's, or its account may no longer change Carpet rules |
+| `404` | the editor has no setting of that name |
+| `409` | the settings are locked in `carpet.conf` |
+
+This is the one non-`GET` an admin's token may still send under `carpetLogicViewerMode`.
+
+### `POST /api/login`
+
+Sign an admin in. No token; `Content-Type: application/json`; at most 4 KiB.
+
+Request body: `{"name": "Steve", "password": "..."}`
+
+Response: `{"token": "...", "user": "Steve", "admin": true}`
+
+| Status | When |
+|---|---|
+| `400` | the body is not a name of 1 to 32 characters without spaces and a password of 1 to 128 |
+| `401` | `Wrong name or password`, for every reason a sign-in can fail |
+| `415` | the content type is not `application/json` |
+| `429` | too many attempts for the name or from the address; `Retry-After` and `"retryAfter"` give the seconds to wait |
+| `503` | too many sign-ins are being checked at once |
+
+### `POST /api/password`
+
+Set an admin's password with the ticket of a link from `/carpetlogic password`. No token;
+`Content-Type: application/json`; at most 4 KiB.
+
+Request body: `{"ticket": "...", "name": "Steve", "password": "..."}`
+
+Response: `{"success": true, "name": "Steve"}`. The ticket is used up, and the account's admin sessions
+are ended.
+
+| Status | When |
+|---|---|
+| `400` | a field is missing, or the password has fewer than 10 or more than 128 characters; the ticket can be used again |
+| `403` | `This link is no longer valid`: the ticket is unknown, used, older than 10 minutes, for another name, or its account is no longer an admin |
+| `429` | too many bad tickets from the address |
+
+### `POST /api/logout`
+
+End the session of the token the request carries. No body. Works under viewer mode and for a token
+whose player has left.
+
+Response: `{"success": true}`. Any event stream the session had open is closed.
+
 ### `GET /api/schema`
 
 The whole of `carpetlogic/actions.json`, verbatim except that each `optionsFrom` is replaced in place by
@@ -711,7 +1201,9 @@ the `options` array it resolves to. This is what the editor compiles against.
 
 ### `GET /api/programs`
 
-An array of the saved programs, as stored. Does not include the presets.
+An array of the saved programs, as stored, each with three more fields: `folder` (the subfolder, or
+empty), `file` (where it is kept, relative to the server's directory) and `draft`. The folder is read
+again for every call. Does not include the presets.
 
 ### `GET /api/presets`
 
@@ -721,23 +1213,64 @@ An array of the built-in presets.
 
 Save a program.
 
-Request body: a program object — `id`, `name`, `description`, `actions`, optionally `graphData`.
+Request body: a program object — `id`, `name`, `description`, `actions`, `graphData` — and
+optionally `error`, `folder`, `baseUpdatedAt` and `force`.
 
 ```json
 {
   "id": "myrounds",
   "name": "My rounds",
   "description": "five crits",
-  "actions": [ { "type": "MOVE", "params": { "direction": "forward", "ticks": 20 } } ]
+  "actions": [ { "type": "MOVE", "params": { "direction": "forward", "ticks": 20 } } ],
+  "baseUpdatedAt": 1730000000000
 }
 ```
 
 An empty or missing `id` gets one generated. Saving over an existing id keeps that program's
-`createdAt`. A program cannot take a preset's id.
+`createdAt` and its folder. A program cannot take a preset's id.
 
-Response: `{"success": true, "id": "myrounds"}`
+- `error` makes it a draft: the reason is kept and the actions are not. Actions that do not fit the
+  schema make it a draft too, with the schema's complaint as the reason, instead of a refusal.
+- `folder` puts a new program into a subfolder.
+- `baseUpdatedAt` is the `updatedAt` of the copy the save started from. When the stored copy has
+  another one the save is refused with `409`; `force: true` saves over it. Without `baseUpdatedAt`
+  nothing is checked.
 
-`400` when the actions do not fit the schema.
+Response:
+
+```json
+{
+  "success": true,
+  "id": "myrounds",
+  "name": "My rounds",
+  "folder": "",
+  "file": "world/carpetlogic/programs/My-rounds.json",
+  "updatedAt": 1730000005000,
+  "draft": false,
+  "unchanged": false
+}
+```
+
+`name` is the name the server settled on, which differs from the one sent when that was taken or
+empty. `draft` comes with `reason`. `unchanged` is true when the program was already stored exactly so,
+and then nothing was written and `updatedAt` is the old one.
+
+| Status | When |
+|---|---|
+| `400` | the id is not a valid one or is a preset's |
+| `409` | `{"error": "...", "conflict": true, "updatedAt": ...}`: the stored copy is not the one this save started from |
+| `429` | more than 60 writes in a minute from this session |
+| `500` | the file could not be written; the error says where and why |
+
+### `POST /api/programs/move`
+
+Put a program into a subfolder of the programs folder, or back. Request body
+`{"id": "myrounds", "folder": "Drills"}`; an empty `folder` is the programs folder itself. The folder
+name is made safe the way a file name is, at most 32 characters, and is created when it is not there;
+a subfolder that has lost its last program is removed.
+
+Response `{"success": true, "folder": "Drills", "file": "world/carpetlogic/programs/Drills/My-rounds.json"}`.
+`404` when there is no such program.
 
 ### `DELETE /api/programs/<id>`
 

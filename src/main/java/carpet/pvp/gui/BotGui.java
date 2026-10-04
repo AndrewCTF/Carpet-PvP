@@ -218,7 +218,10 @@ public final class BotGui
         // A server without authentication places the bot right away, the way /bot spawn finds it too.
         if (server.getPlayerList().getPlayerByName(name) instanceof EntityPlayerMPFake bot)
         {
-            finishSpawn(bot, PENDING_SPAWNS.remove(name));
+            PendingSpawn arrived = PENDING_SPAWNS.remove(name);
+            finishSpawn(bot, arrived);
+            // The pairing goes in whatever route the bot took, or the two never find each other.
+            if (arrived.opponent() != null) PENDING_DUELS.put(name, arrived.opponent());
         }
         return name;
     }

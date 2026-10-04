@@ -14,6 +14,7 @@ import carpet.pvp.MatchHistory;
 import carpet.pvp.kit.KitStore;
 import carpet.utils.CommandHelper;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -46,12 +47,20 @@ public class Api
 
     private final MinecraftServer server;
     private final CarpetLogic logic;
+    private final AdminRules rules;
     private final SecureRandom random = new SecureRandom();
+    private final SaveLimiter saves = new SaveLimiter();
 
     public Api(MinecraftServer server, CarpetLogic logic)
     {
+        this(server, logic, new CarpetAdminRules(server, logic));
+    }
+
+    public Api(MinecraftServer server, CarpetLogic logic, AdminRules rules)
+    {
         this.server = server;
         this.logic = logic;
+        this.rules = rules;
     }
 
     /**
@@ -62,6 +71,11 @@ public class Api
         if (session.owner() == null)
         {
             return null;
+        }
+        if (session.admin())
+        {
+            // An admin signed in with a password and need not be in the game, but must still be an admin.
+            return rules.isAdmin(session.owner()) ? null : "This account may no longer change Carpet rules";
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(session.owner());
         if (owner == null)
@@ -82,7 +96,10 @@ public class Api
         {
             return error(403, denied);
         }
-        if (!"GET".equals(method) && CarpetSettings.carpetLogicViewerMode)
+        // Viewer mode stops the editor from changing or running anything, but not an admin from changing
+        // settings: viewer mode is one of them. Who is an admin is the settings route's own question.
+        boolean changesSettings = "POST /api/settings".equals(method + " " + path) && rules.loginEnabled();
+        if (!"GET".equals(method) && rules.viewerMode() && !changesSettings)
         {
             return error(403, "The web editor is in viewer mode (carpetLogicViewerMode)");
         }
@@ -92,10 +109,12 @@ public class Api
             {
                 case "GET /api/status" -> ok(status(session));
                 case "GET /api/settings" -> ok(settings());
+                case "POST /api/settings" -> changesSettings ? changeSetting(parse(body), session) : error(404, "Unknown API endpoint");
                 case "GET /api/schema" -> ok(logic.getSchema().json());
-                case "GET /api/programs" -> ok(GSON.toJsonTree(logic.getProgramStorage().getAllPrograms()));
+                case "GET /api/programs" -> ok(programs());
                 case "GET /api/presets" -> ok(GSON.toJsonTree(logic.getProgramStorage().getPresets()));
-                case "POST /api/programs" -> saveProgram(parse(body));
+                case "POST /api/programs" -> saveProgram(parse(body), session);
+                case "POST /api/programs/move" -> moveProgram(parse(body));
                 case "GET /api/bots" -> ok(panelState());
                 case "GET /api/matches" -> ok(GSON.toJsonTree(MatchHistory.matches()));
                 case "POST /api/bots/spawn" -> spawnBot(parse(body), session);
@@ -168,10 +187,13 @@ public class Api
         status.addProperty("version", CarpetSettings.carpetVersion);
         status.addProperty("user", session.ownerName());
         status.addProperty("viewerMode", CarpetSettings.carpetLogicViewerMode);
+        status.addProperty("admin", session.admin());
+        status.addProperty("adminLogin", rules.loginEnabled());
         status.addProperty("activeBots", logic.getBotManager().getBots().size());
         status.addProperty("runningPrograms", logic.getProgramExecutor().getRunningCount());
         status.addProperty("savedPrograms", logic.getProgramStorage().getCount());
         status.addProperty("maxPrograms", CarpetSettings.carpetLogicMaxPrograms);
+        status.addProperty("programsFolder", logic.getProgramStorage().location());
         return status;
     }
 
@@ -194,28 +216,142 @@ public class Api
         settings.add("difficulties", GSON.toJsonTree(List.of(BotPvpConfig.difficulties())));
         settings.add("kits", GSON.toJsonTree(KitStore.of(server).names()));
         settings.add("combatOptions", GSON.toJsonTree(List.of(BotPvpConfig.keys())));
+        // What the Settings panel draws: every rule it shows, as the rule registry describes it.
+        settings.add("rules", rules.rules());
+        if (rules.locked() != null)
+        {
+            settings.addProperty("locked", rules.locked());
+        }
         return settings;
     }
 
-    private Response saveProgram(JsonObject request)
+    private Response changeSetting(JsonObject request, AuthManager.Session session)
     {
+        if (!session.admin())
+        {
+            return error(403, "Only an admin who signed in with a password can change settings");
+        }
+        String rule = string(request, "rule");
+        String value = string(request, "value");
+        if (rule == null || value == null)
+        {
+            return error(400, "'rule' and 'value' must both be given");
+        }
+        AdminRules.Change change = rules.set(rule, value, session);
+        JsonObject result = new JsonObject();
+        result.addProperty("success", change.status() == 200);
+        if (change.status() != 200)
+        {
+            result.addProperty("error", change.message());
+        }
+        else if (change.message() != null)
+        {
+            result.addProperty("message", change.message());
+        }
+        if (change.rule() != null)
+        {
+            result.add("rule", change.rule());
+        }
+        return new Response(change.status(), result);
+    }
+
+    // The folder is read again every time it is listed, so a file put there by hand shows up without a restart.
+    private JsonArray programs()
+    {
+        ProgramStorage storage = logic.getProgramStorage();
+        storage.loadAll();
+        JsonArray listed = new JsonArray();
+        storage.getAllPrograms().forEach(program -> listed.add(described(program)));
+        return listed;
+    }
+
+    // A program as it is stored, with where its file is and whether it runs.
+    private JsonObject described(BotProgram program)
+    {
+        JsonObject described = GSON.toJsonTree(program).getAsJsonObject();
+        described.addProperty("folder", program.getFolder());
+        described.addProperty("file", logic.getProgramStorage().location(program));
+        described.addProperty("draft", program.getError() != null);
+        return described;
+    }
+
+    /**
+     * Saves a program, whether or not it compiles: the editor sends the graph and either the actions it compiled
+     * to or the reason it does not compile, and a program that does not is kept as a draft.
+     */
+    private Response saveProgram(JsonObject request, AuthManager.Session session)
+    {
+        long wait = saves.admit(session, System.currentTimeMillis());
+        if (wait > 0)
+        {
+            return error(429, "Saving too often. Try again in " + (wait + 999) / 1000 + " seconds");
+        }
         BotProgram program = GSON.fromJson(request, BotProgram.class);
         ProgramStorage storage = logic.getProgramStorage();
-        if (program.getId() == null || program.getId().isEmpty())
+        boolean fresh = program.getId() == null || program.getId().isEmpty();
+        if (fresh)
         {
             program.setId("p" + Long.toHexString(random.nextLong()));
         }
-        BotProgram existing = storage.getById(program.getId());
-        long now = System.currentTimeMillis();
-        program.setCreatedAt(existing != null && !existing.isPreset() ? existing.getCreatedAt() : now);
-        program.setUpdatedAt(now);
-        program.setPreset(false);
         program.setName(cleanName(program.getName()));
-        storage.save(program);
+        program.setError(cleanReason(program.getError()));
+        program.setFolder(string(request, "folder"));
+        JsonElement base = request.get("baseUpdatedAt");
+        Long baseUpdatedAt = base != null && base.isJsonPrimitive() && base.getAsJsonPrimitive().isNumber() ? (Long) base.getAsLong() : null;
+        JsonElement force = request.get("force");
+        ProgramStorage.Saved saved;
+        try
+        {
+            saved = storage.save(program, baseUpdatedAt, force != null && force.isJsonPrimitive() && force.getAsBoolean());
+        }
+        catch (IllegalStateException e)
+        {
+            return error(500, e.getMessage());
+        }
+        BotProgram kept = saved.program();
+        JsonObject result = new JsonObject();
+        if (saved.conflict())
+        {
+            result.addProperty("error", "'" + kept.getName() + "' has been saved somewhere else since this copy was opened");
+            result.addProperty("conflict", true);
+            result.addProperty("updatedAt", kept.getUpdatedAt());
+            return new Response(409, result);
+        }
+        result.addProperty("success", true);
+        result.addProperty("id", kept.getId());
+        result.addProperty("name", kept.getName());
+        result.addProperty("folder", kept.getFolder());
+        result.addProperty("file", storage.location(kept));
+        result.addProperty("updatedAt", kept.getUpdatedAt());
+        result.addProperty("draft", kept.getError() != null);
+        if (kept.getError() != null)
+        {
+            result.addProperty("reason", kept.getError());
+        }
+        result.addProperty("unchanged", !saved.written());
+        return ok(result);
+    }
 
+    private Response moveProgram(JsonObject request)
+    {
+        String folder = string(request, "folder");
+        BotProgram moved;
+        try
+        {
+            moved = logic.getProgramStorage().move(string(request, "id"), folder == null ? "" : folder);
+        }
+        catch (IllegalStateException e)
+        {
+            return error(500, e.getMessage());
+        }
+        if (moved == null)
+        {
+            return error(404, "There is no such program");
+        }
         JsonObject result = new JsonObject();
         result.addProperty("success", true);
-        result.addProperty("id", program.getId());
+        result.addProperty("folder", moved.getFolder());
+        result.addProperty("file", logic.getProgramStorage().location(moved));
         return ok(result);
     }
 
@@ -339,6 +475,17 @@ public class Api
             return "Untitled";
         }
         return clean.length() > MAX_NAME_LENGTH ? clean.substring(0, MAX_NAME_LENGTH) : clean;
+    }
+
+    // Why a draft does not compile is shown in lists and in chat: one line, of a sane length.
+    private static String cleanReason(String reason)
+    {
+        if (reason == null)
+        {
+            return null;
+        }
+        String clean = reason.replaceAll("\\p{Cntrl}", " ").strip();
+        return clean.length() > 300 ? clean.substring(0, 300) : clean;
     }
 
     // A setting key names one of the bot rules and a value is what one of them takes: neither may be a paragraph.

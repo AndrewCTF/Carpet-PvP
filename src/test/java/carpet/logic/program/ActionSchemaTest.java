@@ -16,6 +16,7 @@ import com.google.gson.reflect.TypeToken;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
@@ -89,6 +90,13 @@ class ActionSchemaTest
                 branch.add("condition", action);
                 action = branch;
             }
+            if (INSIDE_A_LOOP.contains(definition.type()))
+            {
+                JsonObject loop = new JsonObject();
+                loop.addProperty("type", "LOOP");
+                loop.add("children", GSON.toJsonTree(List.of(action)));
+                action = loop;
+            }
             tree.add(action);
         }
 
@@ -100,7 +108,8 @@ class ActionSchemaTest
         for (Definition definition : schema.definitions())
         {
             BotAction step = actions.get(index++);
-            BotAction action = definition.kind().equals(ActionSchema.CONDITION) ? step.getCondition() : step;
+            BotAction action = definition.kind().equals(ActionSchema.CONDITION) ? step.getCondition()
+                    : INSIDE_A_LOOP.contains(definition.type()) ? step.getChildren().getFirst() : step;
             assertEquals(definition.type(), action.getType());
             for (Param param : definition.params().values())
             {
@@ -348,7 +357,140 @@ class ActionSchemaTest
                 double value = (Double) param.defaultValue();
                 yield value + 1 <= param.max() ? value + 1 : value - 1;
             }
+            case EXPR -> param.returns() == Expression.Type.BOOL ? "true" : param.returns() == Expression.Type.LIST ? "list(1, 2)" : "7";
         };
+    }
+
+    /** The steps that are only allowed inside a loop, and are put into one to be tried. */
+    private static final Set<String> INSIDE_A_LOOP = Set.of("BREAK", "CONTINUE");
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "[{type: BREAK}]",
+            "[{type: CONTINUE}]",
+            "[{type: IF, params: {condition: 'true'}, children: [{type: BREAK}]}]",
+            "[{type: LOOP, children: [{type: ON_EVENT, children: [{type: BREAK}]}]}]",
+            "[{type: LOOP, children: [{type: JUMP}]}, {type: CONTINUE}]"})
+    void breakAndContinueAreRefusedOutsideALoop(String json)
+    {
+        List<BotAction> actions = GSON.fromJson(json, new TypeToken<List<BotAction>>() {}.getType());
+        String message = assertThrows(IllegalArgumentException.class, () -> schema.validate(actions)).getMessage();
+        assertTrue(message.endsWith(" is not inside a loop"), message);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "[{type: LOOP, children: [{type: BREAK}]}]",
+            "[{type: FOREVER, children: [{type: IF, params: {condition: 'true'}, children: [{type: BREAK}], elseChildren: [{type: CONTINUE}]}]}]",
+            "[{type: WHILE, params: {condition: 'true'}, children: [{type: SEQUENCE, children: [{type: CONTINUE}]}]}]",
+            "[{type: FOR_EACH, children: [{type: BREAK}]}]",
+            "[{type: ON_EVENT, children: [{type: LOOP, children: [{type: BREAK}]}]}]"})
+    void breakAndContinueAreTakenAnywhereInsideALoop(String json)
+    {
+        schema.validate(GSON.fromJson(json, new TypeToken<List<BotAction>>() {}.getType()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "[{type: IF_THEN_ELSE, condition: {type: CONDITION_ALL, conditions: [{type: JUMP}]}}]",
+            "[{type: IF_THEN_ELSE, condition: {type: CONDITION_NOT}}]",
+            "[{type: IF_THEN_ELSE, condition: {type: CONDITION_IS_FLYING, conditions: [{type: CONDITION_IS_FLYING}]}}]"})
+    void aConditionMadeOfConditionsIsCheckedAllTheWayDown(String json)
+    {
+        List<BotAction> actions = GSON.fromJson(json, new TypeToken<List<BotAction>>() {}.getType());
+        assertThrows(IllegalArgumentException.class, () -> schema.validate(actions));
+    }
+
+    // ── Expressions in parameters ──
+
+    @Test
+    void aNumberParameterTakesAnExpression()
+    {
+        BotAction move = new BotAction("MOVE", Map.of("ticks", "$steps * 2 + 1"));
+        schema.validate(List.of(move));
+        assertEquals(21, schema.params(move, Map.of("steps", 10.0)).integer("ticks"));
+        assertEquals(6000, schema.params(move, Map.of("steps", 1.0e9)).integer("ticks"), "what it gives is clamped like a number");
+
+        BotAction look = new BotAction("LOOK_AT", Map.of("x", "max($a, $b) / 4"));
+        schema.validate(List.of(look));
+        assertEquals(2.5, schema.params(look, Map.of("a", 10.0, "b", 3.0)).number("x"));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "helth / 2 | MOVE.ticks: Unknown name 'helth' at 0",
+            "health / | MOVE.ticks: Unexpected end of the expression",
+            "health < 5 | MOVE.ticks: Expected a number but got true or false at 0",
+            "held_item | MOVE.ticks: Expected a number but got text at 0",
+            "40 | MOVE.ticks must be a number or an expression"})
+    void anExpressionThatCannotGiveANumberIsRefusedWithItsReason(String source, String message)
+    {
+        BotAction move = new BotAction("MOVE", Map.of("ticks", source));
+        assertEquals(message, assertThrows(IllegalArgumentException.class, () -> schema.validate(List.of(move))).getMessage());
+    }
+
+    @Test
+    void anExpressionParameterIsCheckedForWhatItHasToGive()
+    {
+        BotAction branch = new BotAction("IF", Map.of("condition", "$count >= 3 and not ($done == true)"));
+        schema.validate(List.of(branch));
+        assertTrue(schema.params(branch, Map.of("count", 3.0, "done", false)).truth("condition"));
+        assertFalse(schema.params(branch, Map.of("count", 3.0, "done", true)).truth("condition"));
+
+        assertEquals("IF.condition: Expected true or false but got a number at 0", assertThrows(IllegalArgumentException.class,
+                () -> schema.validate(List.of(new BotAction("IF", Map.of("condition", "health + 1"))))).getMessage());
+        assertEquals("IF.condition must be an expression", assertThrows(IllegalArgumentException.class,
+                () -> schema.validate(List.of(new BotAction("IF", Map.of("condition", true))))).getMessage());
+
+        // A value that may be anything: a number, text or a list.
+        BotAction set = new BotAction("SET", Map.of("name", "who", "value", "'Steve' + ' ' + $n"));
+        schema.validate(List.of(set));
+        assertEquals("Steve 2", schema.params(set, Map.of("n", 2.0)).value("value"));
+    }
+
+    @Test
+    void anExpressionThatFailsWhenItIsEvaluatedSaysWhichParameter()
+    {
+        BotAction move = new BotAction("MOVE", Map.of("ticks", "10 / $n"));
+        schema.validate(List.of(move));
+        assertEquals("MOVE.ticks: Division by zero at 3",
+                assertThrows(BotActionException.class, () -> schema.params(move, Map.of()).integer("ticks")).getMessage());
+
+        // A variable can hold anything, so what it holds is only known when it is read.
+        BotAction wait = new BotAction("DELAY", Map.of("ticks", "$name"));
+        schema.validate(List.of(wait));
+        assertEquals("DELAY.ticks: Expected a number but got text",
+                assertThrows(BotActionException.class, () -> schema.params(wait, Map.of("name", "Steve")).integer("ticks")).getMessage());
+
+        BotAction health = new BotAction("DELAY", Map.of("ticks", "health"));
+        schema.validate(List.of(health));
+        assertEquals("DELAY.ticks: 'health' can only be read while a program runs",
+                assertThrows(BotActionException.class, () -> schema.params(health).integer("ticks")).getMessage());
+    }
+
+    @Test
+    void everyNameAndFunctionAnExpressionKnowsIsAnsweredByARunningProgram()
+    {
+        // A program whose one step sets a variable from the name or the call, run on a bot that answers anything.
+        Expression.Vocabulary vocabulary = schema.vocabulary();
+        Map<String, String> calls = Map.of("distance", "distance(1, 2, 3)", "player_distance", "player_distance('Steve')",
+                "count", "count('arrow')", "block", "block(1, 2, 3)", "entities", "entities('zombie', 8)");
+        List<String> sources = new java.util.ArrayList<>(vocabulary.values().keySet());
+        sources.addAll(calls.values());
+        assertEquals(31 + 5, sources.size());
+        for (String source : sources)
+        {
+            RecordingBot recorder = new RecordingBot();
+            ProgramExecutor executor = new ProgramExecutor(schema, name -> recorder.bot, () -> 1);
+            BotProgram program = new BotProgram("test", source, "");
+            program.setActions(List.of(new BotAction("SET", Map.of("name", "read", "value", source))));
+            schema.validate(program.getActions());
+            executor.startProgram("bot", program, null);
+            executor.tick();
+
+            ProgramExecutor.ProgramInfo info = executor.getPrograms().get("bot");
+            assertEquals("COMPLETED", info.status(), source + ": " + info.error());
+        }
     }
 
 }

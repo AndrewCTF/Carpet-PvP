@@ -12,7 +12,7 @@ import java.util.Set;
 
 /**
  * A {@link Bot} that does nothing but write down what it was told to do and what it was asked, as
- * "method[arguments]". Questions are answered with false or 0 unless an answer was set for the method.
+ * "method[arguments]". Questions are answered with false, 0 or no text unless an answer was set for the method.
  */
 final class RecordingBot implements InvocationHandler
 {
@@ -43,6 +43,14 @@ final class RecordingBot implements InvocationHandler
         if (returns == boolean.class)
         {
             return Boolean.FALSE;
+        }
+        if (returns == String.class)
+        {
+            return "";
+        }
+        if (returns == int.class)
+        {
+            return 0;
         }
         return Set.class.isAssignableFrom(returns) ? Set.of() : (Object) 0.0;
     }

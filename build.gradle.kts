@@ -234,6 +234,8 @@ val webuiTest = tasks.register<Exec>("webuiTest") {
     inputs.files(tests)
     inputs.dir(rootProject.file("src/main/resources/webui"))
     inputs.dir(rootProject.file("src/main/resources/carpetlogic"))
+    // The cases the page's expression checker shares with the Java evaluator.
+    inputs.dir(rootProject.file("src/test/resources/carpetlogic"))
     onlyIf {
         if (node == null) logger.lifecycle("webuiTest skipped: node is not on the PATH")
         node != null

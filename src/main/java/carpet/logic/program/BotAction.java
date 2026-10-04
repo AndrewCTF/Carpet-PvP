@@ -15,6 +15,7 @@ public class BotAction
     private List<BotAction> children;
     private List<BotAction> elseChildren;
     private BotAction condition;
+    private List<BotAction> conditions;
 
     public BotAction()
     {
@@ -69,6 +70,17 @@ public class BotAction
     public void setCondition(BotAction condition)
     {
         this.condition = condition;
+    }
+
+    /** The conditions a condition that combines others is made of. */
+    public List<BotAction> getConditions()
+    {
+        return conditions == null ? List.of() : conditions;
+    }
+
+    public void setConditions(List<BotAction> conditions)
+    {
+        this.conditions = conditions;
     }
 
     @Override

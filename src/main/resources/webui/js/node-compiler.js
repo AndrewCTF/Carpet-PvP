@@ -8,10 +8,16 @@
    ═══════════════════════════════════════════════════════════════ */
 const NodeCompiler = (() => {
 
+    // The checker of expressions: a script of the page, or a module where there is no page.
+    const Checker = typeof Expression !== "undefined" ? Expression : require("./expression.js");
+    const NUMERAL = /^-?(\d+(\.\d+)?|\.\d+)$/;
+
     let schema = null;
     let actionByNode = {};      // editor node type → action type
-    let variablePrefix = "";    // what a number parameter holds when it names a variable
-    let variableName = /.*/;    // what may follow the prefix
+    let vocabulary = null;      // the names and functions an expression may use, and how a variable is written
+    let mistakes = null;        // where the mistakes found while compiling are noted, when somebody wants them
+    let compiling = null;       // the node being compiled
+    let nesting = 0;            // how deep in conditions made of conditions the compiler is
 
     function setSchema(newSchema) {
         schema = newSchema;
@@ -19,14 +25,45 @@ const NodeCompiler = (() => {
         for (const [type, def] of Object.entries(schema.actions)) {
             actionByNode[def.node] = type;
         }
-        variablePrefix = schema.variables.referencePrefix;
-        variableName = new RegExp(schema.variables.namePattern);
+        vocabulary = Object.assign({ prefix: schema.variables.referencePrefix }, schema.expressions);
     }
 
     // ── Parameters ───────────────────────────────────────────
 
+    // What an expression has to give to fit a parameter.
+    function expected(param) {
+        return param.type === "expr" ? param.returns || "any" : "number";
+    }
+
+    /** What is wrong with a parameter's value as the checker of expressions sees it, or null. */
+    function problem(param, value) {
+        const text = value === undefined || value === null ? "" : String(value).trim();
+        if (param.type === "expr") {
+            const verdict = Checker.check(text === "" ? String(param.default) : text, vocabulary, expected(param));
+            return verdict.ok ? null : verdict.error;
+        }
+        if ((param.type === "int" || param.type === "number") && typeof value === "string" && text !== "" && !NUMERAL.test(text)) {
+            const verdict = Checker.check(text, vocabulary, "number");
+            return verdict.ok ? null : verdict.error;
+        }
+        return null;
+    }
+
+    // A value the parameter cannot take becomes the parameter's default, so that what is compiled always fits
+    // the schema. What was wrong with it is noted for whoever asked compile() for the mistakes.
     function coerce(param, value) {
+        const wrong = problem(param, value);
+        if (wrong) {
+            if (mistakes) {
+                mistakes.push({ nodeId: compiling ? compiling.id : null, node: compiling ? compiling.title : null, param: param.name, message: wrong });
+            }
+            return param.default;
+        }
         switch (param.type) {
+            case "expr": {
+                const text = value === undefined || value === null ? "" : String(value).trim();
+                return text === "" ? param.default : text;
+            }
             case "bool":
                 return typeof value === "boolean" ? value : param.default;
             case "string": {
@@ -34,9 +71,9 @@ const NodeCompiler = (() => {
                 return param.options && !param.options.includes(text) ? param.default : text;
             }
             default: {
-                // A number parameter may name a variable instead of holding one.
-                if (typeof value === "string" && value.startsWith(variablePrefix)) {
-                    return variableName.test(value.slice(variablePrefix.length)) ? value : param.default;
+                // A number parameter may hold an expression instead of a number, of which a variable is the simplest.
+                if (typeof value === "string" && value.trim() !== "" && !NUMERAL.test(value.trim())) {
+                    return value.trim();
                 }
                 let number = value === "" || value === null ? NaN : Number(value);
                 if (!Number.isFinite(number)) number = param.default;
@@ -74,17 +111,47 @@ const NodeCompiler = (() => {
         "Control/If-Else": 2,       // then, else, done
         "Control/Forever": null,
         "Control/Sequence": null,
+        "Control/If": 2,            // then, else, done
+        "Control/While": 1,         // body, done
+        "Control/ForEach": 1,       // body, done
         "Events/OnEvent": 1,        // body, next
     };
 
     // The nodes that are handed a condition: it arrives on their last input, as nodes.js declares the sockets.
     const WITH_CONDITION = new Set(["Control/If-Else", "Control/WaitUntil"]);
 
-    function compile(graph) {
+    /**
+     * @param found optional: an array that is given the mistakes in the fields of the nodes that were compiled,
+     *              each as { nodeId, node, param, message }. A program that has any is not what its author
+     *              wrote, since every mistaken field was compiled as its default.
+     */
+    function compile(graph, found) {
         if (!schema) throw new Error("The action schema has not been loaded");
         const start = (graph._nodes || []).find(n => n.type === "Control/Start");
         if (!start) throw new Error("No Start node found. Add a Control/Start node.");
-        return chainFrom(graph, start, new Set());
+        mistakes = found || null;
+        try {
+            return chainFrom(graph, start, new Set());
+        } finally {
+            mistakes = null;
+            compiling = null;
+        }
+    }
+
+    /**
+     * Compiles a program that is meant to run: one mistaken field is a reason not to.
+     * @throws Error with the first reason the graph does not compile, and the nodeId of the node it is about
+     */
+    function compileStrictly(graph) {
+        const found = [];
+        const actions = compile(graph, found);
+        if (found.length > 0) {
+            const first = found[0];
+            const error = new Error(first.param ? first.node + ", " + first.param + ": " + first.message : first.message);
+            error.nodeId = first.nodeId;
+            throw error;
+        }
+        return actions;
     }
 
     // The actions for a node and everything that follows it. A node already on this path ends the chain,
@@ -120,21 +187,43 @@ const NodeCompiler = (() => {
 
         const type = actionByNode[node.type];
         if (!type) throw new Error("Node '" + node.type + "' cannot be compiled");
+        compiling = node;
         const action = make(type, pick(schema.actions[type], props));
 
         if (WITH_CONDITION.has(node.type)) {
             const condition = source(graph, node, node.inputs.length - 1);
-            if (!condition) throw new Error("A " + node.title + " node has no condition connected");
+            if (!condition) throw at(node, new Error("The " + node.title + " node has no condition connected"));
             action.condition = compileNode(graph, condition, visited);
+        }
+
+        // A condition made of conditions: what is wired into it, compiled the same way.
+        if (node.type === "Conditions/Not" || node.type === "Conditions/All" || node.type === "Conditions/Any") {
+            if (nesting > 32) throw at(node, new Error("The conditions are wired in a circle"));
+            nesting++;
+            try {
+                const wired = node.inputs.map((input, index) => source(graph, node, index)).filter(Boolean);
+                if (wired.length === 0) {
+                    if (mistakes) mistakes.push({ nodeId: node.id, node: node.title, param: null, message: "The " + node.title + " node has no condition connected" });
+                } else if (node.type === "Conditions/Not") {
+                    action.condition = compileNode(graph, wired[0], visited);
+                } else {
+                    action.conditions = wired.map(condition => compileNode(graph, condition, visited));
+                }
+            } finally {
+                nesting--;
+            }
         }
 
         switch (node.type) {
             case "Control/Repeat":
             case "Control/Forever":
+            case "Control/While":
+            case "Control/ForEach":
             case "Events/OnEvent":
                 action.children = branch(graph, node, 0, visited);
                 break;
 
+            case "Control/If":
             case "Control/If-Else":
                 action.children = branch(graph, node, 0, visited);
                 action.elseChildren = branch(graph, node, 1, visited);
@@ -149,6 +238,12 @@ const NodeCompiler = (() => {
         }
 
         return action;
+    }
+
+    // Which node an error is about, so that the page can show it there.
+    function at(node, error) {
+        if (error.nodeId === undefined) error.nodeId = node.id;
+        return error;
     }
 
     // The node properties that are parameters of the action; a node carries nothing else the compiler reads.
@@ -207,7 +302,7 @@ const NodeCompiler = (() => {
         return link ? graph.getNodeById(link.origin_id) : null;
     }
 
-    return { setSchema, compile, make };
+    return { setSchema, compile, compileStrictly, make, problem };
 })();
 
 if (typeof module !== "undefined") module.exports = NodeCompiler;

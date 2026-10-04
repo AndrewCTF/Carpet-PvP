@@ -12,9 +12,11 @@ import com.google.gson.JsonParser;
  * A clean stop deletes it; a login finds it still there and undoes the whole session from it.
  *
  * <p>One player per file, named after them, in the world's {@code carpet-autosetup} folder. The
- * format is JSON with no Minecraft types in it, so both ends of it are unit testable.</p>
+ * format is JSON with no Minecraft types in it, so both ends of it are unit testable. What a session
+ * is doing is of no use to whoever reads the file back: there is no session then, only a player to
+ * give their things to.</p>
  */
-public record SessionFile(int version, String player, String mode, String difficulty, SavedState saved)
+public record SessionFile(int version, String player, SavedState saved)
 {
     /** Bumped whenever the shape changes; a file of another version is not read. */
     public static final int VERSION = 1;
@@ -26,8 +28,6 @@ public record SessionFile(int version, String player, String mode, String diffic
         JsonObject json = new JsonObject();
         json.addProperty("version", version);
         json.addProperty("player", player);
-        json.addProperty("mode", mode);
-        json.addProperty("difficulty", difficulty);
         json.add("saved", saved.toJson());
         return GSON.toJson(json);
     }
@@ -61,13 +61,6 @@ public record SessionFile(int version, String player, String mode, String diffic
         {
             throw new IllegalArgumentException("a session file needs the name of the player it belongs to");
         }
-        return new SessionFile(version, player.getAsString(), text(json, "mode"), text(json, "difficulty"),
-                SavedState.fromJson(json.get("saved")));
-    }
-
-    private static String text(JsonObject json, String key)
-    {
-        JsonElement value = json.get(key);
-        return value == null || !value.isJsonPrimitive() ? "" : value.getAsString();
+        return new SessionFile(version, player.getAsString(), SavedState.fromJson(json.get("saved")));
     }
 }

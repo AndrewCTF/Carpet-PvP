@@ -2,6 +2,8 @@ package carpet.logic;
 
 import carpet.CarpetSettings;
 import carpet.logic.program.BotProgram;
+import carpet.logic.web.AdminLogin;
+import carpet.logic.web.AdminRules;
 import carpet.logic.web.WebServer;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.utils.CommandHelper;
@@ -13,6 +15,8 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static net.minecraft.commands.Commands.argument;
@@ -27,6 +31,10 @@ public class CarpetLogicCommand
                 .executes(CarpetLogicCommand::showStatus)
                 .then(literal("status").executes(CarpetLogicCommand::showStatus))
                 .then(literal("open").executes(CarpetLogicCommand::open))
+                .then(literal("password")
+                        .executes(ctx -> passwordLink(ctx, null))
+                        .then(argument("player", StringArgumentType.word())
+                                .executes(ctx -> passwordLink(ctx, StringArgumentType.getString(ctx, "player")))))
                 .then(literal("programs")
                         .executes(CarpetLogicCommand::listPrograms)
                         .then(literal("run")
@@ -79,6 +87,70 @@ public class CarpetLogicCommand
         return 0;
     }
 
+    // The password of an editor admin is typed in the browser and nowhere else. What the game gives out is a
+    // link to the page that sets it, to the admin it is for: in their own chat, or on the console for the
+    // console to pass on.
+    private static int passwordLink(CommandContext<CommandSourceStack> ctx, String named)
+    {
+        CommandSourceStack source = ctx.getSource();
+        WebServer web = CarpetLogic.INSTANCE.getWebServer();
+        if (web == null)
+        {
+            Messenger.m(source, "r The web editor is not running; the server log says why");
+            return 0;
+        }
+        if (!CarpetSettings.carpetLogicAdminLogin)
+        {
+            Messenger.m(source, "r The editor's admin sign-in is off. Turn it on with /carpet carpetLogicAdminLogin true");
+            return 0;
+        }
+        AdminRules rules = CarpetLogic.INSTANCE.getAdminRules();
+        Entity entity = source.getEntity();
+        if (entity instanceof ServerPlayer player && !(player instanceof EntityPlayerMPFake))
+        {
+            String own = player.getGameProfile().name();
+            if (named != null && !named.equalsIgnoreCase(own))
+            {
+                Messenger.m(source, "r Only the server console can make a password link for somebody else");
+                return 0;
+            }
+            AdminRules.Account account = rules.admin(own);
+            if (account == null || !account.id().equals(player.getUUID()))
+            {
+                Messenger.m(source, "r Only players who may change Carpet rules can be editor admins");
+                return 0;
+            }
+            player.sendSystemMessage(Messenger.c("w Bot editor admin: ", "cu set your password", "@" + passwordUrl(web, account),
+                    "g  (for you only, works once, valid " + AdminLogin.LINK_MINUTES + " min)"));
+            return 1;
+        }
+        if (entity == null && CommandHelper.hasPermissionLevel(source, 4))
+        {
+            if (named == null)
+            {
+                Messenger.m(source, "r Name the admin the link is for: /carpetlogic password <player>");
+                return 0;
+            }
+            AdminRules.Account account = rules.admin(named);
+            if (account == null)
+            {
+                Messenger.m(source, "r " + named + " may not change Carpet rules, so cannot be an editor admin. Op them first");
+                return 0;
+            }
+            source.sendSuccess(() -> Messenger.c("w Bot editor admin password for " + account.name() + ", works once, valid "
+                    + AdminLogin.LINK_MINUTES + " min: " + passwordUrl(web, account)), false);
+            return 1;
+        }
+        Messenger.m(source, "r Only a player or the server console can ask for a password link");
+        return 0;
+    }
+
+    private static String passwordUrl(WebServer web, AdminRules.Account account)
+    {
+        String ticket = CarpetLogic.INSTANCE.getAdminLogin().link(account.id(), account.name());
+        return web.url() + "/#setup=" + ticket + "&name=" + URLEncoder.encode(account.name(), StandardCharsets.UTF_8);
+    }
+
     private static int showStatus(CommandContext<CommandSourceStack> ctx)
     {
         if (notReady(ctx)) return 0;
@@ -101,9 +173,12 @@ public class CarpetLogicCommand
             Messenger.m(ctx.getSource(), "y No saved programs");
             return 1;
         }
+        Messenger.m(ctx.getSource(), "g Programs are kept in " + CarpetLogic.INSTANCE.getProgramStorage().location());
         for (BotProgram program : programs)
         {
-            Messenger.m(ctx.getSource(), "w  - " + program.getName(), "g  (" + program.getActionCount() + " actions)");
+            String name = (program.getFolder().isEmpty() ? "" : program.getFolder() + "/") + program.getName();
+            Messenger.m(ctx.getSource(), "w  - " + name, program.getError() == null
+                    ? "g  (" + program.getActionCount() + " actions)" : "y  (does not run yet: " + program.getError() + ")");
         }
         return programs.size();
     }

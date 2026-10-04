@@ -1195,20 +1195,11 @@ public class CarpetSettings
     @Rule(desc = "Bots auto-eat when hungry (uses existing nav auto-eat)", category = PVP)
     public static boolean botAutoFood = true;
 
-    @Rule(desc = "Bots auto-drink/throw potions in combat (planned)", category = PVP)
-    public static boolean botAutoPotion = false;
-
-    @Rule(desc = "Bots auto-equip the best available armor (planned)", category = PVP)
-    public static boolean botAutoArmor = false;
-
     @Rule(desc = "Bots auto-equip the best available weapon (planned)", category = PVP)
     public static boolean botAutoWeapon = false;
 
-    @Rule(desc = "Bots auto-repair gear with Mending XP (planned)", category = PVP)
-    public static boolean botAutoRepair = false;
-
     @Rule(desc = "Default bot combat style", category = PVP,
-            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE"}, strict = true)
+            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE", "SMP"}, strict = true)
     public static String botCombatStyle = "MELEE";
 
     @Rule(desc = "Default bot difficulty preset, sets skill, pace and techniques at once", category = PVP,
@@ -1381,6 +1372,16 @@ public class CarpetSettings
 
     @Rule(desc = "The CarpetLogic web editor can look at bots and programs but not change or run anything", category = CREATIVE)
     public static boolean carpetLogicViewerMode = false;
+
+    @Rule(
+            desc = "Offers an admin sign-in on the CarpetLogic web editor, which lets its Settings panel change rules",
+            extra = {
+                    "An admin is a player who may use /carpet; /carpetlogic password gives one a link to set a web password",
+                    "The editor speaks plain HTTP: put it behind a reverse proxy with TLS before offering it beyond localhost"
+            },
+            category = CREATIVE
+    )
+    public static boolean carpetLogicAdminLogin = false;
 
     @Rule(desc = "Maximum number of bot programs running at the same time", category = CREATIVE,
             validate = Validators.NonNegativeNumber.class)

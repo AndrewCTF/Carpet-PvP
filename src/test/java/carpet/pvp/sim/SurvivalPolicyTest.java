@@ -31,9 +31,11 @@ class SurvivalPolicyTest
     @Test
     void doesNotWasteAGoldenAppleAtFullHealth()
     {
-        // Comfortable trade: 20 health against 0.1 a tick bottoms out at 16.9, well above the 6 heart
-        // buffer, so the eight hearts an apple buys are worth less than the 32 ticks of offense and
-        // the two gaps it spends. The reserve alone is RESERVE_WEIGHT * 2 / 3 = 6.
+        // A trade nobody is winning: 20 health against a twentieth of a heart a tick bottoms out at 19.5,
+        // well above the 6 heart buffer, so the eight hearts an apple buys are worth less than the 32 ticks
+        // of offense they cost.
+        // What holding one back is worth is capped at what spending it gains, which here is nothing worth
+        // having, so the two come out level and the trade stands.
         SurvivalPolicy.Inputs in = duel();
         in.incomingDamagePerTick = 0.1f;
         in.horizonTicks = 50;
@@ -44,6 +46,7 @@ class SurvivalPolicyTest
         assertTrue(decision.offered(SurvivalPolicy.Action.EAT_GOLDEN_APPLE));
         assertTrue(decision.scoreOf(SurvivalPolicy.Action.EAT_GOLDEN_APPLE)
                 < decision.scoreOf(SurvivalPolicy.Action.KEEP_FIGHTING));
+        // The reserve of a two-gap bag is RESERVE_WEIGHT * 2 / 3 = 6.
         assertEquals(6.0, SurvivalPolicy.RESERVE_WEIGHT * 2.0 / 3.0, 1e-9);
         // 32 ticks of Consumables.defaultFood time, and 32 ticks of offense given up.
         assertEquals(32, Effects.CONSUME_TICKS);

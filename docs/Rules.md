@@ -103,16 +103,13 @@ All of these are in the `pvp` category.
 | `botAutoTotem` | bool | `true` | Move a totem of undying into the offhand when there is none, swapping it out of the main inventory. |
 | `botAutoShield` | bool | `false` | Put a shield in the offhand at 8 health or less. Only when `botAutoTotem` is off, so the two never fight over the slot. |
 | `botAutoFood` | bool | `true` | Automatic eating. The per-bot value is pushed into navigation as its own `autoEat` option, so a bot with it off never eats on its way somewhere; `fakePlayerNavAutoEat` is the global default behind it. |
-| `botAutoPotion` | bool | `false` | Stored per bot, not acted on. |
-| `botAutoArmor` | bool | `false` | Stored per bot, not acted on. The `smp` style's own `smp.armor` option is the path that works. |
 | `botAutoWeapon` | bool | `false` | Whether the sword style may pick the best weapon in its hotbar instead of holding the sword. |
-| `botAutoRepair` | bool | `false` | Stored per bot, not acted on. The `smp` style's own `smp.mend` option is the path that works. |
 
 ### What it fights with
 
 | Rule | Type | Default | Values | What it does |
 |---|---|---|---|---|
-| `botCombatStyle` | string | `MELEE` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | Which style fights. The list is missing `SMP`, so the `smp` style can only be set per bot, through `/player <name> ai combatstyle smp`, `/bot option <name> combatstyle smp` or the menu, none of which go through this rule. |
+| `botCombatStyle` | string | `MELEE` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE`, `SMP` | Which style every bot spawned after this inherits. |
 | `botDifficulty` | string | `AVERAGE` | `BEGINNER`, `CASUAL`, `AVERAGE`, `SKILLED`, `EXPERT` | Which difficulty preset `/bot spawn` and `/auto-setup` start from. See [Bots.md](Bots.md#what-the-difficulty-presets-change). |
 | `botPreferSword` | bool | `true` | | Prefer a sword to an axe in melee. |
 | `botShieldBreak` | bool | `false` | | Switch to an axe while the target has a shield up. |
@@ -178,7 +175,8 @@ it.
 | `carpetLogicBindAddress` | string | `127.0.0.1` | Interface the web editor listens on, applied at server start. `127.0.0.1` keeps it on the server's own machine; `0.0.0.0` opens it up. Suggests those two. |
 | `carpetLogicSessionHours` | int | `24` | How long a link from `/carpetlogic open` stays valid. Non-negative, so `0` expires a token the moment it is used. Suggests `1` and `24`. |
 | `carpetLogicUpdateInterval` | int | `5` | Ticks between bot status pushes on the editor's event stream. 1 to 1024. Suggests `1`, `5` and `20`. |
-| `carpetLogicViewerMode` | bool | `false` | The editor can look at bots and programs but not change or run anything. Refuses every API request that is not a `GET`. |
+| `carpetLogicViewerMode` | bool | `false` | The editor can look at bots and programs but not change or run anything. Refuses every API request that is not a `GET`, except an admin changing a setting. |
+| `carpetLogicAdminLogin` | bool | `false` | Offers an admin sign-in on the web editor: a player who may use `/carpet` sets a web password through a link from `/carpetlogic password`, signs in with their name and that password, and can then change rules from the editor's Settings panel. Off, the sign-in and its routes do not exist and the panel is read only. The editor speaks plain HTTP, so put it behind a reverse proxy with TLS before offering this beyond localhost. See [The admin sign-in](CarpetLogic.md#the-admin-sign-in). |
 | `carpetLogicMaxPrograms` | int | `4` | How many bot programs may run at once. Non-negative, so `0` stops any program from starting. |
 
 See [CarpetLogic.md](CarpetLogic.md) for what these do to the security model.

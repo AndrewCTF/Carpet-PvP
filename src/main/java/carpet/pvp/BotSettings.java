@@ -61,10 +61,7 @@ public final class BotSettings
     public static boolean botAutoTotem = true;
     public static boolean botAutoShield = false;
     public static boolean botAutoFood = true;
-    public static boolean botAutoPotion = false;
-    public static boolean botAutoArmor = false;
     public static boolean botAutoWeapon = false;
-    public static boolean botAutoRepair = false;
     public static String botCombatStyle = "MELEE";
     public static String botDifficulty = "AVERAGE";
     public static boolean botPreferSword = true;

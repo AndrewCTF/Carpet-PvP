@@ -99,8 +99,8 @@ difficulty and the faction are in the header, where they are bigger buttons.
 
 Each one carries a line saying what it does, and the ones with a hand-written note are the common
 settings; the per-style ones fall back to a note that says `Set with /bot option <bot> <key>
-<value>.`, and their labels are built from the option name, which mangles them: `ranged.bow` comes
-out as `Ra nge d.bo w`.
+<value>.`, and their labels name the style they belong to: `ranged.bow` reads as `Ranged: bow`,
+`smp.retotem` as `SMP: retotem` and `crystal.retotem_delay` as `Crystal: retotem delay`.
 
 A setting at the end of its range simply stops moving when you click, because the value is clamped.
 
@@ -193,11 +193,13 @@ the layout back when it closes.
 
 ## Self-test coverage
 
-`gui_toggle_option`, `gui_cycle_style`, `gui_spawn`, `gui_no_item_theft` and
-`gui_kit_editor_roundtrip` cover this page. `gui_no_item_theft` walks every click type over every
-button of the main, spawn and bot pages and checks the viewer's inventory never changes.
-`gui_kit_editor_roundtrip` builds a layout, saves it with `/bot gui saveas`, hands it out with
-`/bot kit give` and checks it comes back slot for slot. See [SelfTest.md](SelfTest.md).
+`gui_toggle_option`, `gui_cycle_style`, `gui_spawn`, `gui_no_item_theft`,
+`gui_kit_editor_roundtrip` and `gui_quick_fight` cover this page. `gui_no_item_theft` walks every
+click type over every button of the main, spawn and bot pages and checks the viewer's inventory never
+changes. `gui_kit_editor_roundtrip` builds a layout, saves it with `/bot gui saveas`, hands it out
+with `/bot kit give` and checks it comes back slot for slot. `gui_quick_fight` presses the quick
+fight button and checks the two bots it puts on the server end up fighting each other. See
+[SelfTest.md](SelfTest.md).
 
 ## Related pages
 

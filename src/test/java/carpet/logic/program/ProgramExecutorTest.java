@@ -66,6 +66,289 @@ class ProgramExecutorTest
         return executor.getPrograms().get("bot").status();
     }
 
+    // ── Expressions ──
+
+    @Test
+    void anIfTakesTheBranchItsExpressionChooses()
+    {
+        recorder.answers.put("health", 6.0);
+        run("[{type: IF, params: {condition: 'health < 10 and not in_water'}, children: [{type: JUMP}], elseChildren: [{type: DISMOUNT}]}, {type: SWAP_HANDS}]");
+        tick(3);
+        assertEquals(List.of("jump[]", "swapHands[]", "stopAll[]"), recorder.calls);
+
+        recorder.calls.clear();
+        recorder.answers.put("health", 20.0);
+        run("[{type: IF, params: {condition: 'health < 10 and not in_water'}, children: [{type: JUMP}], elseChildren: [{type: DISMOUNT}]}]");
+        tick(1);
+        assertEquals(1, recorder.count("dismount"));
+        assertEquals(0, recorder.count("jump"));
+    }
+
+    @Test
+    void aWhileRepeatsItsBodyForAsLongAsItsExpressionHolds()
+    {
+        run("[{type: WHILE, params: {condition: '$n < 3'}, children: [{type: JUMP}, {type: SET, params: {name: n, value: '$n + 1'}}]}, {type: DISMOUNT}]");
+        tick(10);
+        assertEquals(3, recorder.count("jump"));
+        assertEquals(1, recorder.count("dismount"), "and carries on after it");
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void aWhileWhoseExpressionDoesNotHoldRunsNothing()
+    {
+        run("[{type: WHILE, params: {condition: '$n > 0'}, children: [{type: JUMP}]}, {type: DISMOUNT}]");
+        tick(1);
+        assertEquals(0, recorder.count("jump"));
+        assertEquals(1, recorder.count("dismount"));
+    }
+
+    @Test
+    void aWhileThatNeverEndsIsPausedAtTheBudgetLikeAnyLoop()
+    {
+        run("[{type: WHILE, params: {condition: 'true'}, children: [{type: SET, params: {name: n, value: '$n + 1'}}]}]");
+        tick(3);
+        assertEquals("RUNNING", status());
+        assertEquals(1, warnings.size(), "said once: " + warnings);
+        assertTrue(warnings.getFirst().contains("steps in one tick"));
+    }
+
+    @Test
+    void aWhileWithNothingInItWaitsForItsExpressionToStopHolding()
+    {
+        recorder.answers.put("isSprinting", true);
+        run("[{type: WHILE, params: {condition: 'sprinting'}}, {type: JUMP}]");
+        tick(5);
+        assertEquals(0, recorder.count("jump"));
+        recorder.answers.put("isSprinting", false);
+        tick(1);
+        assertEquals(1, recorder.count("jump"));
+    }
+
+    @Test
+    void waitForHoldsUntilItsExpressionIsTrueOrItsTimeIsUp()
+    {
+        recorder.answers.put("health", 20.0);
+        run("[{type: WAIT_FOR, params: {condition: 'health <= 10', timeout: 100}}, {type: JUMP}]");
+        tick(10);
+        assertEquals(0, recorder.count("jump"));
+        recorder.answers.put("health", 10.0);
+        tick(1);
+        assertEquals(1, recorder.count("jump"));
+
+        recorder.calls.clear();
+        recorder.answers.put("health", 20.0);
+        run("[{type: WAIT_FOR, params: {condition: 'health <= 10', timeout: 5}}, {type: JUMP}]");
+        tick(4);
+        assertEquals(0, recorder.count("jump"));
+        tick(2);
+        assertEquals(1, recorder.count("jump"), "the timeout lets it go");
+    }
+
+    @Test
+    void aNumberParameterIsWorkedOutWhenItsStepRuns()
+    {
+        recorder.answers.put("food", 12.0);
+        run("[{type: SET, params: {name: half, value: 'food / 2'}}, {type: HOTBAR, params: {slot: '$half - 1'}}, {type: LOOK_AT, params: {x: 'x + 1', y: 'floor(2.9)', z: \"if(food > 10, 3, 4)\"}}]");
+        tick(1);
+        assertEquals(List.of("selectHotbar[5]", "lookAt[1.0, 2.0, 3.0]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void theOldConditionNodesTakeAnExpressionNode()
+    {
+        recorder.answers.put("food", 3.0);
+        run("[{type: IF_THEN_ELSE, condition: {type: CONDITION_EXPRESSION, params: {expression: 'food < 6 or health < 6'}}, children: [{type: JUMP}]}]");
+        tick(1);
+        assertEquals(List.of("jump[]"), recorder.calls);
+    }
+
+    @Test
+    void anExpressionThatFailsStopsTheProgramWithItsReason()
+    {
+        run("[{type: DELAY, params: {ticks: '10 / $nothing'}}, {type: JUMP}]");
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("DELAY.ticks: Division by zero at 3", executor.getPrograms().get("bot").error());
+        assertEquals(0, recorder.count("jump"));
+    }
+
+    @Test
+    void evaluatingAnExpressionIsPaidForOutOfTheTicksSteps()
+    {
+        // A loop whose condition counts the entities around the bot: each look costs twenty steps and three for
+        // the expression around it, so far fewer turns fit into a tick than of a loop that only counts.
+        run("[{type: WHILE, params: {condition: \"entities('zombie', 8) == 0\"}, children: [{type: SET, params: {name: n, value: '$n + 1'}}]}]");
+        tick(1);
+        int looking = recorder.questions.size();
+        assertTrue(looking > 10 && looking <= ProgramExecutor.MAX_STEPS_PER_TICK / 20, "looks around in one tick: " + looking);
+        tick(1);
+        assertTrue(recorder.questions.size() <= 2 * looking + 1, "and no more in the next");
+        assertEquals("RUNNING", status());
+    }
+
+    @Test
+    void aVariableThatHoldsTextIsNotANumber()
+    {
+        run("[{type: SET, params: {name: who, value: \"'Steve'\"}}, {type: ADD_VARIABLE, params: {name: who, amount: 1}}]");
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("The variable 'who' holds text, not a number", executor.getPrograms().get("bot").error());
+    }
+
+    @Test
+    void aListCannotGrowPastItsLimitByHoldingLists()
+    {
+        // Doubling a list by putting it into itself: without counting what is inside, a tick would make 2^300 items.
+        run("[{type: SET, params: {name: a, value: 'range(100)'}}, {type: FOREVER, children: [{type: SET, params: {name: a, value: 'list($a, $a)'}}]}]");
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("SET.value: A list holds at most 256 items at 0", executor.getPrograms().get("bot").error());
+
+        // Nor by wrapping: every list inside a list is an item of it, so a list is never deeper than its limit.
+        run("[{type: FOREVER, children: [{type: SET, params: {name: a, value: 'list($a)'}}]}]");
+        tick(2);
+        assertEquals("ERROR", status());
+        assertEquals("SET.value: A list holds at most 256 items at 0", executor.getPrograms().get("bot").error());
+    }
+
+    @Test
+    void theTickAProgramReadsStartsAtNought()
+    {
+        run("[{type: SET, params: {name: first, value: 'tick'}}, {type: DELAY, params: {ticks: 3}}, {type: SET, params: {name: later, value: 'tick'}}]");
+        tick(5);
+        assertEquals("0", executor.variable("bot", "first"));
+        assertEquals("3", executor.variable("bot", "later"));
+    }
+
+    // ── Loops that scripts have ──
+
+    @Test
+    void forEachRunsItsBodyOncePerItemWithTheItemInAVariable()
+    {
+        run("[{type: FOR_EACH, params: {variable: slot, list: 'list(3, 1, 2)'}, children: [{type: HOTBAR, params: {slot: '$slot'}}]}, {type: SWAP_HANDS}]");
+        tick(3);
+        assertEquals(List.of("selectHotbar[3]", "selectHotbar[1]", "selectHotbar[2]", "swapHands[]", "stopAll[]"), recorder.calls);
+        assertEquals("2", executor.variable("bot", "slot"), "the variable keeps the last item");
+    }
+
+    @Test
+    void forEachOverNothingRunsNothing()
+    {
+        run("[{type: FOR_EACH, params: {variable: n, list: 'range(0)'}, children: [{type: JUMP}]}, {type: DISMOUNT}]");
+        tick(2);
+        assertEquals(0, recorder.count("jump"));
+        assertEquals(1, recorder.count("dismount"));
+    }
+
+    @Test
+    void forEachNeedsAList()
+    {
+        run("[{type: SET, params: {name: n, value: '5'}}, {type: FOR_EACH, params: {variable: i, list: '$n'}, children: [{type: JUMP}]}]");
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("FOR_EACH.list: Expected a list but got a number", executor.getPrograms().get("bot").error());
+    }
+
+    @Test
+    void breakLeavesTheInnermostLoopOnly()
+    {
+        run("""
+                [{type: LOOP, params: {count: 2}, children: [
+                   {type: FOR_EACH, params: {variable: i, list: 'range(10)'}, children: [
+                     {type: IF, params: {condition: '$i == 2'}, children: [{type: BREAK}]},
+                     {type: HOTBAR, params: {slot: '$i + 1'}}]},
+                   {type: DISMOUNT}]},
+                 {type: SWAP_HANDS}]""");
+        tick(2);
+        assertEquals(List.of("selectHotbar[1]", "selectHotbar[2]", "dismount[]", "selectHotbar[1]", "selectHotbar[2]", "dismount[]", "swapHands[]", "stopAll[]"),
+                recorder.calls);
+    }
+
+    @Test
+    void continueSkipsTheRestOfTheRound()
+    {
+        run("""
+                [{type: FOR_EACH, params: {variable: i, list: 'range(5)'}, children: [
+                   {type: IF, params: {condition: '$i % 2 == 1'}, children: [{type: CONTINUE}]},
+                   {type: HOTBAR, params: {slot: '$i + 1'}}]},
+                 {type: SWAP_HANDS}]""");
+        tick(2);
+        assertEquals(List.of("selectHotbar[1]", "selectHotbar[3]", "selectHotbar[5]", "swapHands[]", "stopAll[]"), recorder.calls);
+    }
+
+    @Test
+    void breakEndsAForeverAndAWhile()
+    {
+        run("""
+                [{type: FOREVER, children: [{type: SET, params: {name: n, value: '$n + 1'}}, {type: IF, params: {condition: '$n >= 4'}, children: [{type: BREAK}]}]},
+                 {type: WHILE, params: {condition: 'true'}, children: [{type: SET, params: {name: n, value: '$n + 1'}}, {type: IF, params: {condition: '$n >= 9'}, children: [{type: BREAK}]}]},
+                 {type: SWAP_HANDS}]""");
+        tick(2);
+        assertEquals("COMPLETED", status());
+        assertEquals("9", executor.variable("bot", "n"));
+        assertEquals(1, recorder.count("swapHands"));
+    }
+
+    @Test
+    void continueInARepeatStillCountsTheRound()
+    {
+        run("[{type: LOOP, params: {count: 3}, children: [{type: SET, params: {name: n, value: '$n + 1'}}, {type: CONTINUE}, {type: JUMP}]}]");
+        tick(2);
+        assertEquals("COMPLETED", status());
+        assertEquals("3", executor.variable("bot", "n"));
+        assertEquals(0, recorder.count("jump"));
+    }
+
+    @Test
+    void stopProgramEndsItThereAsCompleted()
+    {
+        run("[{type: FOREVER, children: [{type: JUMP}, {type: IF, params: {condition: 'true'}, children: [{type: STOP_PROGRAM}]}, {type: DISMOUNT}]}, {type: SWAP_HANDS}]");
+        tick(3);
+        assertEquals("COMPLETED", status());
+        assertEquals(1, recorder.count("jump"));
+        assertEquals(0, recorder.count("dismount"));
+        assertEquals(0, recorder.count("swapHands"));
+        assertEquals(1, recorder.count("stopAll"), "and lets go of the bot");
+    }
+
+    @Test
+    void conditionsCombineWithAllAnyAndNot()
+    {
+        recorder.answers.put("isSneaking", true);
+        recorder.answers.put("isSprinting", false);
+        String sneaking = "{type: CONDITION_IS_SNEAKING}";
+        String sprinting = "{type: CONDITION_IS_SPRINTING}";
+        String[][] cases = {
+                {"{type: CONDITION_ALL, conditions: [" + sneaking + ", " + sprinting + "]}", "false"},
+                {"{type: CONDITION_ANY, conditions: [" + sneaking + ", " + sprinting + "]}", "true"},
+                {"{type: CONDITION_NOT, condition: " + sprinting + "}", "true"},
+                {"{type: CONDITION_ALL, conditions: [" + sneaking + ", {type: CONDITION_NOT, condition: " + sprinting + "}]}", "true"},
+                {"{type: CONDITION_ANY, conditions: [" + sprinting + ", {type: CONDITION_NOT, condition: " + sneaking + "}]}", "false"},
+                {"{type: CONDITION_ALL, conditions: [" + sneaking + ", {type: CONDITION_EXPRESSION, params: {expression: 'health == 0'}}]}", "true"}};
+        for (String[] each : cases)
+        {
+            recorder.calls.clear();
+            run("[{type: IF_THEN_ELSE, condition: " + each[0] + ", children: [{type: JUMP}], elseChildren: [{type: DISMOUNT}]}]");
+            tick(1);
+            assertEquals(each[1].equals("true") ? 1 : 0, recorder.count("jump"), each[0]);
+            assertEquals(each[1].equals("true") ? 0 : 1, recorder.count("dismount"), each[0]);
+        }
+    }
+
+    @Test
+    void aDraftIsNotRunAndSaysWhy()
+    {
+        run("[{type: FOREVER, children: [{type: DELAY, params: {ticks: 5}}]}]");
+        BotProgram draft = new BotProgram("draft", "Half done", "");
+        draft.setError("An If / Else node has no condition connected");
+
+        assertEquals("'Half done' does not run yet: An If / Else node has no condition connected", executor.startProgram("bot", draft, null));
+        tick(1);
+        assertEquals("RUNNING", status(), "and the program the bot was running is left alone");
+        assertEquals("test", executor.getPrograms().get("bot").programName());
+    }
+
     @Test
     void moveHoldsItsDirectionForExactlyItsTicks()
     {
