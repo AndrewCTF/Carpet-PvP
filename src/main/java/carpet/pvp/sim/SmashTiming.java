@@ -158,6 +158,96 @@ public final class SmashTiming
         return plan;
     }
 
+    /** The two hits of a stun slam taken inside one fall: an axe on the way down, then the mace a tick or two later. */
+    public static final class FallStunSlam
+    {
+        public int axeHitTick = -1;
+        public int maceHitTick = -1;
+        public double axeFallDistance;
+        public double maceFallDistance;
+        public float maceDamage;
+        public float axeDamage;
+        /** True when the raised shield took the axe hit instead of letting it through. */
+        public boolean shieldAbsorbedAxe;
+
+        /**
+         * True when both hits came out of one fall. The counter only grows while a fighter is falling and is
+         * zeroed by the landing tick, and a smash needs it past the threshold on both hits, so a mace hit that
+         * carries at least as much fall as the axe hit could not have touched down in between.
+         */
+        public boolean oneFall()
+        {
+            return maceHitTick > axeHitTick && maceFallDistance > CombatMath.SMASH_FALL_THRESHOLD
+                    && maceFallDistance >= axeFallDistance;
+        }
+
+        public boolean lands()
+        {
+            return stunSlamFits(axeHitTick, maceHitTick) && maceDamage > 0.0f;
+        }
+    }
+
+    /**
+     * The stun slam taken in a single fall: the axe opens the window on the way down and the mace lands a tick
+     * or two later, which is as long as a player can wait for the hotbar change to reach its hand.
+     *
+     * <p>The mace hit is not charged, because the axe hit spent the cooldown, so it is not worth a crit. It is
+     * still worth a great deal: {@code Player.attack} scales the base damage by the charge and adds the item's
+     * fall bonus afterwards, so the bonus survives the spent cooldown in full and only the base damage is
+     * scaled down. That is what this prices, and it is what the fall is for: the same two hits on the ground
+     * would have nothing to add.</p>
+     *
+     * <p>The attacker walks towards the target and only swings inside its reach and while it can still smash,
+     * so the plan starts from a state the caller has put into the air. {@code chargeDamage} and
+     * {@code chargeSpeed} are the loadout of the item the cooldown was collected under, which is what the
+     * swapped mace hit is charged at.</p>
+     */
+    public static FallStunSlam planFallStunSlam(DuelSim sim, int attacker, boolean blocking, int shieldRaisedTick,
+            int densityLevel, double chargeDamage, double chargeSpeed, int chargeTicks, int gapTicks, int maxTicks)
+    {
+        FallStunSlam plan = new FallStunSlam();
+        DuelSim.Fighter att = sim.fighter(attacker);
+        DuelSim.Fighter tgt = sim.fighter(1 - attacker);
+        int sinceSwing = chargeTicks;
+        int axeGateTicks = CombatMath.minTicksForGate(chargeSpeed);
+        int walk = DuelSim.action(1, 0, false, att.onGround, false);
+        for (int t = 0; t < maxTicks && plan.maceHitTick < 0; t++)
+        {
+            sinceSwing++;
+            boolean inFall = DuelSim.inReach(att, tgt) && canSmash(att);
+            boolean swingAxe = plan.axeHitTick < 0 && inFall && sinceSwing >= axeGateTicks;
+            boolean swingMace = plan.axeHitTick >= 0 && t - plan.axeHitTick >= gapTicks && inFall;
+            // The attack is resolved at the head of the tick, before this tick's movement, so the fall the
+            // mace is priced at is the one the fighter was carrying when it decided to swing.
+            double fall = att.fallDistance;
+            sim.step(walk, DuelSim.NOOP);
+            if (swingAxe)
+            {
+                plan.axeHitTick = t;
+                plan.axeFallDistance = fall;
+                plan.shieldAbsorbedAxe = shieldBlocks(blocking, shieldRaisedTick, t);
+                plan.axeDamage = plan.shieldAbsorbedAxe ? 0.0f
+                        : CombatMath.damageAfterDefences(
+                                CombatMath.attackDamage((float) chargeDamage, 0.0F, 0.0F,
+                                        CombatMath.chargeScale(sinceSwing, chargeSpeed), false),
+                                tgt.armor, tgt.toughness, 0, tgt.epf);
+                sinceSwing = 0;
+            }
+            if (swingMace)
+            {
+                plan.maceHitTick = t;
+                plan.maceFallDistance = fall;
+                float scale = CombatMath.chargeScale(sinceSwing, chargeSpeed);
+                boolean crit = CombatMath.isCritical(true, false, false, false, false, false, true, att.sprinting,
+                        CombatMath.passesChargeGate(scale));
+                plan.maceDamage = AttributeSwap.damage(chargeDamage, chargeSpeed, sinceSwing, crit,
+                        fall, densityLevel, 0.0F, tgt.armor, tgt.toughness, 0, tgt.epf);
+                break;
+            }
+        }
+        return plan;
+    }
+
     /**
      * The tick the first hit of a mace swing on a fighter that is falling onto the target has to land on, or
      * -1 when it cannot get there. Charges the mace fully, so the caller only has to walk the attacker's

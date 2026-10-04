@@ -17,17 +17,21 @@ public final class MaceChoice
     public static final float CHAIN_MIN_GAIN = 1.0F;
 
     /** The techniques a mace style can switch off one by one. */
-    public enum Technique { WIND_CHARGE, CHAIN, PEARL, ELYTRA, STUN_SLAM, ENCHANT_PICK, BOUNCE, SAFE_LANDING, SWAP }
+    public enum Technique
+    {
+        WIND_CHARGE, CHAIN, PEARL, ELYTRA, ROCKET, STUN_SLAM, FALL_STUN_SLAM, ENCHANT_PICK, BOUNCE,
+        SAFE_LANDING, SWAP, BREACH_SWAP, READ
+    }
 
     private MaceChoice()
     {
     }
 
     /**
-     * Whether a difficulty preset knows a technique. The presets climb: a beginner throws one wind
-     * charge and tries not to break a leg on landing, a casual fighter chains a second one, an average
-     * one adds the pearl and the stun slam, a skilled one can dive and chain the bounce off a smash,
-     * and only an expert goes for the item swap, which a version has to be measured for first.
+     * Whether a difficulty preset knows a technique. The presets climb: a beginner throws one wind charge and
+     * tries not to break a leg on landing, a casual fighter chains a second one, an average one adds the pearl
+     * and reads what the target is doing, a skilled one dives, chains the bounce off a smash and changes item on
+     * the tick of the hit, and an expert is willing to take the stun slam inside a single fall.
      */
     public static boolean allows(Difficulty difficulty, Technique technique)
     {
@@ -39,11 +43,16 @@ public final class MaceChoice
             case CASUAL -> allows(Difficulty.BEGINNER, technique) || technique == Technique.CHAIN;
             case AVERAGE -> allows(Difficulty.CASUAL, technique)
                     || technique == Technique.PEARL
-                    || technique == Technique.STUN_SLAM;
+                    || technique == Technique.STUN_SLAM
+                    || technique == Technique.READ;
             case SKILLED -> allows(Difficulty.AVERAGE, technique)
                     || technique == Technique.ELYTRA
-                    || technique == Technique.BOUNCE;
-            case EXPERT -> allows(Difficulty.SKILLED, technique) || technique == Technique.SWAP;
+                    || technique == Technique.ROCKET
+                    || technique == Technique.BOUNCE
+                    || technique == Technique.SWAP
+                    || technique == Technique.BREACH_SWAP;
+            case EXPERT -> allows(Difficulty.SKILLED, technique)
+                    || technique == Technique.FALL_STUN_SLAM;
         };
     }
 

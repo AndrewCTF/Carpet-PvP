@@ -146,7 +146,8 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `mace_smash_damage` | 900 | A smash out of a measured fall does what `CombatMath` gives for that fall, that enchantment and that armour. |
 | `mace_stun_slam` | 900 | An axe takes a raised shield down and the mace hit that follows inside the hundred tick window costs the target health. |
 | `mace_no_fall_damage_on_miss` | 900 | A launch with the target lifted out of the arc still comes down harmless: the bot spends a second wind charge and lands on full health. |
-| `mace_attribute_swap_probe` | 600 | Whether this version lets a mace hit carry an attack cooldown collected under another item: two swings with the same wait, one of them swapping item on the tick of the hit. Passes either way, records the answer the style obeys. |
+| `mace_swap_probe` | 700 | The same 11 block fall made twice, once with the mace held through and once with a netherite sword charging the cooldown and the mace swapped in on the tick of the swing, plus the ticks either hand needs to come back to a full strength hit. Passes either way, records the numbers the style obeys. |
+| `mace_breach_swap_probe` | 500 | The same charged sword hit on full protection netherite, once with the sword alone in the hand and once with the Breach mace swapped in on the tick of the swing. Passes either way, records the numbers. |
 | `mace_duel` | 4500 | The expert mace bot against the expert sword bot in netherite, alternating sides: a round is won by putting the other fighter down, or on the damage traded when neither went down. The mace bot has to win four of the six. |
 
 `kit_give` checks these values, one per built-in kit:

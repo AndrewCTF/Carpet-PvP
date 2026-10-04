@@ -88,16 +88,17 @@ Permissions:
 
 | Slot | Item | Count | Enchantments |
 |---|---|---|---|
-| 0 (main hand) | `minecraft:mace` | 1 | Density 5 |
+| 0 (main hand) | `minecraft:mace` | 1 | Density 5, Wind Burst 3 |
 | 1 | `minecraft:mace` | 1 | Breach 4 |
 | 2 | `minecraft:wind_charge` | 16 | |
 | 3 | `minecraft:golden_apple` | 4 | |
 | 4 | `minecraft:ender_pearl` | 3 | |
-| 5 | `minecraft:netherite_axe` | 1 | Sharpness 2 |
+| 5 | `minecraft:firework_rocket` | 24 | |
 | 6 | `minecraft:netherite_sword` | 1 | Sharpness 3 |
-| 7 | `minecraft:totem_of_undying` | 1 | |
+| 7 | `minecraft:netherite_axe` | 1 | Sharpness 2 |
 | 8 | `minecraft:elytra` | 1 | |
 | 9 | `minecraft:totem_of_undying` | 1 | |
+| 10 | `minecraft:totem_of_undying` | 1 | |
 | head | `minecraft:netherite_helmet` | 1 | Protection 4, Unbreaking 3 |
 | chest | `minecraft:netherite_chestplate` | 1 | Protection 4, Unbreaking 3 |
 | legs | `minecraft:netherite_leggings` | 1 | Protection 4, Unbreaking 3 |

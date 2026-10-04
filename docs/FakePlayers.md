@@ -693,15 +693,30 @@ per bot:
 | `mace.windcharge` | `true`/`false` | the wind charge launch |
 | `mace.chain` | `true`/`false` | a second charge on the way down |
 | `mace.pearl` | `true`/`false` | the ender pearl entry |
-| `mace.elytra` | `true`/`false` | the elytra dive, which needs the wings on the chest |
+| `mace.elytra` | `true`/`false` | the elytra dive: the wings go on by using the elytra out of the hotbar and come off by using the chest plate it was exchanged with |
+| `mace.rocket` | `true`/`false` | the firework rockets the dive climbs on |
 | `mace.stunslam` | `true`/`false` | the axe on a raised shield, then the smash inside the window |
+| `mace.fallstunslam` | `true`/`false` | the same pair taken inside one fall, the axe on the way down and the mace a tick later |
 | `mace.enchants` | `true`/`false` | pick between the Density and the Breach mace by the target's armour |
 | `mace.bounce` | `true`/`false` | one more hit off the bounce a Wind Burst mace gives |
 | `mace.safeland` | `true`/`false` | the charge that keeps a launch that hit nothing from costing fall damage |
 | `mace.swap` | `true`/`false` | change item on the tick of the hit, where a measurement says it is worth anything |
+| `mace.breachswap` | `true`/`false` | every ground hit made with the Breach mace in the hand for the swing, over the base damage and the cadence of the charging item |
+| `mace.read` | `true`/`false` | step out from under a target that is falling on the bot with a mace |
 
 Every one of them is also gated by the difficulty preset: a beginner knows the launch and the safe
-landing, and each harder preset adds one more of them, up to the swap, which only an expert may try.
+landing, each harder preset adds one more of them, an average one starts reading what the target is
+doing, a skilled one dives and changes item on the tick of the hit, and only an expert takes the stun
+slam inside a single fall.
+
+### The attribute swap
+
+The game re-reads an item's `ATTACK_DAMAGE` and `ATTACK_SPEED` only once a tick, in `LivingEntity.tick`,
+and only clears the swing timer for a changed main-hand item in `Player.tick`. Both happen after the
+action pack has run, so a bot that changes hotbar slot and swings in the same tick hits with the new
+item's fall bonus, enchantments and Breach on top of the base damage and the charge of the item it was
+holding. `carpet.pvp.sim.AttributeSwap` prices that and `MaceSwap` records what the `mace_swap_probe`
+and `mace_breach_swap_probe` scenarios measured on the running version.
 
 What the brain does each tick, in order: survival reflexes, then the combat check, then the retreat
 check, then target selection, then the chase and the strafing. Turning `combat` off only stops a
