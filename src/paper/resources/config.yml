@@ -59,10 +59,7 @@ combat:
   autoTotem: true
   autoShield: false
   autoFood: true
-  autoPotion: false
-  autoArmor: false
   autoWeapon: false
-  autoRepair: false
   # One of MELEE, CRYSTAL, ANCHOR, RANGED, MACE, SMP.
   style: MELEE
   # One of BEGINNER, AVERAGE, SKILLED, EXPERT.

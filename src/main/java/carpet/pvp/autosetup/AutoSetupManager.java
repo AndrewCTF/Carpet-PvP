@@ -41,6 +41,7 @@ public final class AutoSetupManager
 
     private static final Map<String, AutoSetupSession> SESSIONS = new LinkedHashMap<>();
     private static final Map<String, SavedState> RECOVERED = new LinkedHashMap<>();
+    private static final NeededSettings NEEDED = new NeededSettings();
     private static Path folder;
 
     private AutoSetupManager() {}
@@ -50,13 +51,22 @@ public final class AutoSetupManager
     /** The session a player is in, or null while they are not fighting. */
     public static AutoSetupSession session(ServerPlayer player)
     {
-        return SESSIONS.get(player.getName().getString());
+        return session(player.getName().getString());
+    }
+
+    /** The session of that name, or null while they are not fighting or not on the server. */
+    public static AutoSetupSession session(String player)
+    {
+        return SESSIONS.get(player);
     }
 
     /**
      * Starts a session, or the next round of the one the player is already in: asking for the mode
      * they are fighting in again is a rematch, which keeps the score, and asking for another one
      * ends what they had before, since a player only ever fights one bot at a time.
+     *
+     * <p>Anything of an earlier session that could not be undone while the player was gone is undone
+     * first, so that the new session saves what they really own rather than what they were given.</p>
      *
      * @param difficulty what to fight next, or null to go on with the one the session has
      * @throws AutoSetupSession.Failed when no session can be started, with the reason to tell the player
@@ -73,10 +83,51 @@ public final class AutoSetupManager
             return existing;
         }
         stop(server, name);
+        restorePending(server, name, player);
         AutoSetupSession session = AutoSetupSession.open(server, player, mode,
                 difficulty != null ? difficulty : defaultDifficulty());
         SESSIONS.put(name, session);
         return session;
+    }
+
+    /**
+     * Gives a player back what a session of theirs that could not be undone left behind, so that a new
+     * session does not write over the file that is holding it.
+     *
+     * @return whether anything was waiting, whether or not it could be given back now
+     */
+    private static boolean restorePending(MinecraftServer server, String player, ServerPlayer online)
+    {
+        SavedState saved = pending(server, player);
+        if (saved == null) return false;
+        if (!giveBack(server, player, online, saved))
+        {
+            RECOVERED.put(player, saved);
+            AutoSetupSettings.LOG.error("/auto-setup could not give " + player + " their things back before a new "
+                    + "session; their file is kept for the next time they log in");
+            return true;
+        }
+        RECOVERED.remove(player);
+        delete(server, player);
+        return true;
+    }
+
+    /** What is held back for a player, from the files read at the last start or from a session of their own. */
+    private static SavedState pending(MinecraftServer server, String player)
+    {
+        SavedState saved = RECOVERED.get(player);
+        if (saved != null) return saved;
+        Path file = fileFor(server, player);
+        if (!Files.isRegularFile(file)) return null;
+        try
+        {
+            return SessionFile.parse(Files.readString(file, StandardCharsets.UTF_8)).saved();
+        }
+        catch (IOException | IllegalArgumentException e)
+        {
+            AutoSetupSettings.LOG.error("/auto-setup cannot read the session file of " + player + ": " + e.getMessage());
+            return null;
+        }
     }
 
     /** The difficulty the {@code botDifficulty} rule names, or the middle one when it names none. */
@@ -158,6 +209,9 @@ public final class AutoSetupManager
             {
                 SessionFile session = SessionFile.parse(Files.readString(file, StandardCharsets.UTF_8));
                 RECOVERED.put(session.player(), session.saved());
+                // The session that turned a setting on is gone, but the player it was for still needs
+                // it kept until they are given back, so the file's claim is taken up again here.
+                NEEDED.holdAll(session.player(), session.saved().rules());
                 AutoSetupSettings.LOG.info("/auto-setup is holding the things of " + session.player()
                         + " back from a session the server did not survive");
             }
@@ -175,6 +229,7 @@ public final class AutoSetupManager
      */
     public static void reload(MinecraftServer server)
     {
+        for (String player : new ArrayList<>(SESSIONS.keySet())) NEEDED.forget(player);
         SESSIONS.clear();
         load(server);
     }
@@ -195,14 +250,16 @@ public final class AutoSetupManager
 
     /**
      * A player has logged in: if the server did not survive their last session, this is where they
-     * get their things, their place and their game mode back, and the arena comes down.
+     * get their things, their place and their game mode back, and the arena comes down. A session
+     * that could not be undone while they were gone is picked up here as well, which is what the
+     * message they were given when it failed promised them.
      */
     public static void onPlayerJoined(MinecraftServer server, ServerPlayer player)
     {
         String name = player.getName().getString();
-        SavedState saved = RECOVERED.remove(name);
+        SavedState saved = pending(server, name);
         if (saved == null) return;
-        if (!giveBack(server, player, saved))
+        if (!giveBack(server, name, player, saved))
         {
             // Nothing is deleted until the player is whole again, and the next login tries once more.
             RECOVERED.put(name, saved);
@@ -210,6 +267,7 @@ public final class AutoSetupManager
                     + "file is kept for the next time they log in");
             return;
         }
+        RECOVERED.remove(name);
         delete(server, name);
         Menus.recovered(player);
     }
@@ -234,6 +292,17 @@ public final class AutoSetupManager
     }
 
     // ===== what a session needs from the manager =====
+
+    /**
+     * Records that a session of this player needs the setting, so that it goes back only once the last
+     * session needing it is over.
+     *
+     * @return the {@code setting=value} line for the session file, or null when this server has no such setting
+     */
+    static String hold(String player, String setting, String was)
+    {
+        return NEEDED.hold(player, setting, was);
+    }
 
     /**
      * Writes what a player would lose if the server died now. Nothing has been touched yet the
@@ -269,17 +338,21 @@ public final class AutoSetupManager
      * back to what they were, and the player gets their own things, their game mode and their place.
      * Stopping a session and recovering one that a crash left behind are the same call.
      *
+     * @param owner whose session this is, which is whose file it is and whose settings it holds
      * @return whether the player is whole again; false when they were not there to be given them
      *         back, which is what keeps their file for the next login
      */
-    static boolean giveBack(MinecraftServer server, ServerPlayer player, SavedState saved)
+    static boolean giveBack(MinecraftServer server, String owner, ServerPlayer player, SavedState saved)
     {
         if (saved == null) return true;
         Arena.restore(server, saved.spot().dimension(), saved.blocks());
         for (String rule : saved.rules())
         {
             int split = rule.indexOf('=');
-            if (split > 0) AutoSetupSettings.set(rule.substring(0, split), rule.substring(split + 1));
+            if (split <= 0) continue;
+            // A setting another session of another player still needs stays on until that one ends.
+            String back = NEEDED.release(owner, rule.substring(0, split));
+            if (back != null) AutoSetupSettings.set(rule.substring(0, split), back);
         }
         if (player == null) return false;
         try
@@ -321,6 +394,9 @@ public final class AutoSetupManager
     {
         SESSIONS.remove(session.playerName());
         if (givenBack) delete(session.server(), session.playerName());
+        // What could not be given back is what the next login is for, so it is remembered as waiting
+        // rather than left on disk for a restart to find.
+        if (!givenBack) RECOVERED.put(session.playerName(), session.savedState());
         return givenBack;
     }
 

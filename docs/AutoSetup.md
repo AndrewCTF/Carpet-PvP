@@ -23,9 +23,8 @@ click is enough.
 | modes | `[Sword]`, `[SMP]`, `[Mace]`, `[Crystal]`, `[Ranged]`, each running `/auto-setup <mode>` |
 | difficulties | `[beginner]`, `[casual]`, `[average]`, `[skilled]`, `[expert]`, each running `/auto-setup <mode> <difficulty>` |
 
-The hint line below them reads `y  the arena is built next to you, y  /auto-setup stop takes it
-away again`. The stray `y` in front of each half is a formatting bug in the mod and is left as it
-is here so the page matches what a player sees.
+The hint line below them reads `the arena is built next to you, /auto-setup stop takes it away
+again`, with the command in yellow.
 
 ## Starting a session
 
@@ -123,11 +122,15 @@ The session is over: your things, your place and your game mode are back, and th
 ```
 
 If any of that cannot be done right now, the session file is kept and you are told your things are
-being kept.
+being kept. That happens when you are not there to be given them back, and it is picked up the next
+time you log in: your things, your place, your game mode and the arena are all put back then, and the
+file is deleted. Asking for a new session while a file of yours is still waiting does the same
+first, so what the new session saves is what you really own.
 
 The same thing happens, without you typing anything, when you log out and when the server stops. A
 second player may have their own session at the same time; each has its own file, its own arena and
-its own bot.
+its own bot. What they share is `fakePlayerNavigation`, which goes back to what it was when the last
+session that needed it ends, not when the first one does.
 
 ## If the server dies
 
@@ -143,14 +146,10 @@ mode are back, and the arena is gone.
 The file is then deleted. A file that cannot be read is logged as an error and left alone. A file
 whose name does not end in `.json` is ignored.
 
-Two gaps worth knowing: a file is only picked up at server start, so a session whose restore failed
-at logout or at `/auto-setup stop` waits for the next start rather than the next login, and starting
-a new session overwrites a file whose restore had failed.
-
-The same applies inside one arena. Two players who both have sessions running share the
-`fakePlayerNavigation` rule, and only the first of them records having turned it on, so the first to
-stop puts it back while the other is still fighting. The bot walks in a straight line instead, so
-the session still works.
+A file that is still there is also picked up by a new session of the same player, which gives
+everything back before it writes anything of its own over it. And a setting a session turned on is
+put back by the last session holding it, so two players with sessions of their own never take
+`fakePlayerNavigation` away from each other.
 
 ## What is and is not saved
 
@@ -164,10 +163,11 @@ the session still works.
 | The blocks the arena overwrote | The cursor item, the ender chest, advancements |
 
 The file is `<world>/carpet-autosetup/<name>.json`, written pretty-printed with keys `version`,
-`player`, `mode`, `difficulty` and `saved`. `saved.spot` holds the position, `saved.gamemode` the
-game mode, `saved.slots` the 36 slots plus five equipment strings, `saved.rules` the rules that were
-changed as `name=oldvalue`, and `saved.blocks` every block the arena wrote as `x, y, z, state`. The
-`mode` and `difficulty` keys are written and read but nothing acts on them.
+`player` and `saved`. `saved.spot` holds the position, `saved.gamemode` the game mode, `saved.slots`
+the 36 slots plus five equipment strings, `saved.rules` the settings the session needs as
+`name=valuebefore`, and `saved.blocks` every block the arena wrote as `x, y, z, state`. There is
+nothing about the mode or the difficulty in it: whoever reads the file back finds a player to give
+their things to, not a session to carry on.
 
 ## Which kit each mode gives
 
@@ -183,9 +183,11 @@ Both you and the bot get it, every round. See [Kits.md](Kits.md) for what is in 
 
 ## Self-test coverage
 
-`autosetup_roundtrip`, `autosetup_each_mode`, `autosetup_crash_safe` and `autosetup_rules_restored`
-cover this page. See [SelfTest.md](SelfTest.md). `autosetup_each_mode` runs `sword`, `smp`, `mace`
-and `crystal`; `ranged` is not in that list.
+`autosetup_roundtrip`, `autosetup_each_mode`, `autosetup_crash_safe`,
+`autosetup_rules_restored` and `autosetup_login_recovers` cover this page. See
+[SelfTest.md](SelfTest.md). `autosetup_each_mode` runs `sword`, `smp`, `mace` and `crystal`;
+`ranged` is not in that list. `autosetup_login_recovers` is the one that logs a player out of a
+session and back in.
 
 ## Related pages
 

@@ -96,10 +96,7 @@ public final class BotOptionLayout
         notes.put("autototem", note("Auto totem", "Keeps a totem of undying in its off hand."));
         notes.put("autoshield", note("Auto shield", "Raises a shield once it is hurt."));
         notes.put("autofood", note("Auto food", "Eats when it gets hungry."));
-        notes.put("autopotion", note("Auto potion", "Drinks a potion when it would help."));
-        notes.put("autoarmor", note("Auto armour", "Swaps to the better armour it picks up."));
         notes.put("autoweapon", note("Auto weapon", "Swaps to the better weapon it picks up."));
-        notes.put("autorepair", note("Auto repair", "Repairs its gear with what it carries."));
         notes.put("prefersword", note("Prefer sword", "Hold a sword when it carries one."));
         notes.put("shieldbreak", note("Shield break", "Hit with an axe when the target is blocking."));
         notes.put("critical", note("Crits", "Time its swings to land as critical hits."));
@@ -216,17 +213,12 @@ public final class BotOptionLayout
     {
         Note note = NOTES.get(key);
         if (note != null) return note.title();
-        StringBuilder title = new StringBuilder();
-        boolean boundary = true;
-        for (int i = 0; i < key.length(); i++)
-        {
-            char c = key.charAt(i);
-            // Split before a consonant that follows a vowel, so autoshield reads as auto shield.
-            if (i > 0 && isVowel(key.charAt(i - 1)) && !isVowel(c)) title.append(' ');
-            title.append(boundary ? Character.toUpperCase(c) : c);
-            boundary = false;
-        }
-        return title.toString();
+        int dot = key.indexOf('.');
+        if (dot < 0) return key;
+        // A style option belongs to one style, so it is called by that style and its own words:
+        // ranged.bow reads as "Ranged: bow" and crystal.retotem_delay as "Crystal: retotem delay".
+        String style = BotPvpConfig.CombatStyle.valueOf(key.substring(0, dot).toUpperCase(Locale.ROOT)).name();
+        return style + ": " + key.substring(dot + 1).replace('_', ' ');
     }
 
     /** The lore line that explains what the setting does. */
@@ -313,11 +305,6 @@ public final class BotOptionLayout
         if (type == BotPvpConfig.CombatStyle.class) return Kind.STYLE;
         if (type == BotPvpConfig.Difficulty.class) return Kind.DIFFICULTY;
         return Kind.TEXT;
-    }
-
-    private static boolean isVowel(char c)
-    {
-        return "aeiou".indexOf(c) >= 0;
     }
 
     private static boolean isNumber(String value)

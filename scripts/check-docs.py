@@ -118,6 +118,11 @@ notes.append(f"commands: {len(roots)} root commands registered, {len(words)} dis
 # every literal under a /bot ... must exist, and every /bot literal must be documented
 bot_src = "\n".join(body_of(f) for f in glob.glob("src/main/java/carpet/commands/Bot*.java"))
 bot_subs = {x for x in re.findall(r'literal\("([a-z][A-Za-z]*)"\)', bot_src)}
+# The Paper plugin registers its own tree, in carpet/paper/PaperBotCommands.java, so a subcommand the
+# docs name may live there. Its own page is still being written, so only the Fabric tree is checked
+# for a literal nothing documents.
+paper_src = body_of("src/main/java/carpet/paper/PaperBotCommands.java")
+known = bot_subs | {x for x in re.findall(r'literal\("([a-z][A-Za-z]*)"\)', paper_src)}
 seen = set()
 for d in docs:
     for a, b in re.findall(r'/bot ([a-zA-Z]+) ([a-zA-Z]+)', body_of(d)):
@@ -126,13 +131,13 @@ for d in docs:
 # only lower-case words are subcommands; anything else is a name from the examples
 seen = {x for x in seen if x.islower()}
 IGNORE = {"ai", "and", "in", "at", "combat"}
-bad = sorted(x for x in seen if x not in bot_subs and x not in IGNORE)
+bad = sorted(x for x in seen if x not in known and x not in IGNORE)
 if bad:
     problems.append("/bot subcommands in docs that do not exist: " + ", ".join(bad))
 bad = sorted(x for x in bot_subs if x not in seen and x not in {"at", "bot"})
 if bad:
     problems.append("/bot subcommands in code not in docs: " + ", ".join(bad))
-notes.append(f"/bot: {len(bot_subs)} subcommands in code, {len(seen)} used in docs, all matched both ways")
+notes.append(f"/bot: {len(known)} subcommands in code, {len(seen)} used in docs, all matched both ways")
 
 # ---------- 4. bot settings ----------
 cfg = body_of("src/main/java/carpet/pvp/BotPvpConfig.java")

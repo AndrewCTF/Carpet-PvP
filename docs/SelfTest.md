@@ -104,7 +104,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-There are **107** of them: 53 built into `SelfTest.java` and 54 more registered in
+There are **113** of them: 52 built into `SelfTest.java` and 61 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
@@ -131,6 +131,7 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `nav_crowd` | 1200 | Ten bots chasing one target through a wall with one gate stay within 5 blocks of it while the busiest tick stays inside the shared search cap and at least one of them uses the shared flow field. |
 | `nav_tick_budget` | 1200 | A 125-block search is spread over at least two consecutive searching ticks without exceeding the per-bot or the shared node budget. |
 | `nav_smooth` | 900 | A bot walking a diagonal across open ground covers no more than 5% more distance than the straight line. |
+| `fake_player_fall_distance` | 400 | A fake player dropped from eight blocks reads a fall distance on the way down within 0.35 of what the duel simulator gives for the same drop, and takes exactly the damage a player would, three blocks of the fall being the safe distance. |
 | `chase_attack` | 600 | `nav chase attack 2.5 0 <target>` closes and damages the target. |
 | `chase_crit` | 600 | `nav chase crit 2.5 0 <target>` closes and damages the target. |
 | `animate_use` | 300 | `animate use` swings the off hand and `animate attack` the main hand, read off the swing each one leaves behind. |
@@ -203,7 +204,6 @@ The built-in list runs first, in the order below, and the index scenarios run af
 |---|---|---|
 | `bot_spawn_kit` | 200 | `/bot spawn <n> mace expert` hands the bot the mace kit, turns combat on, applies `EXPERT`, refuses an unknown option and accepts the style name `sword` as `MELEE`. |
 | `sword_hits_require_aim` | 700 | A bot with its back to the target lands no hit until its view is within 30° of it, and every rotation step it takes is a whole mouse click. |
-| `sword_duel_damage` | 1000 | An expert sword bot against a passive target lands at least two hits, one of them a crit and one a sprint hit — which is what the sprint-reset W-tap buys. |
 | `sword_shield_break` | 1000 | A skilled bot breaks a shield that is being held up and hurts its owner. |
 | `sword_difficulty_order` | 2400 | Across six sequential expert-against-beginner duels the expert preset wins at least five. |
 | `sword_damage_rate` | 520 | An expert bot against a passive, non-regenerating target in full diamond reaches an 80% hit rate over 320 ticks and drives the target's lowest health to 8 or below, reporting every miss kind and every planner tick. |
@@ -211,7 +211,9 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `sword_catches_runner` | 500 | An expert bot catches a target walking away in a straight line: it closes to 3.5 blocks or less with at least two hits, sprinting a substantial share of the time. |
 | `sword_shield_play` | 900 | With shield play on the bot has its shield up on at least ten ticks and takes at most 0.8× the damage of the identical fight with shield play off — at the cost of its own hits. |
 | `sword_settings` | 1200 | With a diamond sword in slot 0 and a netherite axe in slot 2: `autoWeapon` off holds the sword, `autoWeapon` with `preferSword` on still holds it, `preferSword` off switches to the axe, and `bhop` on leaves the bot off the ground on more ticks than `bhop` off. |
+| `sword_only` | 600 | Two bots given the built-in sword kit and set on each other: on every tick of the fight each has its sword in the main hand, nothing in the off hand, nothing else in its inventory and is not using an item. |
 | `sword_hits_passive_target` | 1400 | All five difficulty presets, run at once 60 blocks apart, each land a first hit on a same-kit passive target within 500 ticks, after closing the 4.6-block gap themselves. |
+| `bot_stop_stats_trace` | 600 | An expert sword bot lands a hit on the player in front of it, then `bot stats`, `bot trace` and `bot stop` each succeed and leave the fighter with combat off and navigation off. |
 | `bot_budget` | 700 | With eight average bots in four duels `botSimBudget` is never exceeded; cutting it to 64 starves fighter-ticks, restoring it makes the bots plan again, and the full budget produced no starved ticks at all. |
 
 ### The ranged style
@@ -246,7 +248,8 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `mace_smash_damage` | 900 | A smash out of a measured fall does within 15% of what `CombatMath` gives for that fall, that enchantment and that armour. |
 | `mace_stun_slam` | 900 | An axe takes a raised shield down and the mace hit inside the following hundred-tick window takes at least 2.5 health off what the axe left. |
 | `mace_no_fall_damage_on_miss` | 900 | A launch whose target is lifted out of the arc still comes down harmless: the bot spends a second wind charge and lands on full health. |
-| `mace_attribute_swap_probe` | 600 | Whether this Minecraft version lets a mace hit carry an attack cooldown collected under another item: two swings with the same wait, one of them swapping item on the tick of the hit. Passes either way and records the answer the style obeys. |
+| `mace_swap_probe` | 700 | Whether this Minecraft version lets a mace hit carry an attack cooldown collected under another item: the same drop charged off the netherite sword, with the mace swapped in on the tick of the hit, and the ticks each mace needs to be ready again. Passes either way and records the answer the style obeys. |
+| `mace_breach_swap_probe` | 500 | The same question for Breach: a charged sword hit on its own and the same hit with the Breach mace swapped in on the tick of it, both against full protection netherite. Records what the style may rely on. |
 | `mace_duel` | 4500 | The expert mace bot against the expert sword bot in netherite, alternating sides over six rounds: a round is a knockout or, failing that, a damage trade of at least 1.25×. The mace bot has to win four. |
 
 ### The smp style
@@ -273,6 +276,7 @@ The built-in list runs first, in the order below, and the index scenarios run af
 |---|---|---|
 | `drill_aim_scores` | 900 | `bot drill aim` is accepted with a diamond sword in hand, the run ends with at least one hit, and the player has their sword back. |
 | `drill_skips_without_needs` | 400 | Empty-handed, `bot drill stunslam`, `bot drill retotem` and an unknown drill name are all refused, no drill starts, and the player still holds nothing new. |
+| `drill_stunslam_shield` | 400 | A player carrying neither an axe nor a mace is refused the stun-slam drill, and a player with both gets one whose bot stands behind a raised shield with the sword kit's sword in hand, and stops it when asked. |
 
 ### `/auto-setup`
 
@@ -282,6 +286,7 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `autosetup_each_mode` | 2000 | Bare `/auto-setup` prints its menu, and each of `sword`, `smp`, `mace` and `crystal` starts a session with that mode, that bot style, the right floor block and the kit's first item in the player's hand. `ranged` is not in this list. |
 | `autosetup_crash_safe` | 1200 | A session file exists on disk while fighting; after a simulated crash the live session is gone and the player is flagged unrecovered; after logging in again the inventory is fully restored, the file is deleted, `fakePlayerNavigation` is off again and the arena is gone. |
 | `autosetup_rules_restored` | 900 | `carpet fakePlayerNavigation` is off when a session starts, on while it runs, and back to false after `auto-setup stop`. |
+| `autosetup_login_recovers` | 600 | A player who logs out of a session has their file kept and what is in it waiting for their login; logging in again gives every slot back and deletes the file. A second player who logs out and asks for a new session without that door is given their own things back first, so the new file is written over nothing. |
 
 ### The menu
 
@@ -292,6 +297,7 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `gui_spawn` | 200 | Three clicks on the spawn page put a new bot on the server with that style, that difficulty and combat on. |
 | `gui_no_item_theft` | 400 | Every click type over every button on all three pages leaves the viewer's inventory byte-identical, leaves nothing on the cursor, never changes which menu slots hold something, and drops nothing on the ground. |
 | `gui_kit_editor_roundtrip` | 300 | A layout built in the kit editor, saved with `/bot gui saveas` and given with `/bot kit give`, comes back slot for slot identical, the viewer's inventory is unchanged throughout, and the empty editor still writes a kit. |
+| `gui_quick_fight` | 600 | The quick fight button of the main menu puts two bots of the default style on the server, in a faction each of their own with combat on, and one of them lands a hit. |
 
 ### Two scenarios that are written but not registered
 
