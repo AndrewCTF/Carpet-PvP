@@ -2,6 +2,7 @@ package carpet.pvp.mace;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,12 +11,16 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 
 /**
- * What a mace fighter has in its hotbar: the two maces of the kit, the axe it breaks shields with and
- * the items it gets into the air with. Every slot is found by reading the inventory rather than assumed,
- * so a bot carrying a different kit simply finds less of it. The sword it falls back on is left to the
- * sword style, and the elytra only counts worn, since a glide needs it on the chest.
+ * What a mace fighter has in its hotbar: the maces of the kit, the axe it breaks shields with, the item it
+ * charges a launch under and the items it gets into the air with. Every slot is found by reading the inventory
+ * rather than assumed, so a bot carrying a different kit simply finds less of it.
+ *
+ * <p>Two of these are read from the body rather than the bag. The elytra only counts worn, since a glide needs
+ * it on the chest, and the chest piece it is exchanged with is what puts the wings back on, so both are asked
+ * of the equipment slot every time.</p>
  */
 public final class MaceGear
 {
@@ -32,8 +37,11 @@ public final class MaceGear
     private int breachMace = -1;
     private int plainMace = -1;
     private int axe = -1;
+    private int sword = -1;
     private int charge = -1;
     private int pearl = -1;
+    private int elytra = -1;
+    private int rocket = -1;
     private int densityLevel;
     private int breachLevel;
     private int burstLevel;
@@ -55,8 +63,11 @@ public final class MaceGear
         breachMace = -1;
         plainMace = -1;
         axe = -1;
+        sword = -1;
         charge = -1;
         pearl = -1;
+        elytra = -1;
+        rocket = -1;
         densityLevel = 0;
         breachLevel = 0;
         burstLevel = 0;
@@ -71,7 +82,8 @@ public final class MaceGear
             {
                 int dense = level(stack, density);
                 int breachy = level(stack, breach);
-                burstLevel = Math.max(burstLevel, level(stack, windBurst));
+                int burst = level(stack, windBurst);
+                burstLevel = Math.max(burstLevel, burst);
                 if (dense > 0)
                 {
                     densityMace = slot;
@@ -91,6 +103,10 @@ public final class MaceGear
             {
                 axe = slot;
             }
+            else if (sword < 0 && stack.is(net.minecraft.tags.ItemTags.SWORDS))
+            {
+                sword = slot;
+            }
             else if (charge < 0 && stack.is(Items.WIND_CHARGE))
             {
                 charge = slot;
@@ -98,6 +114,14 @@ public final class MaceGear
             else if (pearl < 0 && stack.is(Items.ENDER_PEARL))
             {
                 pearl = slot;
+            }
+            else if (elytra < 0 && stack.is(Items.ELYTRA))
+            {
+                elytra = slot;
+            }
+            else if (rocket < 0 && stack.is(Items.FIREWORK_ROCKET))
+            {
+                rocket = slot;
             }
         }
     }
@@ -126,6 +150,12 @@ public final class MaceGear
         return burstLevel;
     }
 
+    /** Slot of the Breach mace, or -1 when the kit has none. */
+    public int breachSlot()
+    {
+        return breachMace;
+    }
+
     /** Slot of the axe that breaks a raised shield, or -1. */
     public int axeSlot()
     {
@@ -139,12 +169,54 @@ public final class MaceGear
     }
 
     /**
-     * True while the wings are worn on the chest. A glide is a chest-slot thing, not a hotbar one, so a
-     * bot that only has the elytra in its hotbar cannot dive with it.
+     * The slot of the item whose cooldown a launch or a ground hit is collected under, which is what the mace is
+     * swapped in on top of. A sword recharges in thirteen ticks against a mace's thirty four and its base damage
+     * is higher, so it is the one worth charging under; an axe is the fallback for a kit without a sword.
+     */
+    public int chargerSlot()
+    {
+        if (sword >= 0)
+        {
+            return sword;
+        }
+        return axe;
+    }
+
+    /**
+     * True while the wings are worn on the chest. A glide is a chest-slot thing, not a hotbar one, so a bot
+     * that only has the elytra in its hotbar cannot dive with it until it has used it once.
      */
     public boolean wearingElytra()
     {
         return bot.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA);
+    }
+
+    /**
+     * True while the chest holds anything the bot can hand back to take the wings off again. An elytra on the
+     * chest is the wings themselves, and using those from the hand would put them straight back on.
+     */
+    public boolean wearingChestpiece()
+    {
+        ItemStack chest = bot.getItemBySlot(EquipmentSlot.CHEST);
+        return !chest.isEmpty() && !chest.is(Items.ELYTRA) && swappable(chest);
+    }
+
+    /** Slot of the elytra in the hotbar, or -1 once it has been put on. */
+    public int elytraSlot()
+    {
+        return elytra;
+    }
+
+    /** Slot of the firework rockets, or -1. */
+    public int rocketSlot()
+    {
+        return rocket;
+    }
+
+    /** How many rockets are left in the hotbar. */
+    public int rockets()
+    {
+        return rocket < 0 ? 0 : bot.getInventory().getItem(rocket).getCount();
     }
 
     /** Slot of the wind charges, or -1. */
@@ -201,6 +273,24 @@ public final class MaceGear
         return pearl >= 0 && pearls() > 0 && !bot.getCooldowns().isOnCooldown(bot.getInventory().getItem(pearl));
     }
 
+    /** True while the bot can light a rocket: FireworkRocketItem.use only fires one with the wings open. */
+    public boolean rocketReady()
+    {
+        return rocket >= 0 && rockets() > 0 && bot.isFallFlying()
+                && !bot.getCooldowns().isOnCooldown(bot.getInventory().getItem(rocket));
+    }
+
+    /** True when the cooldown of a launch is collected under the axe, which hits harder but recharges slower. */
+    public boolean chargerIsAxe()
+    {
+        return chargerSlot() == axe;
+    }
+
+    private static boolean swappable(ItemStack stack)
+    {
+        return stack.get(DataComponents.EQUIPPABLE) != null;
+    }
+
     private static boolean isAxe(ItemStack stack)
     {
         for (Item item : AXES)
@@ -215,7 +305,7 @@ public final class MaceGear
 
     private static int level(ItemStack stack, Holder<Enchantment> enchantment)
     {
-        return enchantment == null ? 0 : stack.getEnchantments().getLevel(enchantment);
+        return enchantment == null ? 0 : EnchantmentHelper.getItemEnchantmentLevel(enchantment, stack);
     }
 
     private static Holder<Enchantment> holder(RegistryAccess registries, String name)

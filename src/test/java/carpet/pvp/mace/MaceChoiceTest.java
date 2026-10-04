@@ -25,7 +25,7 @@ class MaceChoiceTest
         }
     }
 
-    /** The techniques climb with the preset, and only an expert goes for the swap. */
+    /** The techniques climb with the preset: the item swap and the dive come in at skilled, the fall stun slam at expert. */
     @Test
     void theHarderPresetsKnowMore()
     {
@@ -34,11 +34,14 @@ class MaceChoiceTest
         assertFalse(MaceChoice.allows(Difficulty.CASUAL, Technique.PEARL));
         assertTrue(MaceChoice.allows(Difficulty.AVERAGE, Technique.PEARL));
         assertTrue(MaceChoice.allows(Difficulty.AVERAGE, Technique.STUN_SLAM));
+        assertTrue(MaceChoice.allows(Difficulty.AVERAGE, Technique.READ));
         assertFalse(MaceChoice.allows(Difficulty.AVERAGE, Technique.ELYTRA));
         assertTrue(MaceChoice.allows(Difficulty.SKILLED, Technique.ELYTRA));
         assertTrue(MaceChoice.allows(Difficulty.SKILLED, Technique.BOUNCE));
-        assertFalse(MaceChoice.allows(Difficulty.SKILLED, Technique.SWAP));
-        assertTrue(MaceChoice.allows(Difficulty.EXPERT, Technique.SWAP));
+        assertTrue(MaceChoice.allows(Difficulty.SKILLED, Technique.SWAP));
+        assertTrue(MaceChoice.allows(Difficulty.SKILLED, Technique.BREACH_SWAP));
+        assertFalse(MaceChoice.allows(Difficulty.SKILLED, Technique.FALL_STUN_SLAM));
+        assertTrue(MaceChoice.allows(Difficulty.EXPERT, Technique.FALL_STUN_SLAM));
     }
 
     /**
