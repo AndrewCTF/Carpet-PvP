@@ -11,6 +11,29 @@ Two things are independent of each other:
 - **The web editor.** An HTTP server that serves a page, hands out the schema and takes programs
   back. Purely optional.
 
+## Getting started
+
+1. **Who can use it.** `/carpetlogic` is for operators by default. To let every player use it, an
+   operator runs `/carpet commandCarpetLogic true`.
+2. **Open the editor.** In game, run `/carpetlogic open` and click **open in browser** in chat. The
+   link is for you only, lasts 24 hours and works while you are online.
+3. **Get a bot.** In the editor's **Bots** panel on the right, type a name and press **Spawn**: the bot
+   appears where you are standing in game. Bots spawned with `/bot spawn` or `/player` are listed too.
+4. **Make a program.** On an empty canvas the editor offers presets such as *W-Tap* and *Crit Chain*:
+   press one to load it. Or build your own: click a node in the library on the left and it is added
+   after the selected node and wired to it. Click a node on the canvas to change its settings.
+5. **Run it.** Choose the bot in the bar under the canvas and press **Run**. **Stop** ends it. What the
+   program is doing, and anything that goes wrong, shows in the console at the bottom.
+6. **Keep it.** **Save** writes the program to `<world>/carpetlogic/programs/`, and with **Autosave** on
+   that happens by itself. A saved program runs without the browser:
+   `/carpetlogic programs run <program> <bot>`.
+
+**On a server that is not your own computer** the editor is closed to the outside until its admin opens
+it: by default it only answers on the server machine itself (`127.0.0.1`). The admin sets
+`/carpet carpetLogicBindAddress 0.0.0.0`, restarts the server and opens port 9876. The link in chat
+then reads `localhost`; replace that with the server's address. For anything beyond a home network,
+read [Security](#security) first: the editor speaks plain HTTP.
+
 ## The editor
 
 ![The editor with nothing on the canvas yet](images/carpetlogic-editor.png)

@@ -161,6 +161,10 @@ public class CarpetLogicCommand
                 "y " + logic.getBotManager().getBots().size(), "w  bots, ",
                 "y " + logic.getProgramExecutor().getRunningCount(), "w  running programs, ",
                 "y " + logic.getProgramStorage().getCount(), "w  saved programs");
+        if (web != null)
+        {
+            Messenger.m(ctx.getSource(), "g /carpetlogic open gives you a link to the editor in your browser");
+        }
         return 1;
     }
 
