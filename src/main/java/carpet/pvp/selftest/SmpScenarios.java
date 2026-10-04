@@ -81,6 +81,9 @@ final class SmpScenarios
                         }
                         SelfTest.run(server, "bot kit give " + a + " smp");
                         fighting(a, "average").forEach(command -> SelfTest.run(server, command));
+                        // The bot buys distance to heal and has to be allowed to come back for the dummy from
+                        // there, as /bot duel does: beyond its target range it would stand where it healed.
+                        SelfTest.run(server, "bot option " + a + " targetrange 64");
                         // The target holds a netherite sword without ever swinging it: the survival
                         // model weighs what it is wearing, so with nothing in its hand the bot would
                         // never see itself as being in danger from it at all.

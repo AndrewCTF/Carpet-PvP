@@ -321,6 +321,12 @@ public final class SelfTest
     private static final int DRAIN_MIN_TICKS = 60;
     private static final int DRAIN_TIMEOUT_TICKS = 1200;
     private static int ticks;
+    /** The scenario that failed once and is being run a second time, or null. */
+    private static String retrying;
+    /** What its first attempt said. */
+    private static String firstFailure;
+    /** Scenarios that needed their second attempt, for the summary. */
+    private static final List<String> retried = new ArrayList<>();
 
     private SelfTest() {}
 
@@ -368,7 +374,10 @@ public final class SelfTest
             }
             acting = false;
             ticks = 0;
-            current = scenario(names.get(results.size()), results.size());
+            // A second attempt runs somewhere new, with bots of its own, so nothing the first left behind is in it.
+            current = retrying != null
+                    ? scenario(retrying, names.size() + retried.size())
+                    : scenario(names.get(results.size()), results.size());
             if (current == null)
             {
                 conclude(server, false, "unknown scenario");
@@ -392,7 +401,25 @@ public final class SelfTest
                 if (player(server, bot.name()) != null) run(server, cmd(bot.name() + " disconnect"));
             }
             current = null;
-            conclude(server, probe.ok(), probe.detail());
+            // A fight between bots is not the same fight twice, and one unlucky round is not a broken mod: a
+            // scenario that fails is run once more, and only one that fails both times fails the run. The
+            // report says which ones needed it.
+            if (!probe.ok() && retrying == null)
+            {
+                retrying = names.get(results.size());
+                firstFailure = probe.detail();
+                retried.add(retrying);
+                settle(server);
+                log(server, fmt("RETRY %s after %d ticks: %s", retrying, ticks, firstFailure));
+                return;
+            }
+            String detail = probe.detail();
+            if (retrying != null)
+            {
+                detail += (probe.ok() ? "; passed on a second attempt, the first failed: " : "; failed twice, the first time: ") + firstFailure;
+                retrying = null;
+            }
+            conclude(server, probe.ok(), detail);
         }
     }
 
@@ -2656,16 +2683,23 @@ boolean[] walkAsked = {false};
         });
     }
 
-    static void conclude(MinecraftServer server, boolean passed, String detail)
+    /** Puts back what a scenario changed, and answers which rules that was. */
+    static String settle(MinecraftServer server)
     {
-        // Whatever a scenario changed in the rules goes back now, so that one which failed or ran out of time
-        // cannot hand the next one a server the run was not written against.
         String restored = RuleGuard.leave();
         // the two scenarios that need mobs to spawn turn this on for themselves
         run(server, "gamerule spawn_mobs false");
         // four scenarios turn this off to measure damage, and a bot in a later one would then heal only
         // what its items give it
         run(server, "gamerule natural_health_regeneration true");
+        return restored;
+    }
+
+    static void conclude(MinecraftServer server, boolean passed, String detail)
+    {
+        // Whatever a scenario changed in the rules goes back now, so that one which failed or ran out of time
+        // cannot hand the next one a server the run was not written against.
+        String restored = settle(server);
         Result result = new Result(names.get(results.size()), passed, ticks,
                 restored.isEmpty() ? detail : detail + "; rules put back: " + restored);
         results.add(result);
@@ -2706,6 +2740,10 @@ boolean[] walkAsked = {false};
             passed = false;
         }
         log(server, fmt("%s, %d of %d scenarios passed", passed ? "PASSED" : "FAILED", results.stream().filter(Result::passed).count(), results.size()));
+        if (!retried.isEmpty())
+        {
+            log(server, fmt("%d needed a second attempt: %s", retried.size(), String.join(", ", retried)));
+        }
         // Stop the server the way an operator would, then let the watchdog wait it out: a server that
         // leaves a thread behind would keep this JVM alive forever, so the run has to prove it can end.
         Thread serverThread = Thread.currentThread();

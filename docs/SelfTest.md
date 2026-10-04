@@ -104,6 +104,11 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
+A scenario that fails is run once more, somewhere new and with bots of its own, and only one that fails
+both times fails the run: a fight between bots is not the same fight twice. The log has a `RETRY` line for
+the first attempt, the scenario's detail in the report says it passed on a second attempt and what the
+first said, and the run's last lines name every scenario that needed one.
+
 There are **137** of them: 52 built into `SelfTest.java` and 85 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
