@@ -1,9 +1,7 @@
 package carpet.patches;
 
-import com.mojang.authlib.GameProfile;
 import net.minecraft.ChatFormatting;
-//~ if >=26.1 'advancements.CriteriaTriggers' -> 'advancements.triggers.CriteriaTriggers'
-import net.minecraft.advancements.triggers.CriteriaTriggers;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
@@ -25,8 +23,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.players.ProfileResolver;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.stats.Stats;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.damagesource.DamageSource;
@@ -936,28 +932,12 @@ public class EntityPlayerMPFake extends ServerPlayer
             this.lastAttackerUUID = attacker.getUUID();
             this.lastAttackerTick = serverLevel.getGameTime();
         }
-        // In 1.21+, directional blocking is handled by applyItemBlocking (uses BLOCKS_ATTACKS component).
-        if (f > 0.0f && this.isBlocking()) {
-            float blockedDamage = this.applyItemBlocking(serverLevel, source, f);
-            if (blockedDamage <= 0.0f) return super.hurtServer(serverLevel, source, f);
-
-            // blockUsingItem has already put a blocking item that was hit with a disabling weapon on
-            // cooldown and stopped it from blocking, exactly like it does for a real player.
-            if (this.isUsingItem())
-            {
-                this.playSound(SoundEvents.SHIELD_BLOCK.value(), 1.0F, 0.8F + this.level().getRandom().nextFloat() * 0.4F);
-            }
-            else if (!BotSettings.shieldStunning)
-            {
-                //~ if >=26.3 'this.invulnerableTime = 20' -> 'this.setInvulnerableTime(20)'
-                this.setInvulnerableTime(20);
-            }
-            CriteriaTriggers.ENTITY_HURT_PLAYER.trigger((ServerPlayer)this, source, f, 0, true);
-            if(blockedDamage < 3.4028235E37F){
-                ((ServerPlayer)this).awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(blockedDamage * 10.0F));
-            }
-            return false;
-        }
+        // Everything else is the game's: a blocking item is applied by LivingEntity.hurtServer through
+        // applyItemBlocking, which takes what the item blocked off the damage and carries on with the
+        // rest, the hurt time, the knockback and the sounds that go with it, exactly as it does for a real
+        // player. The rules this mod adds on purpose are elsewhere and apply to fake and real players
+        // alike: swordBlockHitting in Player_swordBlockStateMixin, and shieldStunning, which clears the
+        // invulnerability a disabled shield leaves behind on the next tick (Player_shieldStunMixin).
         return super.hurtServer(serverLevel, source, f);
     }
 

@@ -104,7 +104,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-There are **118** of them: 52 built into `SelfTest.java` and 66 more registered in
+There are **123** of them: 52 built into `SelfTest.java` and 71 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
@@ -132,6 +132,11 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `nav_tick_budget` | 1200 | A 125-block search is spread over at least two consecutive searching ticks without exceeding the per-bot or the shared node budget. |
 | `nav_smooth` | 900 | A bot walking a diagonal across open ground covers no more than 5% more distance than the straight line. |
 | `fake_player_fall_distance` | 400 | A fake player dropped from eight blocks reads a fall distance on the way down within 0.35 of what the duel simulator gives for the same drop, and takes exactly the damage a player would, three blocks of the fall being the safe distance. |
+| `fake_block_front` | 900 | A sword hit from the front is stopped by a raised shield, the shield takes the wear of stopping it, and the same fighter takes the same hits in full once the shield is taken away. |
+| `fake_block_behind` | 700 | The same hit with the source behind the shield lands in full and the shield takes none of it. |
+| `fake_block_explosion` | 900 | Explosion damage from behind a raised shield reaches a fake player, and the shield stops none of it. |
+| `fake_block_axe` | 900 | An axe from the front takes the shield down and on cooldown, and a hit from the same direction lands on the next tick. |
+| `fake_sword_block` | 900 | With `swordBlockHitting` on a fake player holding a sword up loses the rule's share of a fixed hit and with it off loses all of it. |
 | `chase_attack` | 600 | `nav chase attack 2.5 0 <target>` closes and damages the target. |
 | `chase_crit` | 600 | `nav chase crit 2.5 0 <target>` closes and damages the target. |
 | `animate_use` | 300 | `animate use` swings the off hand and `animate attack` the main hand, read off the swing each one leaves behind. |

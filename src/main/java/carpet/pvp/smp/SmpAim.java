@@ -16,8 +16,19 @@ import carpet.pvp.sim.ProjectileSim;
  */
 public final class SmpAim
 {
-    /** How far a retreat throw aims for, as fractions of the distance the bot asked for. */
-    private static final double[] PEEL_DISTANCE = {1.0, 0.7, 0.45};
+    /**
+     * How far a retreat throw aims for, as fractions of the distance the bot asked for. The last two are
+     * short throws for a bot that is already in reach of the target it is running from, which is worth more
+     * than no throw at all.
+     */
+    private static final double[] PEEL_DISTANCE = {1.0, 0.7, 0.45, 0.3, 0.15};
+    /**
+     * How far ahead of itself a splash may burst and still heal the thrower, in blocks: a splash covers
+     * four, and the thrower is walking into the spot, so a splash that lands well ahead of it still heals
+     * it. The furthest of these that a throw solves for is the one used, since the further ahead it lands
+     * the shallower the throw is and the less of the bot's own fight it costs.
+     */
+    private static final double[] SPLASH_REACH = {0.4, 1.0, 1.6, 2.0, 2.4};
     /** Ticks a throw is given to reach the ground it was aimed at. */
     public static final int THROW_LIMIT = 40;
     /** How close a potion has to burst to the thrower's feet to be worth throwing. */
@@ -38,14 +49,15 @@ public final class SmpAim
         return aim.solved && landsOnFeet(shooter, aim.pitch, yaw, groundY) ? aim.pitch : Double.NaN;
     }
 
-    /**
+/**
      * The pitch that drops a thrown splash onto a point a little ahead of the thrower, which is where
-     * a player walking forwards throws one: the splash covers four blocks, so it heals the thrower on
-     * the way in and the throw does not have to be straight down.
+     * a player walking forwards throws one: the splash covers four blocks, so it heals the thrower on the
+     * way in and the throw does not have to look straight down.
      *
-     * <p>The spot is in front of the thrower's own view rather than along its motion: a thrower's
-     * velocity swings about as it fights, and a spot that swings with it is one the view never settles
-     * on. The solve still undoes the motion, so the splash lands on the spot either way.</p>
+     * <p>The spot is in front of the thrower's own view rather than along its motion: a thrower's velocity
+     * swings about as it fights, and a spot that swings with it is one the view never settles on. The
+     * furthest of those spots a splash still covers is used, because the shallower the pitch the shorter
+     * the throw costs: a player throws one at their own feet while running and barely looks down at all.</p>
      *
      * @param ahead how far in front of the thrower the splash should burst
      * @param yaw   the direction the thrower is facing
@@ -56,10 +68,19 @@ public final class SmpAim
         double radians = Math.toRadians(yaw);
         double dx = -Math.sin(radians);
         double dz = Math.cos(radians);
-        ProjectileAim.Aim aim = ProjectileAim.solveGroundPoint(ProjectileSim.Kind.SPLASH_POTION, shooter,
-                shooter.x + dx * ahead, groundY, shooter.z + dz * ahead, THROW_LIMIT)[0];
-        return aim.solved ? aim.pitch : Double.NaN;
+        double pitch = Double.NaN;
+        for (double reach : SPLASH_REACH)
+        {
+            ProjectileAim.Aim aim = ProjectileAim.solveGroundPoint(ProjectileSim.Kind.SPLASH_POTION, shooter,
+                    shooter.x + dx * reach, groundY, shooter.z + dz * reach, THROW_LIMIT)[0];
+            if (aim.solved)
+            {
+                pitch = aim.pitch;
+            }
+        }
+        return pitch;
     }
+
 
     /**
      * A pearl that lands a chosen distance away along the line the thrower is running away from. A

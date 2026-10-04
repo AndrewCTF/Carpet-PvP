@@ -824,6 +824,7 @@ session, and not across a restart.
 - [AutoSetup.md](AutoSetup.md) — `/auto-setup`, which saves a player's things to disk
 - [Practice.md](Practice.md) — drills, matches, spectating, traces and factions
 - [Kits.md](Kits.md) — `/bot kit`, the kit file format and the built-in kits
+- [SmpStyle.md](SmpStyle.md) — the SMP combat style, its kit and its options
 - [CarpetLogic.md](CarpetLogic.md) — programming bots in the web editor
 - [SwordBlocking.md](SwordBlocking.md) — `swordBlockHitting` and 1.8-style block hitting
 - [SelfTest.md](SelfTest.md) — the scenarios that cover fake players

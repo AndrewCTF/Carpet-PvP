@@ -99,6 +99,14 @@ play and shield breaking are practised with the `axe` kit.
 | feet | `minecraft:netherite_boots` | 1 | Protection 4, Unbreaking 3, Mending 1 |
 | offhand | `minecraft:shield` | 1 | |
 
+The kit the SMP combat style fights in: a Sharpness V netherite sword, five golden apples, eight strong
+healing splashes, five strong strength and three strong swiftness, three pearls, sixteen bottles, three
+cobwebs, a water bucket, two totems and a full set of netherite armour in Protection IV with Unbreaking
+III and Mending. What a bot does with it is [SmpStyle.md](SmpStyle.md); what it spends and in what order
+is what `SurvivalPolicy` scores. The cobwebs and the bucket are in the kit because the style offers them,
+not because a bot in a plain fight gets much out of them: a web cannot be placed against a body and the
+bucket only puts water under the bot that is already on fire or falling.
+
 A second full netherite set in slots 11 to 14 is what the `smp` style swaps into, so a player given
 this kit carries eight netherite pieces.
 
