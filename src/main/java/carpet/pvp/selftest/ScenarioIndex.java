@@ -61,6 +61,7 @@ final class ScenarioIndex
         SCENARIOS.put("sword_ladder", SwordScenarios::ladder);
         SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);
         SCENARIOS.put("sword_shield_play", SwordScenarios::shieldPlay);
+        SCENARIOS.put("sword_only", SwordScenarios::swordOnly);
         SCENARIOS.put("sword_settings", SwordScenarios::swordSettings);
         SCENARIOS.put("crystal_damage_matches_model", CrystalScenarios::damageMatchesModel);
         SCENARIOS.put("crystal_place_and_hit", CrystalScenarios::placeAndHit);

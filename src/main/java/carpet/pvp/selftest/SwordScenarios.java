@@ -40,6 +40,8 @@ final class SwordScenarios
     private static final int RUNNER_TICKS = 150;
     /** Distance the runner starts off at, so the bot has to close a real gap to get to it. */
     private static final double CATCH_GAP = 12.0D;
+    /** Ticks the sword-only duel is watched for, unless a bot goes down first. */
+    private static final int SWORD_ONLY_TICKS = 300;
     /** Ticks each half of the shield scenario runs for. */
     private static final int SHIELD_TICKS = 200;
     /** Ticks each phase of the settings scenario runs for. */
@@ -182,6 +184,73 @@ final class SwordScenarios
                                     + " blocks, sprinting %d of %d ticks and landing %d of its %d clicks",
                             caught[0], closest[0], sprintTicks[0], tick[0], body.stats().hits,
                             body.stats().clicks));
+        });
+    }
+
+    /**
+     * The sword mode is a sword against a sword. Two bots are given the built-in sword kit, the one every
+     * sword fight hands out, and set on each other: on every tick of the fight each has its sword in the
+     * main hand, nothing in the off hand, nothing else in its inventory and is not using an item.
+     */
+    static Scenario swordOnly(String a, String b, String c, Vec3 origin)
+    {
+        boolean[] armed = {false};
+        int[] tick = {0};
+        String[] broken = {null};
+        return new Scenario(SWORD_ONLY_TICKS + 300, List.of(new Bot(a, origin), new Bot(b, origin.add(0.0D, 0.0D, 3.0D))),
+                List.of(), server ->
+        {
+            if (!armed[0])
+            {
+                if (SelfTest.warmingUp(server, a, b))
+                {
+                    return SelfTest.pending("waiting for " + a + " and " + b + " to finish loading");
+                }
+                SelfTest.run(server, "bot kit give " + a + " sword");
+                SelfTest.run(server, "bot kit give " + b + " sword");
+                SelfTest.run(server, "bot option " + a + " difficulty expert");
+                SelfTest.run(server, "bot option " + b + " difficulty average");
+                SelfTest.run(server, "bot option " + a + " combat true");
+                SelfTest.run(server, "bot option " + b + " combat true");
+                SelfTest.run(server, "bot duel " + a + " " + b);
+                armed[0] = true;
+                return SelfTest.pending(a + " and " + b + " have the sword kit and are set on each other");
+            }
+            ServerPlayer first = SelfTest.player(server, a);
+            ServerPlayer second = SelfTest.player(server, b);
+            BotBody one = SelfTest.body(server, a);
+            BotBody two = SelfTest.body(server, b);
+            if (one == null || two == null)
+            {
+                return SelfTest.pending("waiting for both bots to start fighting");
+            }
+            boolean over = !first.isAlive() || !second.isAlive() || ++tick[0] >= SWORD_ONLY_TICKS;
+            if (!over && broken[0] == null)
+            {
+                for (ServerPlayer bot : List.of(first, second))
+                {
+                    long carried = bot.getInventory().getNonEquipmentItems().stream().filter(stack -> !stack.isEmpty()).count();
+                    if (!bot.getMainHandItem().is(Items.DIAMOND_SWORD) || !bot.getOffhandItem().isEmpty() || carried != 1
+                            || bot.isUsingItem())
+                    {
+                        broken[0] = SelfTest.fmt("on tick %d %s held %s and %s in the off hand, carried %d stacks, using an item: %s",
+                                tick[0], bot.getScoreboardName(), SelfTest.describe(bot.getMainHandItem()),
+                                SelfTest.describe(bot.getOffhandItem()), carried, bot.isUsingItem());
+                    }
+                }
+            }
+            if (!over && broken[0] == null)
+            {
+                return SelfTest.pending(SelfTest.fmt("tick %d: %d and %d hits, both with a sword and nothing else",
+                        tick[0], one.stats().hits, two.stats().hits));
+            }
+            BotStats x = one.stats();
+            BotStats y = two.stats();
+            boolean ok = broken[0] == null && x.hits >= 1 && y.hits >= 1 && x.blockTicks == 0 && y.blockTicks == 0;
+            return new Probe(ok, broken[0] != null ? broken[0] : SelfTest.fmt(
+                    "over %d ticks of a duel with the sword kit %s landed %d of %d clicks and %s %d of %d; each held its"
+                            + " sword and nothing else on every tick, and neither blocked (%d and %d ticks)",
+                    tick[0], a, x.hits, x.clicks, b, y.hits, y.clicks, x.blockTicks, y.blockTicks));
         });
     }
 
