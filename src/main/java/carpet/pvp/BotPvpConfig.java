@@ -1,6 +1,5 @@
 package carpet.pvp;
 
-import carpet.CarpetSettings;
 import carpet.pvp.sim.DifficultyPreset;
 import carpet.pvp.sim.DifficultyPresets;
 import carpet.pvp.sim.PlannerParams;
@@ -12,7 +11,7 @@ import java.util.UUID;
  * Per-bot PvP combat-AI configuration for a single {@link carpet.patches.EntityPlayerMPFake}.
  *
  * <p>Every field is seeded from the matching global {@code /carpet} rule (see
- * {@link CarpetSettings}) when the bot spawns, and may be overridden per-bot through
+ * {@link BotSettings}) when the bot spawns, and may be overridden per-bot through
  * {@code /player <name> ai <setting> <value>}. Global rules therefore act as the default,
  * while per-bot overrides win.</p>
  */
@@ -183,45 +182,45 @@ public final class BotPvpConfig
      */
     public BotPvpConfig()
     {
-        combat        = CarpetSettings.botCombat;
-        autoTarget    = CarpetSettings.botAutoTarget;
-        targetPlayers = CarpetSettings.botTargetPlayers;
-        targetMobs    = CarpetSettings.botTargetMobs;
-        targetBots    = CarpetSettings.botTargetBots;
-        revenge       = CarpetSettings.botRevenge;
-        targetRange   = CarpetSettings.botTargetRange;
-        retreatHealth = CarpetSettings.botRetreatHealth;
+        combat        = BotSettings.botCombat;
+        autoTarget    = BotSettings.botAutoTarget;
+        targetPlayers = BotSettings.botTargetPlayers;
+        targetMobs    = BotSettings.botTargetMobs;
+        targetBots    = BotSettings.botTargetBots;
+        revenge       = BotSettings.botRevenge;
+        targetRange   = BotSettings.botTargetRange;
+        retreatHealth = BotSettings.botRetreatHealth;
 
-        autoTotem  = CarpetSettings.botAutoTotem;
-        autoShield = CarpetSettings.botAutoShield;
-        autoFood   = CarpetSettings.botAutoFood;
-        autoPotion = CarpetSettings.botAutoPotion;
-        autoArmor  = CarpetSettings.botAutoArmor;
-        autoWeapon = CarpetSettings.botAutoWeapon;
-        autoRepair = CarpetSettings.botAutoRepair;
+        autoTotem  = BotSettings.botAutoTotem;
+        autoShield = BotSettings.botAutoShield;
+        autoFood   = BotSettings.botAutoFood;
+        autoPotion = BotSettings.botAutoPotion;
+        autoArmor  = BotSettings.botAutoArmor;
+        autoWeapon = BotSettings.botAutoWeapon;
+        autoRepair = BotSettings.botAutoRepair;
 
-        combatStyle    = parseStyle(CarpetSettings.botCombatStyle);
-        difficulty     = parseDifficulty(CarpetSettings.botDifficulty);
-        preferSword    = CarpetSettings.botPreferSword;
-        shieldBreak    = CarpetSettings.botShieldBreak;
-        critical       = CarpetSettings.botCritical;
-        strafe         = CarpetSettings.botStrafe;
-        bhop           = CarpetSettings.botBhop;
-        wtap           = CarpetSettings.botWTap;
-        shieldPlay     = CarpetSettings.botShieldPlay;
-        meleeRange     = CarpetSettings.botMeleeRange;
-        attackCooldown = CarpetSettings.botAttackCooldown;
+        combatStyle    = parseStyle(BotSettings.botCombatStyle);
+        difficulty     = parseDifficulty(BotSettings.botDifficulty);
+        preferSword    = BotSettings.botPreferSword;
+        shieldBreak    = BotSettings.botShieldBreak;
+        critical       = BotSettings.botCritical;
+        strafe         = BotSettings.botStrafe;
+        bhop           = BotSettings.botBhop;
+        wtap           = BotSettings.botWTap;
+        shieldPlay     = BotSettings.botShieldPlay;
+        meleeRange     = BotSettings.botMeleeRange;
+        attackCooldown = BotSettings.botAttackCooldown;
 
-        skill          = CarpetSettings.botSkill;
-        reactionDelay  = CarpetSettings.botReactionDelay;
-        pingTicks      = CarpetSettings.botPingTicks;
-        clicksPerSecond = CarpetSettings.botClicksPerSecond;
-        plannerRange   = CarpetSettings.botPlannerRange;
-        plannerHorizon = CarpetSettings.botPlannerHorizon;
-        plannerPopulation = CarpetSettings.botPlannerPopulation;
+        skill          = BotSettings.botSkill;
+        reactionDelay  = BotSettings.botReactionDelay;
+        pingTicks      = BotSettings.botPingTicks;
+        clicksPerSecond = BotSettings.botClicksPerSecond;
+        plannerRange   = BotSettings.botPlannerRange;
+        plannerHorizon = BotSettings.botPlannerHorizon;
+        plannerPopulation = BotSettings.botPlannerPopulation;
 
-        missChance    = CarpetSettings.botMissChance;
-        mistakeChance = CarpetSettings.botMistakeChance;
+        missChance    = BotSettings.botMissChance;
+        mistakeChance = BotSettings.botMistakeChance;
 
         faction = null;
     }

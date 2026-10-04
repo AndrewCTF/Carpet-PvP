@@ -632,7 +632,6 @@ public final class NavAStarPathfinder
     private static BlockPos footOf(LevelWalkability view, BlockPos around, Traversal traversal, Settings settings)
     {
         ServerLevel level = view.level();
-        if (!level.hasChunk(around.getX() >> 4, around.getZ() >> 4)) return null;
         if (traversal == Traversal.WATER)
         {
             return waterNear(view, around);
@@ -849,7 +848,6 @@ public final class NavAStarPathfinder
 
                     int x = center.getX() + ddx;
                     int z = center.getZ() + ddz;
-                    if (!level.hasChunk(x >> 4, z >> 4)) continue;
 
                     for (int y = level.getMinY(); y <= level.getMaxY(); y++)
                     {

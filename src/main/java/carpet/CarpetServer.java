@@ -28,6 +28,8 @@ import carpet.commands.TestCommand;
 import carpet.network.ServerNetworkHandler;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBudget;
+import carpet.pvp.BotSettings;
+import carpet.pvp.bot.BotCommands;
 import carpet.pvp.gui.BotGui;
 import carpet.pvp.selftest.SelfTest;
 import carpet.helpers.HopperCounter;
@@ -38,6 +40,7 @@ import carpet.logging.HUDController;
 import carpet.script.external.Carpet;
 import carpet.script.external.Vanilla;
 import carpet.script.utils.ParticleParser;
+import carpet.utils.CommandHelper;
 import carpet.utils.DelayedTasks;
 import carpet.utils.MobAI;
 import carpet.utils.SpawnReporter;
@@ -84,6 +87,7 @@ public class CarpetServer
         SettingsManager mgr = new SettingsManager(CarpetSettings.carpetVersion, "carpet", "Carpet Mod");
         settingsManager = mgr;
         settingsManager.parseSettingsClass(CarpetSettings.class);
+        CarpetBotSettings.hook();
         extensions.forEach(CarpetExtension::onGameStarted);
         CarpetScriptServer.parseFunctionClasses();
         CarpetSettings.LOG.info("CARPET PVP LOADED");
@@ -97,9 +101,14 @@ public class CarpetServer
             org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
         }
         CarpetServer.minecraft_server = server;
+        // Touching SelfTest before this would read registries that are not bound yet.
+        CarpetSelfTest.hook();
+        CarpetAutoSetup.hook();
         SpawnReporter.resetSpawnStats(server, true);
 
         forEachManager(sm -> sm.attachServer(server));
+        // attachServer read the configuration file, so the rules hold their loaded values now.
+        CarpetBotSettings.update();
         extensions.forEach(e -> e.onServerLoaded(server));
         scriptServer = new CarpetScriptServer(server);
         Carpet.MinecraftServer_addScriptServer(server, scriptServer);
@@ -123,7 +132,7 @@ public class CarpetServer
         ScheduleCommand.tick(server);
         CarpetSettings.impendingFillSkipUpdates.set(false);
         extensions.forEach(e -> e.onTick(server));
-        BotBudget.instance().beginTick(CarpetSettings.botSimBudget);
+        BotBudget.instance().beginTick(BotSettings.botSimBudget);
         BotCombatCommand.tick(server);
         BotGui.tick(server);
         SelfTest.tick(server);
@@ -137,6 +146,8 @@ public class CarpetServer
         }
         forEachManager(sm -> sm.registerCommand(dispatcher, commandBuildContext));
 
+        // The bodies of /bot and /auto-setup ask their host who may run them; on this side that is a rule.
+        BotCommands.mayCommandBots = source -> CommandHelper.canUseCommand(source, CarpetSettings.commandBot);
         ProfileCommand.register(dispatcher, commandBuildContext);
         CounterCommand.register(dispatcher, commandBuildContext);
         LogCommand.register(dispatcher, commandBuildContext);

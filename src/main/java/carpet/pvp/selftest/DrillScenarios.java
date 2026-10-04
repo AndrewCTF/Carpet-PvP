@@ -36,14 +36,14 @@ final class DrillScenarios
                 {
                     return SelfTest.pending("waiting for " + a + " to finish loading");
                 }
-                SelfTest.run(server, "player " + a + " equip mainhand minecraft:diamond_sword");
+                SelfTest.run(server, SelfTest.cmd(a + " equip mainhand minecraft:diamond_sword"));
                 accepted[0] = MatchScenarios.asPlayer(server, a, "bot drill aim");
                 if (accepted[0] != 1)
                 {
                     step[0] = "refused";
                     return SelfTest.pending("the drill was refused");
                 }
-                SelfTest.run(server, "player " + a + " attack continuous");
+                SelfTest.run(server, SelfTest.cmd(a + " attack continuous"));
                 step[0] = "run";
                 return SelfTest.pending("the aim drill has started");
             }
@@ -62,7 +62,7 @@ final class DrillScenarios
             if (!stopped[0])
             {
                 stopped[0] = true;
-                SelfTest.run(server, "player " + a + " stop");
+                SelfTest.run(server, SelfTest.cmd(a + " stop"));
                 return SelfTest.pending("the aim drill has ended");
             }
             String summary = Drills.lastSummary(player);

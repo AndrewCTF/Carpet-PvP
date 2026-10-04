@@ -84,7 +84,7 @@ final class SwordScenarios
                 // Beating the dummy brings it back at its own spawn point, so the bot has to be allowed to
                 // walk after it again, as /bot duel does.
                 SelfTest.run(server, "bot option " + a + " targetrange 64");
-                SelfTest.run(server, "player " + b + " move forward for 20");
+                SelfTest.run(server, SelfTest.cmd(b + " move forward for 20"));
                 armed[0] = true;
                 return SelfTest.pending(b + " walks up to " + a + " and then stands there");
             }
@@ -149,7 +149,7 @@ final class SwordScenarios
                 SelfTest.swordKit(b).forEach(command -> SelfTest.run(server, command));
                 SelfTest.swordCombat(a, "expert").forEach(command -> SelfTest.run(server, command));
                 SelfTest.run(server, "bot option " + a + " targetrange 96");
-                SelfTest.run(server, "player " + b + " move forward for " + RUNNER_TICKS);
+                SelfTest.run(server, SelfTest.cmd(b + " move forward for " + RUNNER_TICKS));
                 armed[0] = true;
                 return SelfTest.pending(b + " walks away from " + a + " in a straight line");
             }
@@ -318,7 +318,7 @@ final class SwordScenarios
                 // distance for the whole run, which is what the weapon choice and the bunny hop are about.
                 SelfTest.run(server, "bot option " + a + " plannerrange 2");
                 SelfTest.run(server, "bot option " + a + " targetrange 96");
-                SelfTest.run(server, "player " + b + " move forward for 4000");
+                SelfTest.run(server, SelfTest.cmd(b + " move forward for 4000"));
                 armed[0] = true;
                 return SelfTest.pending(a + " has a diamond sword and a netherite axe in its hotbar");
             }

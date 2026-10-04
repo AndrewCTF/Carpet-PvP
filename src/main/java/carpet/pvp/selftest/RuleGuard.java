@@ -1,9 +1,5 @@
 package carpet.pvp.selftest;
 
-import carpet.CarpetServer;
-import carpet.api.settings.CarpetRule;
-import net.minecraft.server.MinecraftServer;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,6 +14,9 @@ import java.util.Map;
  * <p>What is remembered is the value each rule had when the scenario started rather than the rule's own
  * default, because the run itself sets rules up front: the navigation is turned on for the whole run and must
  * survive every scenario.</p>
+ *
+ * <p>A host with no rules, which is the Paper plugin, remembers nothing and has nothing to put back: it
+ * answers the two questions of {@link SelfTest#ruleSnapshot} and {@link SelfTest#ruleRestore} with nothing.</p>
  */
 final class RuleGuard
 {
@@ -29,14 +28,7 @@ final class RuleGuard
     static void enter()
     {
         BEFORE.clear();
-        if (CarpetServer.settingsManager == null)
-        {
-            return;
-        }
-        for (CarpetRule<?> rule : CarpetServer.settingsManager.getCarpetRules())
-        {
-            BEFORE.put(rule.name(), rule.value().toString());
-        }
+        BEFORE.putAll(SelfTest.ruleSnapshot.get());
     }
 
     /**
@@ -44,27 +36,8 @@ final class RuleGuard
      *
      * @return the names of the rules that were put back, for the scenario's report
      */
-    static String leave(MinecraftServer server)
+    static String leave()
     {
-        if (CarpetServer.settingsManager == null || BEFORE.isEmpty())
-        {
-            return "";
-        }
-        StringBuilder restored = new StringBuilder();
-        for (Map.Entry<String, String> rule : BEFORE.entrySet())
-        {
-            CarpetRule<?> current = CarpetServer.settingsManager.getCarpetRule(rule.getKey());
-            if (current == null || rule.getValue().equals(current.value().toString()))
-            {
-                continue;
-            }
-            SelfTest.run(server, "carpet " + rule.getKey() + " " + rule.getValue());
-            if (restored.length() > 0)
-            {
-                restored.append(", ");
-            }
-            restored.append(rule.getKey());
-        }
-        return restored.toString();
+        return BEFORE.isEmpty() ? "" : String.join(", ", SelfTest.ruleRestore.apply(BEFORE));
     }
 }

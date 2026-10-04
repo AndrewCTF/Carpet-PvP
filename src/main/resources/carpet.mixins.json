@@ -130,7 +130,6 @@
         "Player_creativeNoClipMixin",
         "Player_fakePlayerCritMixin",
         "Player_fakePlayerStrongAttackMixin",
-        "Player_fakePlayersMixin",
         "Player_parrotMixin",
         "Player_scarpetEventsMixin",
         "Player_shieldStunMixin",

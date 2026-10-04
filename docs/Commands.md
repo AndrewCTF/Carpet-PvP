@@ -208,6 +208,7 @@ back along with the arena coming down.
 - [Kits.md](Kits.md) — `/bot kit`
 - [CarpetLogic.md](CarpetLogic.md) — `/carpetlogic`
 - [SwordBlocking.md](SwordBlocking.md) — `swordBlockHitting`
+- [Paper.md](Paper.md) — the same commands on a Paper server
 - [Building.md](Building.md) — building the mod
 - [SelfTest.md](SelfTest.md) — the self-test scenarios
 - [docs/scarpet](scarpet/Documentation.md) — the Scarpet language

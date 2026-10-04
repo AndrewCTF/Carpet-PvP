@@ -221,10 +221,10 @@ final class CrystalScenarios
         return new Scenario(600, List.of(new Bot(a, spot(origin, 12, 6))), arena((int) origin.x, (int) origin.z, 19),
                 server ->
                 {
-                    SelfTest.run(server, "player " + a + " equip head minecraft:netherite_helmet");
-                    SelfTest.run(server, "player " + a + " equip chest minecraft:netherite_chestplate");
-                    SelfTest.run(server, "player " + a + " equip legs minecraft:netherite_leggings");
-                    SelfTest.run(server, "player " + a + " equip feet minecraft:netherite_boots");
+                    SelfTest.run(server, SelfTest.cmd(a + " equip head minecraft:netherite_helmet"));
+                    SelfTest.run(server, SelfTest.cmd(a + " equip chest minecraft:netherite_chestplate"));
+                    SelfTest.run(server, SelfTest.cmd(a + " equip legs minecraft:netherite_leggings"));
+                    SelfTest.run(server, SelfTest.cmd(a + " equip feet minecraft:netherite_boots"));
                 }, new DamageProbe(a, origin));
     }
 
@@ -467,9 +467,9 @@ final class CrystalScenarios
                     crystalCombat(a, "casual").forEach(command -> SelfTest.run(server, command));
                     SelfTest.run(server, "give " + a + " minecraft:end_crystal 24");
                     SelfTest.run(server, "give " + b + " minecraft:totem_of_undying");
-                    SelfTest.run(server, "player " + b + " equip offhand minecraft:totem_of_undying");
+                    SelfTest.run(server, SelfTest.cmd(b + " equip offhand minecraft:totem_of_undying"));
                     // A totem of its own, so the scenario can say the bot never popped one.
-                    SelfTest.run(server, "player " + a + " equip offhand minecraft:totem_of_undying");
+                    SelfTest.run(server, SelfTest.cmd(a + " equip offhand minecraft:totem_of_undying"));
                 }, new NeverSuicidesProbe(a));
     }
 
@@ -696,7 +696,7 @@ final class CrystalScenarios
             if (stats.anchorsBlown >= 1)
             {
                 SelfTest.run(server, QUIET);
-                SelfTest.run(server, "player " + bot + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(bot + " disconnect"));
                 return new Probe(victim.getHealth() < 20.0F, SelfTest.fmt(
                         "%s placed %d anchors and set %d of them off, with %d crystals and %d blocks along the"
                                 + " way; %s has %.1f health; %d refusals, %d backed-off ticks, %d searches",
@@ -706,7 +706,7 @@ final class CrystalScenarios
             if (tick - armedAt > STALL_TICKS * 2)
             {
                 SelfTest.run(server, QUIET);
-                SelfTest.run(server, "player " + bot + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(bot + " disconnect"));
                 problem = SelfTest.fmt("%s stalled after %d anchors, %d crystals, %d blocks and"
                         + " %d searches in %d ticks", bot, stats.anchorsPlaced, stats.crystalsPlaced,
                         stats.blocksPlaced, stats.plannerCalls, tick - armedAt);
@@ -795,11 +795,11 @@ final class CrystalScenarios
                 first = fighter(duel, "a");
                 second = fighter(duel, "b");
                 int z = expertsFirst ? 4 : 4 + duel * 20;
-                SelfTest.run(server, "player " + first + " spawn at "
-                        + SelfTest.coords(spot(origin, 2, z)) + " facing 90 0 in minecraft:overworld in survival");
-                SelfTest.run(server, "player " + second + " spawn at "
+                SelfTest.run(server, SelfTest.cmd(first + " spawn at "
+                        + SelfTest.coords(spot(origin, 2, z)) + " facing 90 0 in minecraft:overworld in survival"));
+                SelfTest.run(server, SelfTest.cmd(second + " spawn at "
                         + SelfTest.coords(spot(origin, 5, z)) + " facing 270 0 in minecraft:overworld"
-                        + " in survival");
+                        + " in survival"));
                 return SelfTest.pending(first + " and " + second + " are logging in");
             }
             for (String name : List.of(first, second))
@@ -905,8 +905,8 @@ final class CrystalScenarios
                 expertWins++;
             }
             BotStats stats = SelfTest.stats(expert);
-            SelfTest.run(server, "player " + first + " disconnect");
-            SelfTest.run(server, "player " + second + " disconnect");
+            SelfTest.run(server, SelfTest.cmd(first + " disconnect"));
+            SelfTest.run(server, SelfTest.cmd(second + " disconnect"));
             first = "";
             return SelfTest.pending(SelfTest.fmt("round %d went to the %s: the expert is on %.1f health with"
                     + " %d crystals placed and %d blasts, the beginner on %.1f with %d hits missed",
@@ -918,11 +918,11 @@ final class CrystalScenarios
         {
             if (!first.isEmpty())
             {
-                SelfTest.run(server, "player " + first + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(first + " disconnect"));
             }
             if (!second.isEmpty())
             {
-                SelfTest.run(server, "player " + second + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(second + " disconnect"));
             }
             first = "";
             second = "";

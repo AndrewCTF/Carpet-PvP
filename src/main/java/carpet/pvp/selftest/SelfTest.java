@@ -1,22 +1,13 @@
 package carpet.pvp.selftest;
 
-import carpet.CarpetSettings;
-import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
-import carpet.logic.CarpetLogic;
-import carpet.helpers.OptimizedExplosion;
-import carpet.logic.program.BotAction;
-import carpet.logic.program.BotProgram;
-import carpet.logic.program.ProgramExecutor.ProgramInfo;
-import carpet.logic.web.Api;
-import carpet.logic.web.AuthManager;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBody;
 import carpet.pvp.BotBudget;
+import carpet.pvp.BotSettings;
 import carpet.pvp.BotStats;
 import carpet.pvp.nav.NavSearchBudget;
 import carpet.pvp.selftest.SelfTestReport.Result;
-import carpet.CarpetSettings;
 import carpet.pvp.kit.Kit;
 import carpet.pvp.kit.KitEntry;
 import carpet.pvp.kit.KitInventory;
@@ -44,7 +35,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import carpet.utils.SpawnReporter;
 import net.minecraft.util.Util;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -78,12 +68,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Headless self-test. Started with {@code -Dcarpet.selftest=<names|all>}, the server runs scripted fake-player
@@ -113,6 +108,106 @@ public final class SelfTest
             new KitExpectation("smp", "netherite_sword", "netherite_chestplate", "minecraft:protection", 4, "experience_bottle", 16),
             new KitExpectation("mace", "mace", "netherite_chestplate", "minecraft:protection", 4, "wind_charge", 16),
             new KitExpectation("crystal", "netherite_sword", "netherite_chestplate", "minecraft:blast_protection", 4, "end_crystal", 8));
+
+    /**
+     * How the host of this run drives bots: the literal its fake-player command hangs off, the
+     * scenarios it has no feature for, and what to set up before the first one. Carpet's server keeps
+     * the defaults; the Paper plugin replaces them.
+     */
+    public record Platform(String commandRoot, Set<String> unsupported, Consumer<MinecraftServer> setup) {}
+
+    private static Platform platform = new Platform("player", Set.of(), server -> {
+        run(server, "carpet fakePlayerNavigation true");
+        // A flat world breeds slimes everywhere, and one wandering into a fight changes its outcome.
+        run(server, "gamerule spawn_mobs false");
+        run(server, "kill @e[type=!player]");
+        // Sprinting only removes the wait between ticks; the scenarios take the same ticks either way.
+        run(server, "tick sprint 1d");
+    });
+
+    /**
+     * Starts the program named by {@link #pendingProgram()} on the given bot. Carpet's server sets this
+     * from its CarpetLogic; where there is none the logic scenarios are unsupported.
+     */
+    public static BiConsumer<MinecraftServer, String> programStarter;
+    /** The status of the program running on a bot, or "gone". Null where there is no CarpetLogic. */
+    public static Function<String, String> programStatus;
+    /** Stops the program running on a bot. Does nothing where there is no CarpetLogic. */
+    public static Consumer<String> programStopper = name -> {};
+    /** The error of the program running on a bot, or null where there is none or no CarpetLogic. */
+    public static Function<String, String> programError = name -> null;
+    /**
+     * What every {@code /carpet} rule is at, as its own file would spell it, read at the start of a
+     * scenario. Empty where the host has no rules, which is what the rule guard then has to put back.
+     */
+    public static Supplier<Map<String, String>> ruleSnapshot = LinkedHashMap::new;
+    /**
+     * Puts the rules of {@link #ruleSnapshot} back the way it found them, the way the host's own
+     * command would, and answers the names of the ones it had to set again.
+     */
+    public static Function<Map<String, String>, List<String>> ruleRestore = rules -> List.of();
+    /**
+     * The body of {@code GET /api/bots} as its JSON text, given the server and the bot to report on.
+     * Set by {@code CarpetSelfTest} on Fabric; the snapshot scenario is unsupported elsewhere.
+     */
+    public static BiFunction<MinecraftServer, String, String> botSnapshot;
+    /** How many mob spawn attempts the spawn reporter has counted so far, or 0 where it has none. */
+    public static Supplier<Long> spawnAttempts;
+    /**
+     * Leaves one block position in carpet.helpers.OptimizedExplosion's cache, the way an explosion
+     * that skipped the walk would. Set by {@code CarpetSelfTest} on Fabric; the scenario that needs
+     * it is unsupported elsewhere.
+     */
+    public static Consumer<BlockPos> explosionPositionLeaver = pos -> {};
+    /** What the next {@link #programStarter} call should run, as its action JSON. */
+    private static String pendingProgram;
+
+    /** The program the next {@link #programStarter} call should run. */
+    public static String pendingProgram()
+    {
+        return pendingProgram;
+    }
+
+    /** Hands a program to the host's program runner, as the combat-node scenarios do. */
+    static void startProgram(MinecraftServer server, String botName, String program)
+    {
+        pendingProgram = program;
+        if (programStarter != null) programStarter.accept(server, botName);
+    }
+
+    /** What the host says about the program running on a bot, or "gone" where it runs none. */
+    static String status(String botName)
+    {
+        return programStatus == null ? "gone" : programStatus.apply(botName);
+    }
+
+    /** Why a scenario cannot run somewhere, printed when the host reports it unsupported. */
+    private static final Map<String, String> UNAVAILABLE = Map.ofEntries(
+            Map.entry("script_run", "it needs /script run from Carpet's scripting"),
+            Map.entry("fill_updates", "it needs the carpet fillUpdates rule"),
+            Map.entry("logic_program", "it needs CarpetLogic programs"),
+            Map.entry("logic_forever_budget", "it needs CarpetLogic programs"),
+            Map.entry("logic_bot_snapshot", "it needs CarpetLogic's web API"),
+            Map.entry("sword_block", "it needs the carpet swordBlockHitting rule"),
+            Map.entry("explosion_rules", "it needs the carpet explosionNoBlockDamage rule"),
+            Map.entry("xp_explosions", "it needs the carpet xpFromExplosions rule"),
+            Map.entry("scarpet_events", "it needs scarpet damage events"),
+            Map.entry("scarpet_explosion", "it needs scarpet explosion events"),
+            Map.entry("update_suppression_block", "it needs the carpet updateSuppressionBlock rule"),
+            Map.entry("stackable_shulker_boxes", "it needs the carpet stackableShulkerBoxes rule"),
+            Map.entry("structure_block_ignored", "it needs the carpet structureBlockIgnored rule"),
+            Map.entry("persistent_parrots", "it needs the carpet persistentParrots rule"),
+            Map.entry("lag_free_spawning", "it needs the carpet lagFreeSpawning rule and /spawn"),
+            Map.entry("interaction_updates", "it needs the carpet interactionUpdates rule"),
+            Map.entry("punish_wrong_tool_hits", "it needs the carpet punishWrongToolHits rule"),
+            Map.entry("scarpet_item_use_events", "it needs scarpet item use events"),
+            Map.entry("sculk_sensor_range", "it needs the carpet sculkSensorRange rule"),
+            Map.entry("summon_natural_lightning", "it needs the carpet summonNaturalLightning rule and /spawn"),
+            Map.entry("explosion_state_leak", "it needs the carpet optimizedTNT rule"),
+            Map.entry("scarpet_world_data", "it needs scarpet world data"),
+            Map.entry("mace_smash_damage", "it needs the fake player critical hit mixin"),
+            Map.entry("mace_no_fall_damage_on_miss", "it needs the fake player critical hit mixin"),
+            Map.entry("tick_synced_world_borders", "it needs the carpet tickSyncedWorldBorders rule and /tick"));
 
     private static final String REQUESTED = System.getProperty("carpet.selftest");
     static final double SURFACE_Y = -60.0D;
@@ -154,7 +249,6 @@ public final class SelfTest
     private static final List<Result> results = new ArrayList<>();
     private static final ItemStack SHIELD = new ItemStack(Items.SHIELD);
     /** A session that was never issued to a player, as /carpetlogic from the console makes. */
-    private static final AuthManager.Session CONSOLE_SESSION = new AuthManager.Session(null, "Server", Long.MAX_VALUE);
     private static final ItemStack PEARL = new ItemStack(Items.ENDER_PEARL);
 
     /** Two kits dropped into the world's kit folder, in the two shapes a kit file can be written in. */
@@ -193,6 +287,24 @@ public final class SelfTest
 
     private SelfTest() {}
 
+    /** Whether this JVM was started to run the self-test at all. */
+    public static boolean requested()
+    {
+        return REQUESTED != null;
+    }
+
+    /** Called by the host before the first scenario runs; see {@link Platform}. */
+    public static void use(Platform platform)
+    {
+        SelfTest.platform = platform;
+    }
+
+    /** The fake-player command of this host, which names the bot it drives. */
+    static String cmd(String rest)
+    {
+        return platform.commandRoot() + " " + rest;
+    }
+
     public static void tick(MinecraftServer server)
     {
         if (REQUESTED == null || finished) return;
@@ -201,12 +313,14 @@ public final class SelfTest
             List<String> all = new ArrayList<>(SCENARIOS);
             all.addAll(ScenarioIndex.SCENARIOS.keySet());
             names = SelfTestReport.parseNames(REQUESTED, all);
-            run(server, "carpet fakePlayerNavigation true");
-            // A flat world breeds slimes everywhere, and one wandering into a fight changes its outcome.
-            run(server, "gamerule spawn_mobs false");
-            run(server, "kill @e[type=!player]");
-            // Sprinting only removes the wait between ticks; the scenarios take the same ticks either way.
-            run(server, "tick sprint 1d");
+            for (String skipped : platform.unsupported())
+            {
+                if (names.remove(skipped))
+                {
+                    log(server, "SKIP " + skipped + ": " + UNAVAILABLE.getOrDefault(skipped, "not available here"));
+                }
+            }
+            platform.setup().accept(server);
         }
         if (current == null)
         {
@@ -227,8 +341,8 @@ public final class SelfTest
             RuleGuard.enter();
             for (Bot bot : current.bots())
             {
-                run(server, "player " + bot.name() + " spawn at " + coords(bot.pos())
-                        + " facing " + fmt("%.1f", bot.yaw()) + " 0 in minecraft:overworld in " + bot.gamemode());
+                run(server, cmd(bot.name() + " spawn at " + coords(bot.pos())
+                        + " facing " + fmt("%.1f", bot.yaw()) + " 0 in minecraft:overworld in " + bot.gamemode()));
             }
             return;
         }
@@ -238,7 +352,7 @@ public final class SelfTest
         {
             for (Bot bot : current.bots())
             {
-                if (player(server, bot.name()) != null) run(server, "player " + bot.name() + " disconnect");
+                if (player(server, bot.name()) != null) run(server, cmd(bot.name() + " disconnect"));
             }
             current = null;
             conclude(server, probe.ok(), probe.detail());
@@ -293,7 +407,7 @@ public final class SelfTest
                 });
             case "nav_goto":
                 Vec3 goal = origin.add(12.0D, 0.0D, 0.0D);
-                return new Scenario(600, List.of(new Bot(a, origin)), List.of("player " + a + " nav goto " + coords(goal)), NOTHING, server ->
+                return new Scenario(600, List.of(new Bot(a, origin)), List.of(cmd(a + " nav goto " + coords(goal))), NOTHING, server ->
                 {
                     double left = player(server, a).position().distanceTo(goal);
                     // 1 block is the default arrival radius of nav goto
@@ -302,7 +416,7 @@ public final class SelfTest
             case "nav_follow":
                 Vec3 behind = origin.add(0.0D, 0.0D, -2.0D);
                 return new Scenario(600, List.of(new Bot(a, behind), new Bot(b, origin)),
-                        List.of("player " + a + " nav follow " + b, "player " + b + " move forward"), NOTHING, server ->
+                        List.of(cmd(a + " nav follow " + b), cmd(b + " move forward")), NOTHING, server ->
                 {
                     ServerPlayer leader = player(server, b);
                     double walked = leader.position().distanceTo(origin);
@@ -315,7 +429,7 @@ public final class SelfTest
                 Vec3 second = origin.add(10.0D, 0.0D, 0.0D);
                 boolean[] visited = {false, false};
                 return new Scenario(600, List.of(new Bot(a, origin.add(0.0D, 0.0D, -6.0D))),
-                        List.of("player " + a + " nav patrol " + coords(first) + " " + coords(second)), server ->
+                        List.of(cmd(a + " nav patrol " + coords(first) + " " + coords(second))), server ->
                 {
                     ServerPlayer bot = player(server, a);
                     // Patrol loops, so the two visits happen at different ticks; remember them.
@@ -334,7 +448,7 @@ public final class SelfTest
                 double[] lastX = {origin.x};
                 int[] since = {0};
                 return new Scenario(600, List.of(new Bot(a, origin)),
-                        List.of("player " + a + " nav goto " + coords(far)), server ->
+                        List.of(cmd(a + " nav goto " + coords(far))), server ->
                 {
                     ServerPlayer bot = player(server, a);
                     double x = bot.getX();
@@ -344,7 +458,7 @@ public final class SelfTest
                         {
                             return new Probe(false, fmt("%s has not started walking yet", a));
                         }
-                        run(server, "player " + a + " nav stop");
+                        run(server, cmd(a + " nav stop"));
                         stopping[0] = true;
                         lastX[0] = x;
                         return new Probe(false, fmt("issued nav stop with %s 3 blocks along", a));
@@ -366,7 +480,7 @@ public final class SelfTest
                     ServerPlayer bot = player(server, a);
                     if (!sent[0])
                     {
-                        run(server, "player " + a + " nav come", here);
+                        run(server, cmd(a + " nav come"), here);
                         sent[0] = true;
                         return new Probe(false, fmt("%s was sent to the command source's position", a));
                     }
@@ -378,7 +492,7 @@ public final class SelfTest
                 String mode = name.substring("chase_".length());
                 Vec3 ahead = origin.add(0.0D, 0.0D, 6.0D);
                 return new Scenario(600, List.of(new Bot(a, origin), new Bot(b, ahead)),
-                        List.of("player " + a + " nav chase " + mode + " 2.5 0 " + b), NOTHING, server ->
+                        List.of(cmd(a + " nav chase " + mode + " 2.5 0 " + b)), NOTHING, server ->
                 {
                     float health = player(server, b).getHealth();
                     return new Probe(health < 20.0F, fmt("%s has %.1f health", b, health));
@@ -417,23 +531,25 @@ public final class SelfTest
             case "logic_program":
                 return new Scenario(600, List.of(new Bot(a, origin)), List.of(), server ->
                 {
-                    startProgram(server, a, "[{type: MOVE, params: {direction: forward, ticks: 40}}, {type: STOP_MOVEMENT}]");
+                    pendingProgram = "[{type: MOVE, params: {direction: forward, ticks: 40}}, {type: STOP_MOVEMENT}]";
+                    programStarter.accept(server, a);
                 }, server ->
                 {
                     double walked = player(server, a).position().distanceTo(origin);
-                    String status = status(a);
+                    String status = programStatus.apply(a);
                     return new Probe(walked >= 3.0D && status.equals("COMPLETED"),
                             fmt("%s walked %.1f blocks, its program is %s", a, walked, status));
                 });
             case "logic_forever_budget":
                 return new Scenario(200, List.of(new Bot(a, origin)), List.of(), server ->
                 {
-                    startProgram(server, a, "[{type: FOREVER, children: [{type: SPRINT}]}]");
+                    pendingProgram = "[{type: FOREVER, children: [{type: SPRINT}]}]";
+                    programStarter.accept(server, a);
                 }, server ->
                 {
                     // Reaching this many ticks at all says the loop left the server ticking; the program itself
                     // has no end, so it must still be running.
-                    String status = status(a);
+                    String status = programStatus.apply(a);
                     return new Probe(ticks >= 40 && status.equals("RUNNING"),
                             fmt("after %d ticks the program is %s", ticks, status));
                 });
@@ -451,10 +567,7 @@ public final class SelfTest
                         hit[0] = true;
                         return pending(fmt("hit %s for %.1f health", b, SWORD_BLOCK_HIT));
                     }
-                    Api.Response response = new Api(server, CarpetLogic.INSTANCE)
-                            .handle("GET", "/api/bots", CONSOLE_SESSION, "");
-                    if (response.status() != 200) return new Probe(false, "GET /api/bots answered " + response.status());
-                    JsonObject snapshot = response.body().getAsJsonObject().getAsJsonObject("bots");
+                    JsonObject snapshot = GSON.fromJson(botSnapshot.apply(server, a), JsonObject.class).getAsJsonObject("bots");
                     if (!snapshot.has(a) || !snapshot.has(b))
                     {
                         return new Probe(false, fmt("the snapshot holds %s, both %s and %s were on the server",
@@ -498,7 +611,7 @@ public final class SelfTest
                     {
                         case 0:
                             if (hand != null) return pending(a + " is already swinging");
-                            run(server, "player " + a + " animate use");
+                            run(server, cmd(a + " animate use"));
                             phase[0] = 1;
                             return pending("issued animate use");
                         case 1:
@@ -508,7 +621,7 @@ public final class SelfTest
                             return pending(fmt("animate use swung the %s hand", handName(hand)));
                         case 2:
                             if (hand != null) return pending("waiting for the animate use swing to finish");
-                            run(server, "player " + a + " animate attack");
+                            run(server, cmd(a + " animate attack"));
                             phase[0] = 3;
                             return pending("issued animate attack");
                         case 3:
@@ -532,15 +645,15 @@ public final class SelfTest
                 int[] cleared = {-1};
                 boolean[] gone = {false};
                 return new Scenario(300, List.of(new Bot(a, origin)), List.of(
-                        "player " + a + " equip mainhand minecraft:ender_pearl",
-                        "player " + a + " look down",
-                        "player " + a + " use once"), server ->
+                        cmd(a + " equip mainhand minecraft:ender_pearl"),
+                        cmd(a + " look down"),
+                        cmd(a + " use once")), server ->
                 {
                     ServerPlayer bot = player(server, a);
                     if (phase[0] == 0)
                     {
                         if (!bot.getCooldowns().isOnCooldown(PEARL)) return pending(a + " is not on the ender pearl cooldown yet");
-                        cleared[0] = result(server, "player " + a + " itemCd");
+                        cleared[0] = result(server, cmd(a + " itemCd"));
                         gone[0] = !bot.getCooldowns().isOnCooldown(PEARL);
                         phase[0] = 1;
                     }
@@ -554,9 +667,9 @@ public final class SelfTest
                 // The attacker stands in front of the blocker, as everyone spawns looking along +z.
                 Vec3 front = origin.add(0.0D, 0.0D, 2.0D);
                 return new Scenario(600, List.of(new Bot(a, origin), new Bot(b, front)),
-                        List.of("player " + a + " equip shield minecraft:shield", "player " + a + " use continuous",
-                                "player " + b + " equip mainhand minecraft:diamond_axe",
-                                "player " + b + " turn back", "player " + b + " attack continuous"), server ->
+                        List.of(cmd(a + " equip shield minecraft:shield"), cmd(a + " use continuous"),
+                                cmd(b + " equip mainhand minecraft:diamond_axe"),
+                                cmd(b + " turn back"), cmd(b + " attack continuous")), server ->
                 {
                     ServerPlayer blocker = player(server, a);
                     boolean cooling = blocker.getCooldowns().isOnCooldown(SHIELD);
@@ -675,11 +788,11 @@ public final class SelfTest
                                 new Bot(c, origin.add(0.0D, 0.0D, -2.0D)),
                                 new Bot(d, origin.add(0.0D, 0.0D, 4.0D))),
                         List.of("carpet swordBlockHitting true",
-                                "player " + a + " equip mainhand minecraft:diamond_sword",
-                                "player " + a + " use continuous",
-                                "player " + c + " equip mainhand minecraft:wooden_sword",
-                                "player " + d + " equip mainhand minecraft:wooden_sword",
-                                "player " + d + " turn back"), server ->
+                                cmd(a + " equip mainhand minecraft:diamond_sword"),
+                                cmd(a + " use continuous"),
+                                cmd(c + " equip mainhand minecraft:wooden_sword"),
+                                cmd(d + " equip mainhand minecraft:wooden_sword"),
+                                cmd(d + " turn back")), server ->
                 {
                     ServerPlayer blocker = player(server, a);
                     ServerPlayer idle = player(server, b);
@@ -701,13 +814,13 @@ public final class SelfTest
                         {
                             // Asked for again every tick, because a swing below full attack strength is
                             // dropped, so this is one hit per player as soon as their attacker is ready.
-                            run(server, "player " + c + " attack once");
-                            run(server, "player " + d + " attack once");
+                            run(server, cmd(c + " attack once"));
+                            run(server, cmd(d + " attack once"));
                             return pending(fmt("%s was pushed %.3f and %s %.3f so far, waiting for a hit to land",
                                     a, peak[0], b, peak[1]));
                         }
-                        run(server, "player " + c + " stop");
-                        run(server, "player " + d + " stop");
+                        run(server, cmd(c + " stop"));
+                        run(server, cmd(d + " stop"));
                         run(server, "carpet swordBlockHitting false");
                         phase[0] = 2;
                         return pending(fmt("with the rule on %s was pushed %.3f and the idle %s %.3f",
@@ -724,7 +837,7 @@ public final class SelfTest
                     }
                     // both idle players have to take the whole hit, otherwise the numbers below mean nothing
                     boolean hitsLanded = same(open[0], SWORD_BLOCK_HIT) && same(open[1], SWORD_BLOCK_HIT);
-                    float factor = (float) CarpetSettings.swordBlockDamageMultiplier;
+                    float factor = (float) BotSettings.swordBlockDamageMultiplier;
                     boolean halved = same(guarding[0], SWORD_BLOCK_HIT * factor);
                     boolean wholeAgain = same(guarding[1], SWORD_BLOCK_HIT);
                     // roughly half, with room for the ground friction eating a different share of each push
@@ -740,12 +853,12 @@ public final class SelfTest
                 // the check has to see it gone from there.
                 int[] phase = {0};
                 return new Scenario(300, List.of(), List.of(
-                        "player " + a + " spawn at " + coords(origin) + " facing 0 0 in minecraft:overworld in survival"), server ->
+                        cmd(a + " spawn at " + coords(origin) + " facing 0 0 in minecraft:overworld in survival")), server ->
                 {
                     if (phase[0] == 0)
                     {
                         if (player(server, a) == null) return pending(a + " has not joined yet");
-                        run(server, "player " + a + " kill");
+                        run(server, cmd(a + " kill"));
                         phase[0] = 1;
                         return pending("issued kill on " + a);
                     }
@@ -779,6 +892,7 @@ public final class SelfTest
                 int x0 = (int) origin.x + 2;
                 int z0 = (int) origin.z + 3;
                 List<String> course = List.of(
+                        forceload(x0 - 1, z0 - 1, x0 + 13, z0 + 14),
                         fill(x0 - 1, -60, z0 - 1, x0 + 13, -59, z0 - 1, "minecraft:stone"),
                         fill(x0 - 1, -60, z0 + 14, x0 + 13, -59, z0 + 14, "minecraft:stone"),
                         fill(x0 - 1, -60, z0 - 1, x0 - 1, -59, z0 + 14, "minecraft:stone"),
@@ -794,7 +908,7 @@ public final class SelfTest
                 }
                 Vec3 start = new Vec3(x0 + 0.5D, SURFACE_Y, z0 - 3.5D);
                 Vec3 exit = new Vec3(x0 + 11.5D, SURFACE_Y, z0 + 12.5D);
-                course.add("player " + a + " nav goto " + coords(exit));
+                course.add(cmd(a + " nav goto " + coords(exit)));
                 return new Scenario(900, List.of(new Bot(a, start)), course, server ->
                 {
                     double left = player(server, a).position().distanceTo(exit);
@@ -814,7 +928,7 @@ public final class SelfTest
                 Vec3 start = new Vec3(x0 + 0.5D, SURFACE_Y, z0 + 0.5D);
                 Vec3 parkourGoal = new Vec3(x0 + 46.0D, SURFACE_Y, z0 + 0.5D);
                 List<String> commands = new ArrayList<>(course);
-                commands.add("player " + a + " nav goto " + coords(parkourGoal));
+                commands.add(cmd(a + " nav goto " + coords(parkourGoal)));
                 return new Scenario(900, List.of(new Bot(a, start)), commands, server ->
                 {
                     double left = player(server, a).position().distanceTo(parkourGoal);
@@ -829,6 +943,7 @@ public final class SelfTest
                 int tx = (int) origin.x;
                 int tz = (int) origin.z;
                 List<String> course = List.of(
+                        forceload(tx - 1, tz, tx + 9, tz + 4),
                         fill(tx, -62, tz, tx + 4, -51, tz + 4, "minecraft:stone"),
                         fill(tx - 1, -60, tz + 2, tx - 1, -51, tz + 2, "minecraft:ladder[facing=west]"),
                         fill(tx + 6, -61, tz + 2, tx + 6, -49, tz + 2, "minecraft:stone"),
@@ -837,18 +952,27 @@ public final class SelfTest
                 Vec3 top = new Vec3(tx + 2.0D, -50.0D, tz + 2.5D);
                 Vec3 down = new Vec3(tx + 9.0D, SURFACE_Y, tz + 2.5D);
                 int[] phase = {0};
+                boolean[] climbing = {false};
                 double[] highest = {SURFACE_Y};
-                return new Scenario(1200, List.of(new Bot(a, start)), course,
-                        server -> run(server, "player " + a + " nav goto " + coords(top)), server ->
+                return new Scenario(1200, List.of(new Bot(a, start)), course, server ->
                 {
                     ServerPlayer bot = player(server, a);
                     highest[0] = Math.max(highest[0], bot.getY());
+                    if (!Courses.laid(server, course, new BlockPos(tx + 2, -51, tz + 2), Blocks.STONE))
+                    {
+                        return pending(fmt("%s is waiting for the tower to arrive", a));
+                    }
+                    if (!climbing[0])
+                    {
+                        climbing[0] = true;
+                        run(server, cmd(a + " nav goto " + coords(top)));
+                    }
                     if (phase[0] == 0)
                     {
                         if (bot.position().distanceTo(top) <= 1.5D)
                         {
                             phase[0] = 1;
-                            run(server, "player " + a + " nav goto " + coords(down));
+                            run(server, cmd(a + " nav goto " + coords(down)));
                             return new Probe(false, fmt("%s climbed the ladder to y=%.2f and was sent back down", a, bot.getY()));
                         }
                         return new Probe(false, fmt("%s is still on the ladder at y=%.2f", a, bot.getY()));
@@ -868,6 +992,7 @@ public final class SelfTest
                 // The walls are three high so the only way along the corridor is along it: a bot that could get over
                 // one would walk out of the course instead of over the blocks it is meant to be testing.
                 List<String> course = List.of(
+                        forceload(x0 - 4, z0 - 1, x0 + 10, z0 + 1),
                         fill(x0 - 4, -60, z0 - 1, x0 + 10, -58, z0 - 1, "minecraft:stone"),
                         fill(x0 - 4, -60, z0 + 1, x0 + 10, -58, z0 + 1, "minecraft:stone"),
                         setBlock(x0, -60, z0, "minecraft:oak_slab[type=bottom]"),
@@ -882,13 +1007,21 @@ public final class SelfTest
                         setBlock(x0 + 7, -61, z0, "minecraft:blocksGoalmland"));
                 Vec3 start = new Vec3(x0 - 3.0D, SURFACE_Y, z0 + 0.5D);
                 Vec3 blocksGoal = new Vec3(x0 + 9.0D, SURFACE_Y, z0 + 0.5D);
-                List<String> commands = new ArrayList<>(course);
-                commands.add("player " + a + " nav goto " + coords(blocksGoal));
                 double[] highest = {SURFACE_Y};
-                return new Scenario(900, List.of(new Bot(a, start)), commands, server ->
+                boolean[] walking = {false};
+                return new Scenario(900, List.of(new Bot(a, start)), course, server ->
                 {
                     ServerPlayer bot = player(server, a);
                     highest[0] = Math.max(highest[0], bot.getY());
+                    if (!Courses.laid(server, course, new BlockPos(x0 + 3, -59, z0), Blocks.OAK_STAIRS))
+                    {
+                        return pending(fmt("%s is waiting for the corridor to arrive", a));
+                    }
+                    if (!walking[0])
+                    {
+                        walking[0] = true;
+                        run(server, cmd(a + " nav goto " + coords(blocksGoal)));
+                    }
                     double left = bot.position().distanceTo(blocksGoal);
                     return new Probe(left <= 1.5D && highest[0] >= -58.5D, fmt(
                             "%s is %.2f blocks from the far end of the corridor, highest step was y=%.2f",
@@ -904,11 +1037,12 @@ public final class SelfTest
                 int sz = (int) origin.z;
                 int wallX = sx + 4;
                 int turnZ = sz + 10;
-                List<String> course = List.of(fill(wallX, -60, sz - 6, wallX, -59, sz + 6, "minecraft:stone"));
+                List<String> course = List.of(forceload(wallX - 1, sz - 6, wallX + 1, sz + 6),
+                        fill(wallX, -60, sz - 6, wallX, -59, sz + 6, "minecraft:stone"));
                 List<String> commands = List.of(
                         "effect give " + b + " minecraft:resistance 1 4 true",
-                        "player " + b + " move forward for 50",
-                        "player " + a + " nav chase attack 3.0 0 " + b);
+                        cmd(b + " move forward for 50"),
+                        cmd(a + " nav chase attack 3.0 0 " + b));
                 boolean[] turned = {false};
                 double[] worst = {0.0D};
                 List<String> all = new ArrayList<>(course);
@@ -920,7 +1054,7 @@ public final class SelfTest
                     if (!turned[0] && target.getZ() >= turnZ - 0.5D)
                     {
                         turned[0] = true;
-                        run(server, "player " + b + " move right for 55");
+                        run(server, cmd(b + " move right for 55"));
                     }
                     double gap = player(server, a).distanceTo(target);
                     worst[0] = Math.max(worst[0], gap);
@@ -939,25 +1073,41 @@ public final class SelfTest
                 int sz = (int) origin.z;
                 int wallZ = sz - 10;
                 List<String> course = List.of(
+                        // The chasers are spread over the ground south of the wall, so that is kept loaded too:
+                        // one whose chunk is not there has nothing to plan a route over.
+                        forceload(sx - 12, wallZ - 12, sx + 12, wallZ + 1),
                         fill(sx - 12, -60, wallZ, sx + 4, -59, wallZ, "minecraft:stone"),
                         fill(sx + 7, -60, wallZ, sx + 12, -59, wallZ, "minecraft:stone"));
                 List<Bot> bots = new ArrayList<>();
                 List<String> commands = new ArrayList<>();
                 commands.add("effect give " + b + " minecraft:resistance 1 4 true");
-                commands.add("player " + b + " move forward for 400");
+                commands.add(cmd(b + " move forward for 400"));
+                // The chasers are only told to chase once the wall is there, because one whose route is
+                // planned over ground that has not arrived gives the search up and never finds the gate.
+                List<String> chasing = new ArrayList<>();
                 for (int i = 0; i < 10; i++)
                 {
                     String chaser = a + "c" + i;
                     bots.add(new Bot(chaser, new Vec3(sx + (i % 5 - 2) * 2.0D, SURFACE_Y, wallZ - 8.0D - (i / 5) * 2.0D)));
-                    commands.add("player " + chaser + " nav chase attack 3.0 0 " + b);
+                    chasing.add(cmd(chaser + " nav chase attack 3.0 0 " + b));
                 }
                 bots.add(new Bot(b, new Vec3(sx + 0.5D, SURFACE_Y, sz + 0.5D)));
                 List<String> all = new ArrayList<>(course);
                 all.addAll(commands);
                 int[] peak = {0};
                 boolean[] shared = {false};
+                boolean[] started = {false};
                 return new Scenario(1200, bots, all, server ->
                 {
+                    if (!started[0])
+                    {
+                        if (!Courses.laid(server, course, new BlockPos(sx + 12, -60, wallZ), Blocks.STONE))
+                        {
+                            return pending("waiting for the wall and its gate to arrive");
+                        }
+                        chasing.forEach(command -> run(server, command));
+                        started[0] = true;
+                    }
                     peak[0] = Math.max(peak[0], NavSearchBudget.expansionsLastTick());
                     for (int i = 0; i < 10; i++)
                     {
@@ -966,15 +1116,23 @@ public final class SelfTest
                     ServerPlayer target = player(server, b);
                     double closest = Double.MAX_VALUE;
                     double farthest = 0.0D;
+                    int straggler = 0;
                     for (int i = 0; i < 10; i++)
                     {
                         double gap = player(server, a + "c" + i).distanceTo(target);
                         closest = Math.min(closest, gap);
-                        farthest = Math.max(farthest, gap);
+                        if (gap > farthest)
+                        {
+                            farthest = gap;
+                            straggler = i;
+                        }
                     }
+                    ServerPlayer late = player(server, a + "c" + straggler);
                     return new Probe(farthest <= 5.0D && peak[0] <= NavSearchBudget.sharedCap() && shared[0], fmt(
-                            "of the ten, closest %.1f and farthest %.1f blocks away, busiest tick spent %d of %d expansions, shared field used: %s",
-                            closest, farthest, peak[0], NavSearchBudget.sharedCap(), shared[0]));
+                            "of the ten, closest %.1f and farthest %.1f blocks away, the last one being c%d at %.1f %.1f %.1f"
+                                    + " with the target at %.1f %.1f %.1f, busiest tick spent %d of %d expansions, shared field used: %s",
+                            closest, farthest, straggler, late.getX(), late.getY(), late.getZ(), target.getX(),
+                            target.getY(), target.getZ(), peak[0], NavSearchBudget.sharedCap(), shared[0]));
                 });
             }
             case "nav_tick_budget":
@@ -998,7 +1156,7 @@ public final class SelfTest
                 return new Scenario(1200, List.of(new Bot(a, new Vec3(x0 + 0.5D, SURFACE_Y, z0 + 0.5D))), course,
                         server -> {
                             NavSearchBudget.reset();
-                            run(server, "player " + a + " nav goto " + coords(budgetGoal));
+                            run(server, cmd(a + " nav goto " + coords(budgetGoal)));
                         }, server ->
                 {
                     ServerPlayer bot = player(server, a);
@@ -1035,7 +1193,7 @@ public final class SelfTest
                 Vec3 smoothGoal = new Vec3(x0 + 40.0D, SURFACE_Y, z0 + 40.0D);
                 double[] last = {x0 + 0.5D, SURFACE_Y, z0 + 0.5D};
                 double[] walked = {0.0D};
-                boolean[] walkAsked = {false};
+boolean[] walkAsked = {false};
                 return new Scenario(900, List.of(new Bot(a, start)), List.of(), server ->
                 {
                     ServerPlayer bot = player(server, a);
@@ -1050,7 +1208,7 @@ public final class SelfTest
                                 return new Probe(false, "waiting for the chunks along the walk to load");
                             }
                         }
-                        run(server, "player " + a + " nav goto " + coords(smoothGoal));
+                        run(server, cmd(a + " nav goto " + coords(smoothGoal)));
                         walkAsked[0] = true;
                     }
                     walked[0] += bot.position().distanceTo(new Vec3(last[0], last[1], last[2]));
@@ -1141,7 +1299,7 @@ public final class SelfTest
                         swordKit(a).forEach(command -> run(server, command));
                         swordKit(b).forEach(command -> run(server, command));
                         swordCombat(a, "expert").forEach(command -> run(server, command));
-                        run(server, "player " + b + " move forward for 20");
+                        run(server, cmd(b + " move forward for 20"));
                         armed[0] = true;
                         return new Probe(false, fmt("%s walks up to %s and then stands there", b, a));
                     }
@@ -1173,7 +1331,7 @@ public final class SelfTest
                         swordKit(a, true).forEach(command -> run(server, command));
                         shieldKit(b).forEach(command -> run(server, command));
                         swordCombat(a, "skilled").forEach(command -> run(server, command));
-                        run(server, "player " + b + " use continuous");
+                        run(server, cmd(b + " use continuous"));
                         raised[0] = true;
                         return new Probe(false, fmt("%s is holding its shield up against %s", b, a));
                     }
@@ -1309,11 +1467,11 @@ public final class SelfTest
     static List<String> swordKit(String name, boolean withAxe)
     {
         List<String> kit = new ArrayList<>();
-        kit.add("player " + name + " equip mainhand minecraft:diamond_sword");
-        kit.add("player " + name + " equip head minecraft:diamond_helmet");
-        kit.add("player " + name + " equip chest minecraft:diamond_chestplate");
-        kit.add("player " + name + " equip legs minecraft:diamond_leggings");
-        kit.add("player " + name + " equip feet minecraft:diamond_boots");
+        kit.add(cmd(name + " equip mainhand minecraft:diamond_sword"));
+        kit.add(cmd(name + " equip head minecraft:diamond_helmet"));
+        kit.add(cmd(name + " equip chest minecraft:diamond_chestplate"));
+        kit.add(cmd(name + " equip legs minecraft:diamond_leggings"));
+        kit.add(cmd(name + " equip feet minecraft:diamond_boots"));
         if (withAxe)
         {
             kit.add("give " + name + " minecraft:diamond_axe");
@@ -1324,7 +1482,7 @@ public final class SelfTest
     static List<String> shieldKit(String name)
     {
         return List.of("give " + name + " minecraft:shield",
-                "player " + name + " equip offhand minecraft:shield");
+                cmd(name + " equip offhand minecraft:shield"));
     }
 
     /** Turns a bot into a sword fighter of the given difficulty. */
@@ -1409,7 +1567,7 @@ public final class SelfTest
 
     static void spawn(MinecraftServer server, String bot, Vec3 pos)
     {
-        run(server, "player " + bot + " spawn at " + coords(pos) + " facing 0 0 in minecraft:overworld in survival");
+        run(server, cmd(bot + " spawn at " + coords(pos) + " facing 0 0 in minecraft:overworld in survival"));
     }
 
     /** One duel of the difficulty scenario: the expert takes a different side every other duel. */
@@ -1464,8 +1622,8 @@ public final class SelfTest
         {
             expertWins++;
         }
-        run(server, "player " + first + " disconnect");
-        run(server, "player " + second + " disconnect");
+        run(server, cmd(first + " disconnect"));
+        run(server, cmd(second + " disconnect"));
         duelIndex++;
         duelTicks = 0;
         if (duelIndex >= DUELS)
@@ -1517,7 +1675,7 @@ public final class SelfTest
             budgetTickNanosTotal += now - budgetTickNanos;
         }
         budgetTickNanos = now;
-        int total = CarpetSettings.botSimBudget;
+        int total = BotSettings.botSimBudget;
         // The bots of this tick have not asked for their share yet, so what the budget spent is the
         // number of the tick before.
         budgetMax = Math.max(budgetMax, budget.usedLastTick());
@@ -1576,7 +1734,7 @@ public final class SelfTest
             budgetPlannedBefore = planned;
             budgetStarvedFrom = budgetWatch;
             budgetOriginal = total;
-            run(server, "carpet botSimBudget " + BUDGET_STARVED_RULE);
+            BotSettings.botSimBudget = BUDGET_STARVED_RULE;
             return new Probe(false, fmt("budget cut to %d", BUDGET_STARVED_RULE));
         }
         if (budgetPhase == STARVING)
@@ -1589,7 +1747,7 @@ public final class SelfTest
             starvedSeen = starved - budgetStarvedBefore;
             budgetPhase = RESTORED;
             budgetPlannedBefore = planned;
-            run(server, "carpet botSimBudget " + budgetOriginal);
+            BotSettings.botSimBudget = budgetOriginal;
             return new Probe(false, fmt("budget restored, %d starved ticks while it was %d",
                     starvedSeen, BUDGET_STARVED_RULE));
         }
@@ -1660,27 +1818,6 @@ public final class SelfTest
             return "holds " + describe(bot.getItemBySlot(EquipmentSlot.OFFHAND)) + " in its off hand instead of a shield";
         }
         return null;
-    }
-
-    // A bot program started through the Java API, the way the web editor's execute endpoint starts one, and
-    // never as the console: a program started from a command has no player to run its commands as.
-    static void startProgram(MinecraftServer server, String botName, String actions)
-    {
-        CarpetLogic logic = CarpetLogic.INSTANCE;
-        BotProgram program = new BotProgram("_selftest", "selftest", "");
-        program.setActions(GSON.fromJson(actions, new TypeToken<List<BotAction>>() {}.getType()));
-        logic.getSchema().validate(program.getActions());
-        String refused = logic.getProgramExecutor().startProgram(botName, program, null);
-        if (refused != null)
-        {
-            log(server, "could not start the program on " + botName + ": " + refused);
-        }
-    }
-
-    static String status(String botName)
-    {
-        ProgramInfo info = CarpetLogic.INSTANCE.getProgramExecutor().getPrograms().get(botName);
-        return info == null ? "gone" : info.status();
     }
 
     /** The first slot where the two lists differ, or null when they hold the same things. */
@@ -2099,7 +2236,7 @@ public final class SelfTest
                 "spawn tracking start",
                 "spawn mocking true"), server ->
         {
-            long now = SpawnReporter.spawn_attempts.isEmpty() ? 0 : SpawnReporter.spawn_attempts.values().stream().mapToLong(Long::longValue).sum();
+            long now = spawnAttempts.get();
             if (attempts[0] < 0 && ticks < 200) return new Probe(false, "waiting for the spawner, " + now + " attempts so far");
             if (attempts[0] < 0)
             {
@@ -2133,7 +2270,7 @@ public final class SelfTest
                 forceload(quietLamp),
                 setBlock(quietLamp, "minecraft:redstone_lamp"),
                 setBlock(liveLamp, "minecraft:redstone_lamp"),
-                "player " + a + " equip mainhand minecraft:redstone_block",
+                cmd(a + " equip mainhand minecraft:redstone_block"),
                 "carpet interactionUpdates false"), server ->
         {
             switch (phase[0])
@@ -2152,7 +2289,7 @@ public final class SelfTest
                 case 1:
                     if (ticks < placed[0] + 3) return pending("waiting for the lamp placed with the rule off");
                     quiet[0] = lit(server, quietLamp);
-                    run(server, "player " + a + " equip mainhand minecraft:redstone_block");
+                    run(server, cmd(a + " equip mainhand minecraft:redstone_block"));
                     run(server, "carpet interactionUpdates true");
                     placeByPacket(server, a, liveLamp, Direction.EAST);
                     placed[0] = ticks;
@@ -2234,7 +2371,7 @@ public final class SelfTest
                 "carpet scarpetItemUseEvents true",
                 "script run global_selftest_uses = 0",
                 "script run __on_player_uses_item(player, hand, item) -> global_selftest_uses = global_selftest_uses + 1",
-                "player " + a + " equip mainhand minecraft:bow"), server ->
+                cmd(a + " equip mainhand minecraft:bow")), server ->
         {
             ServerPlayer bot = player(server, a);
             if (on[0] < 0)
@@ -2415,7 +2552,7 @@ public final class SelfTest
                 if (explosionLeakPhase[2] == 0 || primed(server, spared) > 0) return pending("waiting for the first explosion");
                 explosionLeakPhase[0] = 1;
                 explosionLeakPhase[1] = ticks + 3;
-                queueLeftoverPositions(spared);
+                explosionPositionLeaver.accept(spared);
                 run(server, "carpet explosionNoBlockDamage false");
                 run(server, summonTnt(doomed.east(2)));
                 return new Probe(false, "second tnt primed with the rule off, a leftover position queued");
@@ -2513,7 +2650,7 @@ public final class SelfTest
     {
         // Whatever a scenario changed in the rules goes back now, so that one which failed or ran out of time
         // cannot hand the next one a server the run was not written against.
-        String restored = RuleGuard.leave(server);
+        String restored = RuleGuard.leave();
         // the two scenarios that need mobs to spawn turn this on for themselves
         run(server, "gamerule spawn_mobs false");
         Result result = new Result(names.get(results.size()), passed, ticks,
@@ -2562,7 +2699,7 @@ public final class SelfTest
         int exitCode = passed ? 0 : 1;
         stoppingServer = server;
         // Servers are usually stopped with bots online, so the run ends that way too.
-        run(server, "player SelfStop spawn at 0.5 -60 0.5 facing 0 0 in minecraft:overworld in survival");
+        run(server, cmd("SelfStop spawn at 0.5 -60 0.5 facing 0 0 in minecraft:overworld in survival"));
         log(server, "stopping with " + server.getPlayerList().getPlayers().size() + " fake player(s) online");
         server.halt(false);
         Thread watchdog = new Thread(() -> watchExit(serverThread, exitCode), "selftest-watchdog");
@@ -2725,7 +2862,7 @@ public final class SelfTest
     /** The action pack behind a bot, which is where its navigation state is read from. */
     static EntityPlayerActionPack pack(MinecraftServer server, String name)
     {
-        return ((ServerPlayerInterface) player(server, name)).getActionPack();
+        return ((EntityPlayerMPFake) player(server, name)).getActionPack();
     }
 
     static boolean lit(MinecraftServer server, BlockPos pos)
@@ -2916,28 +3053,6 @@ public final class SelfTest
             if (horse.isTrap()) traps++;
         }
         return traps;
-    }
-
-    /**
-     * Puts a block into the position set carpet.helpers.OptimizedExplosion carries from one explosion to the next, the
-     * way an explosion that skipped the walk would. Read and written by reflection, the way the watchdog reads the
-     * player tracker: nothing outside the helper has any business there.
-     */
-    private static void queueLeftoverPositions(BlockPos leftover)
-    {
-        try
-        {
-            Field field = OptimizedExplosion.class.getDeclaredField("affectedBlockPositionsSet");
-            field.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Collection<BlockPos> positions = (Collection<BlockPos>) field.get(null);
-            positions.clear();
-            positions.add(leftover.immutable());
-        }
-        catch (ReflectiveOperationException e)
-        {
-            throw new IllegalStateException("could not reach the explosion position cache", e);
-        }
     }
 
     static void log(MinecraftServer server, String message)
