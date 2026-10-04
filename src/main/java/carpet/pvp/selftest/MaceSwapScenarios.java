@@ -37,8 +37,12 @@ final class MaceSwapScenarios
 
     /** How far above its spawn point a pass lifts the fighter before the fall. */
     private static final double LIFT = 8.0;
-    /** Fall distance at which both passes swing, chosen so the falling fighter is inside the dummy's reach. */
-    private static final double FALL = 3.0;
+    /**
+     * How far the fighter must have dropped before it swings, which is what the smash gate turns on. The
+     * height is used rather than the counter because the two passes have to come down on the same tick, and
+     * the counter of a fighter that was teleported carries the height the teleport moved it.
+     */
+    private static final double MIN_DROP = 1.6;
     /**
      * How far the falling fighter's eyes may still be over the top of the dummy when it swings. The action
      * pack traces a ray three blocks long from the eyes to find what a click would hit, which is shorter than
@@ -54,6 +58,7 @@ final class MaceSwapScenarios
     private static final int RECHARGE = 80;
 
     private final String fighter;
+    private final String other;
     private final String dummy;
     private final Vec3 spot;
     private final Vec3 rest;
@@ -61,10 +66,13 @@ final class MaceSwapScenarios
     private int phase;
     private int ticks;
     private int settle;
+    private int[] settling = {0};
     private float top = 1000.0F;
     private float bottom = 1000.0F;
     private float fallA = -1.0F;
     private float fallB = -1.0F;
+    /** Counter the fighter already carried when it was lifted, which the two passes are read against. */
+    private final float[] base = {0.0F};
     private float dealtA;
     private float dealtB;
     private int cadenceA;
@@ -72,9 +80,16 @@ final class MaceSwapScenarios
     private boolean ready;
     private String report;
 
-    private MaceSwapScenarios(String fighter, String dummy, Vec3 spot, Vec3 rest, boolean falls)
+    /**
+     * @param fighter the fighter of the first pass
+     * @param other   the fighter of the second pass, a player of its own, because a teleport adds the height
+     *                it moved to the fall distance of the fighter it moved and a second lift would leave
+     *                the counter of the first pass on the second
+     */
+    private MaceSwapScenarios(String fighter, String other, String dummy, Vec3 spot, Vec3 rest, boolean falls)
     {
         this.fighter = fighter;
+        this.other = other;
         this.dummy = dummy;
         this.spot = spot;
         this.rest = rest;
@@ -85,15 +100,17 @@ final class MaceSwapScenarios
     static Scenario swapProbe(String a, String b, String c, Vec3 origin)
     {
         Vec3 spot = origin.add(0.0D, 0.0D, UNDER);
-        MaceSwapScenarios probe = new MaceSwapScenarios(a, b, spot, origin, true);
-        return new Scenario(700, List.of(new Bot(a, origin), new Bot(b, spot, 180.0D)), List.of(), probe::tick);
+        MaceSwapScenarios probe = new MaceSwapScenarios(a, c, b, spot, origin, true);
+        return new Scenario(700, List.of(new Bot(a, origin), new Bot(b, spot, 180.0D), new Bot(c, origin)),
+                List.of(), probe::tick);
     }
 
     static Scenario breachSwapProbe(String a, String b, String c, Vec3 origin)
     {
         Vec3 spot = origin.add(0.0D, 0.0D, UNDER);
-        MaceSwapScenarios probe = new MaceSwapScenarios(a, b, spot, origin, false);
-        return new Scenario(500, List.of(new Bot(a, origin), new Bot(b, spot, 180.0D)), List.of(), probe::tick);
+        MaceSwapScenarios probe = new MaceSwapScenarios(a, c, b, spot, origin, false);
+        return new Scenario(500, List.of(new Bot(a, origin), new Bot(b, spot, 180.0D), new Bot(c, origin)),
+                List.of(), probe::tick);
     }
 
     /**
@@ -104,17 +121,22 @@ final class MaceSwapScenarios
      */
     private Probe tick(MinecraftServer server)
     {
-        ServerPlayer bot = SelfTest.player(server, fighter);
+        // The odd phases are the fall probe's two passes and the even ones its two readings; the ground probe
+        // starts at phase eight, and each pass is made by a fighter of its own so neither is lifted twice.
+        boolean swap = phase >= 2 && phase < 8 && (phase - 2) / 2 % 2 == 1;
+        String name = phase >= 8 || swap ? other : fighter;
+        ServerPlayer bot = SelfTest.player(server, name);
         ServerPlayer target = SelfTest.player(server, dummy);
         if (bot == null || target == null) return SelfTest.pending("the fighters have not joined yet");
-        if (SelfTest.warmingUp(server, fighter, dummy))
+        if (SelfTest.warmingUp(server, fighter, other, dummy))
         {
-            return new Probe(false, SelfTest.fmt("waiting for %s and %s to finish loading", fighter, dummy));
+            return new Probe(false, SelfTest.fmt("waiting for %s, %s and %s to finish loading", fighter, other, dummy));
         }
         if (!ready)
         {
             ready = true;
             SelfTest.run(server, "bot kit give " + fighter + " mace");
+            SelfTest.run(server, "bot kit give " + other + " mace");
             SelfTest.run(server, "bot kit give " + dummy + " mace");
             if (falls)
             {
@@ -134,21 +156,26 @@ final class MaceSwapScenarios
         switch (phase)
         {
             case 0 -> {
-                select(server, SMASH_MACE);
+                select(server, name, SMASH_MACE);
                 if (++ticks > MaceSwap.MACE_TICKS)
                 {
-                    lift(server);
+                    lift(server, name);
                     phase = 1;
                 }
                 progress = SelfTest.fmt("charging the mace %d/%d", ticks, MaceSwap.MACE_TICKS);
             }
             case 1 -> {
-                if (bot.fallDistance < FALL || !above(bot, target))
+                settle(server, name);
+                if (base[0] < 0.0F)
+                {
+                    base[0] = (float) bot.fallDistance;
+                }
+                if ((rest.add(0.0D, LIFT, 0.0D).y - bot.getY()) < MIN_DROP || !above(bot, target))
                 {
                     return SelfTest.pending(SelfTest.fmt("falling, %.2f of the way down", bot.fallDistance));
                 }
-                fallA = (float) bot.fallDistance;
-                swing(server);
+                fallA = (float) bot.fallDistance - base[0];
+                swing(server, name);
                 phase = 2;
                 progress = SelfTest.fmt("swung out of %.2f of fall with the mace already in hand", fallA);
             }
@@ -159,7 +186,7 @@ final class MaceSwapScenarios
                     return SelfTest.pending(SelfTest.fmt("reading what the swing did: %.2f so far", top - bottom));
                 }
                 dealtA = top - bottom;
-                select(server, SMASH_MACE);
+                select(server, name, SMASH_MACE);
                 phase = 3;
                 progress = SelfTest.fmt("the mace held through did %.2f", dealtA);
             }
@@ -170,29 +197,34 @@ final class MaceSwapScenarios
                             bot.getAttackStrengthScale(0.5F)));
                 }
                 cadenceA = ticks;
-                select(server, SWORD);
+                select(server, name, SWORD);
                 ticks = 0;
                 phase = 4;
                 progress = SelfTest.fmt("the mace was ready again after %d ticks", cadenceA);
             }
             case 4 -> {
-                select(server, SWORD);
+                select(server, name, SWORD);
                 if (++ticks > MaceSwap.SWORD_TICKS)
                 {
-                    lift(server);
+                    lift(server, name);
                     phase = 5;
                 }
                 progress = SelfTest.fmt("charging the sword %d/%d", ticks, MaceSwap.SWORD_TICKS);
             }
             case 5 -> {
-                if (bot.fallDistance < FALL || !above(bot, target))
+                settle(server, name);
+                if (base[0] < 0.0F)
+                {
+                    base[0] = (float) bot.fallDistance;
+                }
+                if ((rest.add(0.0D, LIFT, 0.0D).y - bot.getY()) < MIN_DROP || !above(bot, target))
                 {
                     return SelfTest.pending(SelfTest.fmt("falling, %.2f of the way down", bot.fallDistance));
                 }
-                fallB = (float) bot.fallDistance;
+                fallB = (float) bot.fallDistance - base[0];
                 // The swap the technique is about: the item in the hand changes on the tick of the swing.
-                select(server, SMASH_MACE);
-                swing(server);
+                select(server, name, SMASH_MACE);
+                swing(server, name);
                 phase = 6;
                 progress = SelfTest.fmt("swung out of %.2f of fall with the mace swapped in on the tick", fallB);
             }
@@ -203,7 +235,7 @@ final class MaceSwapScenarios
                     return SelfTest.pending(SelfTest.fmt("reading what the swing did: %.2f so far", top - bottom));
                 }
                 dealtB = top - bottom;
-                select(server, SWORD);
+                select(server, name, SWORD);
                 phase = 7;
                 progress = SelfTest.fmt("the swapped smash did %.2f", dealtB);
             }
@@ -224,7 +256,7 @@ final class MaceSwapScenarios
                 return SelfTest.pending(report);
             }
             case 8 -> {
-                select(server, SWORD);
+                select(server, name, SWORD);
                 mark(server);
                 ticks = 0;
                 phase = 9;
@@ -233,7 +265,7 @@ final class MaceSwapScenarios
             case 9 -> {
                 if (++ticks > MaceSwap.SWORD_TICKS)
                 {
-                    swing(server);
+                    swing(server, name);
                     phase = 10;
                 }
                 progress = SelfTest.fmt("charging the sword %d/%d", ticks, MaceSwap.SWORD_TICKS);
@@ -244,17 +276,17 @@ final class MaceSwapScenarios
                     return SelfTest.pending(SelfTest.fmt("reading what the swing did: %.2f so far", top - bottom));
                 }
                 dealtA = top - bottom;
-                select(server, SWORD);
+                select(server, name, SWORD);
                 ticks = 0;
                 phase = 11;
                 progress = SelfTest.fmt("the sword on its own did %.2f through the netherite", dealtA);
             }
             case 11 -> {
-                select(server, SWORD);
+                select(server, name, SWORD);
                 if (++ticks > MaceSwap.SWORD_TICKS)
                 {
-                    select(server, BREACH_MACE);
-                    swing(server);
+                    select(server, name, BREACH_MACE);
+                    swing(server, name);
                     phase = 12;
                 }
                 progress = SelfTest.fmt("charging the sword %d/%d", ticks, MaceSwap.SWORD_TICKS);
@@ -300,18 +332,37 @@ final class MaceSwapScenarios
         bot.setXRot((float) -Math.toDegrees(Math.atan2(dy, flat)));
     }
 
+    /** Two ticks of settling after a lift, which is how long the teleport takes to book the fall distance. */
+    private static final int LIFT_SETTLE = 2;
+
     /** One hotbar change, which is what a player's scroll wheel does and what the game allows. */
-    private void select(MinecraftServer server, int slot)
+    private void select(MinecraftServer server, String who, int slot)
     {
-        SelfTest.run(server, "player " + fighter + " hotbar " + slot);
+        SelfTest.run(server, "player " + who + " hotbar " + slot);
     }
 
     /** Lifts the fighter clear of the ground to begin the fall, and starts reading the dummy's health. */
-    private void lift(MinecraftServer server)
+    private void lift(MinecraftServer server, String who)
     {
-        SelfTest.run(server, "tp " + fighter + " " + SelfTest.coords(rest.add(0.0D, LIFT, 0.0D)));
+        SelfTest.run(server, "tp " + who + " " + SelfTest.coords(rest.add(0.0D, LIFT, 0.0D)));
         SelfTest.run(server, "data merge entity " + fighter + " {FallDistance:0.0d,Motion:[0.0d,0.0d,0.0d]}");
         mark(server);
+        settling[0] = LIFT_SETTLE;
+        base[0] = -1.0F;
+    }
+
+    /**
+     * A teleport adds the height it moved to the counter of the fighter it moved, because the game counts
+     * fall distance from the movement between two positions, so the counter is put back on the first tick of
+     * the fall as well. Without this the second pass would start with the first pass's fall still on it.
+     */
+    private void settle(MinecraftServer server, String who)
+    {
+        if (settling[0] > 0)
+        {
+            SelfTest.run(server, "data merge entity " + who + " {FallDistance:0.0d,Motion:[0.0d,0.0d,0.0d]}");
+            settling[0]--;
+        }
     }
 
     private void mark(MinecraftServer server)
@@ -329,13 +380,13 @@ final class MaceSwapScenarios
         ticks = 0;
     }
 
-    private void swing(MinecraftServer server)
+    private void swing(MinecraftServer server, String who)
     {
         // The dummy regenerates in between, so the reading starts on the tick of the swing itself.
         ServerPlayer target = SelfTest.player(server, dummy);
         top = target.getHealth();
         bottom = top;
-        SelfTest.run(server, "player " + fighter + " attack once");
+        SelfTest.run(server, "player " + who + " attack once");
         settle = SETTLE;
         ticks = 0;
     }
