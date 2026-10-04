@@ -77,5 +77,10 @@ final class ScenarioIndex
         SCENARIOS.put("smp_heals", SmpScenarios::heals);
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
         SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
+        SCENARIOS.put("fake_block_front", BlockingScenarios::front);
+        SCENARIOS.put("fake_block_behind", BlockingScenarios::behind);
+        SCENARIOS.put("fake_block_explosion", BlockingScenarios::explosion);
+        SCENARIOS.put("fake_block_axe", BlockingScenarios::axeBreaks);
+        SCENARIOS.put("fake_sword_block", BlockingScenarios::swordBlock);
     }
 }

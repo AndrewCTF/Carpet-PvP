@@ -148,6 +148,15 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `mace_no_fall_damage_on_miss` | 900 | A launch with the target lifted out of the arc still comes down harmless: the bot spends a second wind charge and lands on full health. |
 | `mace_attribute_swap_probe` | 600 | Whether this version lets a mace hit carry an attack cooldown collected under another item: two swings with the same wait, one of them swapping item on the tick of the hit. Passes either way, records the answer the style obeys. |
 | `mace_duel` | 4500 | The expert mace bot against the expert sword bot in netherite, alternating sides: a round is won by putting the other fighter down, or on the damage traded when neither went down. The mace bot has to win four of the six. |
+| `smp_heals` | 1200 | A bot put down to a few hearts heals with what it is carrying and goes back to swinging. |
+| `smp_retotem` | 1100 | A lethal hit pops the totem in the offhand and a fresh one is in it again after the configured wait. |
+| `smp_buffs` | 1400 | Strength handed out with a command runs out and the bot replaces it before it does. |
+| `smp_pearl_retreat` | 1300 | Written but not registered: it does not pass reliably, see [SmpDuel.md](SmpDuel.md). |
+| `fake_block_front` | 900 | A sword hit from the front is stopped by a raised shield, the shield takes the wear of stopping it, and the same fighter takes the same hits in full once the shield is taken away. |
+| `fake_block_behind` | 700 | The same hit with the source behind the shield lands in full and the shield takes none of it. |
+| `fake_block_explosion` | 900 | Explosion damage from behind a raised shield reaches a fake player, and the shield stops none of it. |
+| `fake_block_axe` | 900 | An axe from the front takes the shield down and on cooldown, and a hit from the same direction lands on the next tick. |
+| `fake_sword_block` | 900 | With `swordBlockHitting` on a fake player holding a sword up loses the rule's share of a fixed hit and with it off loses all of it. |
 
 `kit_give` checks these values, one per built-in kit:
 

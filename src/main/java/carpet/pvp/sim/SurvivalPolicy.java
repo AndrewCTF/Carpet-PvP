@@ -258,18 +258,36 @@ public final class SurvivalPolicy
         HealthForecast baseline = HealthForecast.project(in.health, in.maxHealth, in.absorption, in.effects,
                 in.food, in.exhaustionPerTick, in.incomingDamagePerTick, incomingDelay, horizon);
         List<Option> options = new ArrayList<>();
+        Option fighting = null;
+        Option closing = null;
         if (in.beingHit || in.distance <= DuelSim.REACH)
         {
-            options.add(score(in, Action.KEEP_FIGHTING, "trade at " + in.incomingDamagePerTick + " hp/tick",
+            fighting = score(in, Action.KEEP_FIGHTING, "trade at " + in.incomingDamagePerTick + " hp/tick",
                     baseline, 0, 0.0f, 0, 0.0f, 0,
-                    in.enemyHealth - in.outgoingDamagePerTick * horizon));
+                    in.enemyHealth - in.outgoingDamagePerTick * horizon);
+            options.add(fighting);
         }
+        else
+        {
+            // Scored here and put in the list at the end, so the options still read in the order they are
+            // thought about while each of them can be weighed against what spending nothing is worth.
+            HealthForecast walked = HealthForecast.project(in.health, in.maxHealth, in.absorption, in.effects,
+                    in.food, in.exhaustionPerTick, in.incomingDamagePerTick, in.travelTicks, horizon);
+            closing = score(in, Action.RE_ENGAGE,
+                    "close " + in.travelTicks + " ticks and resume trading",
+                    walked, 0, 0.0f, 0, 0.0f, in.travelTicks,
+                    in.enemyHealth - in.outgoingDamagePerTick * (horizon - in.travelTicks));
+        }
+        // What the bot is on if it keeps nothing back, which is what every item has to beat and so what the
+        // reserve of one of them is measured against.
+        double held = (fighting != null ? fighting : closing).score;
 
         if (in.eatingCooldown <= 0)
         {
-            food(options, in, Action.EAT_GOLDEN_APPLE, Effects.GOLDEN_APPLE, in.goldenApples, horizon, baseline);
+            food(options, in, Action.EAT_GOLDEN_APPLE, Effects.GOLDEN_APPLE, in.goldenApples, horizon, baseline,
+                    held);
             food(options, in, Action.EAT_ENCHANTED_GOLDEN_APPLE, Effects.ENCHANTED_GOLDEN_APPLE,
-                    in.enchantedGoldenApples, horizon, baseline);
+                    in.enchantedGoldenApples, horizon, baseline, held);
         }
         if (in.healingPotions > 0 && in.potionCooldown <= 0)
         {
@@ -283,8 +301,8 @@ public final class SurvivalPolicy
         }
         if (in.buffPotions > 0 && in.potionCooldown <= 0)
         {
-            buff(options, in, horizon, baseline, false);
-            buff(options, in, horizon, baseline, true);
+            buff(options, in, horizon, baseline, held, false);
+            buff(options, in, horizon, baseline, held, true);
         }
         armor(options, in, horizon, baseline);
         if (in.pearls > 0 && in.pearlCooldown <= 0 && baseline.ticksToLethal() > 0)
@@ -296,17 +314,14 @@ public final class SurvivalPolicy
                     "pearl away, " + in.pearls + " left, out of reach for " + breakTicks + " ticks",
                     escaped, 0, 0.0f, 0, 0.0f, HOTBAR_SWAP_TICKS, in.enemyHealth), -reserve(in.pearls)));
         }
-        if (!in.beingHit && in.distance > DuelSim.REACH)
+        if (closing != null)
         {
-            HealthForecast closing = HealthForecast.project(in.health, in.maxHealth, in.absorption, in.effects,
-                    in.food, in.exhaustionPerTick, in.incomingDamagePerTick, in.travelTicks, horizon);
-            options.add(score(in, Action.RE_ENGAGE,
-                    "close " + in.travelTicks + " ticks and resume trading",
-                    closing, 0, 0.0f, 0, 0.0f, in.travelTicks,
-                    in.enemyHealth - in.outgoingDamagePerTick * (horizon - in.travelTicks)));
+            options.add(closing);
         }
 
-        Option best = options.get(0);
+        // What the bot is carrying is only worth spending when spending it is worth more than the fight it
+        // would be spent in, so a level score goes to carrying on with it.
+        Option best = fighting != null ? fighting : closing;
         for (Option option : options)
         {
             if (option.score > best.score)
@@ -338,7 +353,7 @@ public final class SurvivalPolicy
     }
 
     private void food(List<Option> options, Inputs in, Action action, Effects.Consumable item, int carried,
-                      int horizon, HealthForecast baseline)
+                      int horizon, HealthForecast baseline, double held)
     {
         if (carried <= 0)
         {
@@ -354,7 +369,8 @@ public final class SurvivalPolicy
                 in.enemyHealth - in.outgoingDamagePerTick * (horizon - item.useTicks)), -reserve(carried)));
     }
 
-    private void buff(List<Option> options, Inputs in, int horizon, HealthForecast baseline, boolean thrown)
+    private void buff(List<Option> options, Inputs in, int horizon, HealthForecast baseline, double held,
+                      boolean thrown)
     {
         int cost = thrown ? HOTBAR_SWAP_TICKS + THROW_AIM_TICKS : Effects.CONSUME_TICKS;
         int duration = in.buffPotionTicks;

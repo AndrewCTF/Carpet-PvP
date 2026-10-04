@@ -40,6 +40,27 @@ class SmpPlanTest
     }
 
     /**
+     * The same fight with nothing in it but the gaps, for the cases that ask what the model does with an
+     * eat: with a splash in the bag the model weighs the two against each other, and which one it picks is
+     * the model's business rather than what these cases are about.
+     */
+    private SurvivalPolicy.Decision unhurried()
+    {
+        SurvivalPolicy.Inputs in = gapsOnly(20.0F, 0.02F, 2);
+        // An exchange this bot is not winning, so over the window it neither gains nor gives up ground.
+        in.outgoingDamagePerTick = 0.2F;
+        return policy.decide(in);
+    }
+
+
+    private SurvivalPolicy.Inputs gapsOnly(float health, float rate, int goldenApples)
+    {
+        SurvivalPolicy.Inputs in = trade(health, rate, goldenApples);
+        in.healingPotions = 0;
+        return in;
+    }
+
+    /**
      * A fight at melee range with a hit every few ticks, which is what the model is meant to be scored
      * against: the rate of health loss a sword exchange actually costs.
      */
@@ -101,17 +122,17 @@ class SmpPlanTest
     void anEatIsOnlyTakenWhenTheModelAsksForOne()
     {
         // One gap, a slow drain and twelve health: the apple's regen and absorption land inside the
-        // window, which is the only shape in which a thirty two tick eat is worth more than the
-        // offence it costs. A bot with a stack of gaps is held back by the model's reserve rule, so
-        // the eat here is the one-gap case.
-        SurvivalPolicy.Decision healing = policy.decide(trade(12.0F, 0.19F, 1));
+        // window, which is the only shape in which a thirty two tick eat is worth more than the offence
+        // it costs, and nothing else is in the bag to be weighed against it. A drain this slow is what
+        // makes the eat the right answer rather than a five tick splash.
+        SurvivalPolicy.Decision healing = policy.decide(gapsOnly(12.0F, 0.08F, 1));
         assertEquals(Action.EAT_GOLDEN_APPLE, healing.chosen.action);
         assertEquals(SmpPlan.Move.EAT, expert().choose(healing, noBuff, nothing, true));
         // A bot that may not eat keeps trading instead.
         assertEquals(SmpPlan.Move.FIGHT, new SmpPlan(SmpGates.of(Difficulty.EXPERT, all(SmpGates.OPT_EAT)))
                 .choose(healing, noBuff, nothing, true));
-        // And a comfortable trade is left alone.
-        SurvivalPolicy.Decision comfortable = policy.decide(trade(20.0F, 0.15F, 2));
+        // And a trade the apple would not improve at all is left alone.
+        SurvivalPolicy.Decision comfortable = unhurried();
         assertEquals(Action.KEEP_FIGHTING, comfortable.chosen.action);
         assertEquals(SmpPlan.Move.FIGHT, expert().choose(comfortable, noBuff, nothing, true));
     }
@@ -191,7 +212,7 @@ class SmpPlanTest
     {
         // Comfortable at full health with the enemy in reach: the model only wants to keep trading,
         // but the strength is twenty seconds from running out and there is a splash of it to hand.
-        SurvivalPolicy.Decision decision = policy.decide(trade(20.0F, 0.15F, 2));
+        SurvivalPolicy.Decision decision = unhurried();
         assertEquals(Action.KEEP_FIGHTING, decision.chosen.action);
         SmpPlan.Buffs running = new SmpPlan.Buffs(SurvivalPolicy.Buff.STRENGTH, 40, 240, 4, 1, 1800, true);
         assertEquals(SmpPlan.Move.BUFF_THROW, expert().choose(decision, running, nothing, true));
@@ -213,7 +234,7 @@ class SmpPlanTest
     void aSlowHealIsNotPostponedForABuff()
     {
         // Eating and topping up at the same time is two things at once, so the heal wins.
-        SurvivalPolicy.Decision decision = policy.decide(trade(12.0F, 0.19F, 1));
+        SurvivalPolicy.Decision decision = policy.decide(gapsOnly(12.0F, 0.08F, 1));
         assertEquals(Action.EAT_GOLDEN_APPLE, decision.chosen.action);
         SmpPlan.Buffs running = new SmpPlan.Buffs(SurvivalPolicy.Buff.STRENGTH, 40, 240, 4, 1, 1800, true);
         assertEquals(SmpPlan.Move.EAT, expert().choose(decision, running, nothing, true));
@@ -223,7 +244,7 @@ class SmpPlanTest
     void waterGoesUnderItsOwnFeetBeforeAnythingElse()
     {
         // Burning out of a long fall matters more than the fight the model was scoring.
-        SurvivalPolicy.Decision decision = policy.decide(trade(12.0F, 0.19F, 1));
+        SurvivalPolicy.Decision decision = policy.decide(gapsOnly(12.0F, 0.08F, 1));
         SmpPlan.Hazard fire = new SmpPlan.Hazard(false, true, true);
         assertEquals(SmpPlan.Move.BUCKET, expert().choose(decision, noBuff, fire, true));
         // With no bucket in the hotbar there is nothing the bot can do about it.
@@ -237,7 +258,7 @@ class SmpPlanTest
     @Test
     void aCobwebGoesDownUnderATargetThatIsRunning()
     {
-        SurvivalPolicy.Decision decision = policy.decide(trade(20.0F, 0.15F, 2));
+        SurvivalPolicy.Decision decision = unhurried();
         SmpPlan.Hazard running = new SmpPlan.Hazard(true, false, true);
         assertEquals(SmpPlan.Move.WEB, expert().choose(decision, noBuff, running, true));
         assertEquals(SmpPlan.Move.FIGHT, expert().choose(decision, noBuff, nothing, true));
@@ -250,7 +271,7 @@ class SmpPlanTest
     void thePlanRemembersWhyItChoseWhatItChose()
     {
         SmpPlan plan = expert();
-        SurvivalPolicy.Decision decision = policy.decide(trade(12.0F, 0.19F, 1));
+        SurvivalPolicy.Decision decision = policy.decide(gapsOnly(12.0F, 0.08F, 1));
         assertEquals(SmpPlan.Move.EAT, plan.choose(decision, noBuff, nothing, true));
         assertEquals(plan.move(), SmpPlan.Move.EAT);
         assertEquals(decision.chosen.reason, plan.reason());

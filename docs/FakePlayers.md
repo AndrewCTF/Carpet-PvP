@@ -652,7 +652,7 @@ pitch, the horizontal boost and how many ticks of it.
 | `autoarmor` | `true`/`false` | planned, not implemented |
 | `autoweapon` | `true`/`false` | planned, not implemented |
 | `autorepair` | `true`/`false` | planned, not implemented |
-| `combatstyle` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | which style fights; the sword (`sword`, `MELEE`) and the mace (`mace`) are implemented, the others fall back to the sword |
+| `combatstyle` | `MELEE`, `SMP`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | which style fights; the sword (`sword`, `MELEE`), the SMP style (`smp`) and the mace (`mace`) are implemented, the others fall back to the sword |
 | `prefersword` | `true`/`false` | stored, not used yet |
 | `shieldbreak` | `true`/`false` | stored, not used yet |
 | `critical` | `true`/`false` | chase with crit hits |
@@ -678,6 +678,35 @@ atkCd=0 | realism[miss=0,mistake=0,reaction=0] | faction=none
 
 Setting `faction` through `ai` also joins or leaves the faction registry, so `/player <name>
 faction info` stays right.
+
+### SMP style options
+
+The SMP style is a sword bot that heals, re-totems and keeps its buffs up. It has a page of its own,
+[SmpStyle.md](SmpStyle.md), with the kit it fights in, how it decides and every option it reads; they are
+set the same way as any other bot setting and per bot:
+
+```
+/bot option <name> smp.pearl false
+```
+
+| Option | Values | What it does |
+|---|---|---|
+| `smp.eat` | `true`/`false` | the golden apple and the enchanted one |
+| `smp.splashheal` | `true`/`false` | the splash healing at its own feet |
+| `smp.buff` | `true`/`false` | drinking and throwing strength and swiftness |
+| `smp.totem` | `true`/`false` | the totem in the offhand and the wait after a pop |
+| `smp.armor` | `true`/`false` | the spare piece of armour |
+| `smp.mend` | `true`/`false` | the experience bottles |
+| `smp.pearl` | `true`/`false` | the pearl that buys room to heal in |
+| `smp.web` | `true`/`false` | the cobweb, which the game refuses to place against a body |
+| `smp.bucket` | `true`/`false` | the water under its own feet |
+| `smp.guard` | `true`/`false` | the shield up between uses |
+| `smp.retotem` | ticks | the wait after a totem pops before a fresh one goes in |
+| `smp.buffwindow` | ticks | how long before a buff runs out it is topped up |
+| `smp.peelback` | blocks | how far a retreat throw aims for |
+
+Every one of them is also gated by the difficulty preset, from `beginner` for the apple and the totem to
+`skilled` for the splash, the buffs, the bottles and the pearl.
 
 ### Mace style options
 
@@ -754,5 +783,6 @@ inventory snapshots `/bot kit give` takes are not.
 - [Commands.md](Commands.md) — every command the mod registers
 - [Rules.md](Rules.md) — the PvP, bot and fake-player rules and their defaults
 - [Kits.md](Kits.md) — `/bot kit`, the kit file format and the built-in kits
+- [SmpStyle.md](SmpStyle.md) — the SMP combat style, its kit and its options
 - [CarpetLogic.md](CarpetLogic.md) — programming bots in the web editor
 - [SwordBlocking.md](SwordBlocking.md) — `swordBlockHitting` and 1.8-style block hitting
