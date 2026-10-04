@@ -14,6 +14,11 @@ There is also a smaller set of plain JUnit tests (`./gradlew test`) for pure log
 the pathfinder, the action schema, kit parsing. Those run in `build` without a server. This page is
 about the server one.
 
+The self-test also never looks at the client: `-Dcarpet.mixinAudit=true` applies the mixins in the
+`mixins` list, not the `client` list of `carpet.mixins.json`. `./gradlew runClientCheck` is the
+client-side counterpart — it boots a dev client on an `Xvfb`, applies every client mixin and quits.
+See [Building.md](Building.md#runclientcheck).
+
 ## Running it
 
 Every version, every scenario:

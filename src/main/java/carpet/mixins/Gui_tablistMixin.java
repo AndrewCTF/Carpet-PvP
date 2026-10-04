@@ -21,7 +21,8 @@ public abstract class Gui_tablistMixin
 
     @Shadow @Final private PlayerTabOverlay tabList;
 
-    @Redirect(method = "renderTabList", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;isLocalServer()Z"))
+    //~ if <26.1 'extractTabList' -> 'renderTabList'
+    @Redirect(method = "extractTabList", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;isLocalServer()Z"))
     private boolean onDraw(Minecraft minecraftClient)
     {
         return this.minecraft.isLocalServer() && !((PlayerListHudInterface) tabList).hasFooterOrHeader();

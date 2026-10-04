@@ -1,5 +1,6 @@
 package carpet.pvp;
 
+import carpet.client.ClientMixinAudit;
 import carpet.client.SwordBlockVisuals;
 import carpet.network.ClientNetworkHandler;
 import net.fabricmc.api.ClientModInitializer;
@@ -16,6 +17,7 @@ public final class PvpClientInitializer implements ClientModInitializer
     @Override
     public void onInitializeClient()
     {
+        ClientMixinAudit.register();
         ClientTickEvents.END_CLIENT_TICK.register(client ->
         {
             SwordBlockVisuals.tick();

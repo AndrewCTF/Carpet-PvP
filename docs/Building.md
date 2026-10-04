@@ -178,6 +178,7 @@ Each combination gets its own directory under `run/`, so they can all be up at o
 | `:26.2:runServer` | `run/26.2/server` |
 | `:1.21.11:runServer` | `run/1.21.11/server` |
 | `:26.3:runSelfTest` | `run/selftest-26.3` |
+| `:26.3:runClientCheck` | `run/26.3/clientCheck` |
 
 The world is per Minecraft version because an older server cannot open a newer world.
 
@@ -197,6 +198,29 @@ The same check can be run without a server:
 ```
 ./gradlew :26.3:webuiTest      # editor graph compiler, needs node
 ```
+
+### `runClientCheck`
+
+```
+./gradlew runClientCheck              # every version
+./gradlew :1.21.11:runClientCheck     # one version
+```
+
+The audit above runs on the server, so it never touches the `client` list of
+`carpet.mixins.json`: a client mixin whose target moved only fails the first time the game loads
+that class, which for a rendering class can be minutes into a session or not at all.
+`runClientCheck` is the same check on the client. It
+
+- starts an `Xvfb` on the first display of `:90`..`:99` that is free (each version starts at its
+  own, so the three run at once), with Mesa's software GLX because the machine has no GPU, and
+  stops it when the run is over,
+- runs the dev client with `-Dcarpet.mixinAudit=true` until `ClientLifecycleEvents.CLIENT_STARTED`,
+- force-loads every class a client mixin targets, so each one is applied and checked,
+- then quits.
+
+It fails when the client reports a mixin failure, when it never reached the end of the audit, and
+when the run times out. It is not part of `build`, because it needs `Xvfb` and a display; run it
+before a release or after touching anything under the `client` list.
 
 ### Self-test
 
