@@ -104,7 +104,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-There are **113** of them: 52 built into `SelfTest.java` and 61 more registered in
+There are **116** of them: 52 built into `SelfTest.java` and 64 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
@@ -228,6 +228,8 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `crossbow_cycle` | 900 | The charged component appears and disappears at least three times, and at least two shots put the target below full health at 14 blocks. |
 | `trident_throw` | 900 | A ranged bot given three tridents completes at least one charge-and-release cast and hits twice from about twelve blocks. |
 | `spear_reach` | 1200 | With the spear charged past its wind-up the bot stands at a gap where the spear reaches and the sword does not, and records the peak closing speed. |
+| `spear_thrust_damage` | 900 | The bot charges a netherite spear, runs in from outside its reach and thrusts: every thrust takes the health the model gives for the closing speed the game used, within one health. |
+| `ranged_closes_ground` | 600 | With a charged spear in hand the bot closes most of eighteen blocks on its target and reaches most of a sprint's speed, which a flat slowdown for every item in use made impossible. |
 | `tnt_cart_safe` | 1200 | The bot lays rail and a tnt minecart beside a target hemmed into two walls, stands off at least eight blocks from the cart — where its own plan says the blast can no longer reach — never drops below 20 health, and the cart is still standing. |
 | `ranged_keeps_distance` | 1200 | Against a casual sword bot in a walled arena the expert ranged bot holds at least six blocks for at least twenty ticks while holding a bow or crossbow, never closes inside three blocks while shooting, and does land a hit once it switches to the sword. |
 | `ranged_duel` | 1200 | In an expert-against-expert duel thirty blocks apart the ranged bot hurts the sword bot before it has to put the sword away. |
