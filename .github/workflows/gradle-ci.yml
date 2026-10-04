@@ -27,16 +27,22 @@ jobs:
               exit 1
             fi
           done
-          fabric=$(ls versions | grep -v -- '-paper$' | tr '\n' ' ')
+          fabric=$(ls versions | grep -v -- '-paper$' | jq -R . | jq -sc .)
           paper=$(ls versions | grep -- '-paper$' | jq -R . | jq -sc .)
           echo "fabric=$fabric" >> "$GITHUB_OUTPUT"
           echo "paper=$paper" >> "$GITHUB_OUTPUT"
           echo "Fabric: $fabric"
           echo "Paper: $paper"
 
+  # One runner per node: a self-test server wants the cores to itself, and three of them on one runner
+  # took three times as long and lost more fights to timing.
   fabric:
     needs: nodes
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.nodes.outputs.fabric) }}
     steps:
       - uses: actions/checkout@v4
       - name: Read Java version
@@ -56,37 +62,25 @@ jobs:
           cache: gradle
       - name: Make gradlew executable
         run: chmod +x ./gradlew
-      - name: Check Java & Gradle versions
-        run: |
-          java --version
-          ./gradlew --version
-      - name: Build every node and run the unit tests
-        run: ./gradlew --no-daemon build
-      - name: Self-test the Fabric servers
-        run: |
-          tasks=""
-          for node in ${{ needs.nodes.outputs.fabric }}; do tasks="$tasks :$node:runSelfTest"; done
-          ./gradlew --no-daemon $tasks
+      - name: Build ${{ matrix.node }} and run its unit tests
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:build"
+      - name: Self-test the ${{ matrix.node }} server
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:runSelfTest"
       - name: Check the client mixins
         # The dev client needs a display; the task starts its own Xvfb with Mesa's software renderer.
         # From 26.3 the client opens its window through SDL, which finds no GLX visual on the runner's
         # Xvfb ("Couldn't find matching GLX visual") and then sits there until the task times out. That
         # client is checked on a developer's machine; the older ones are checked here.
+        if: ${{ startsWith(matrix.node, '1.') || startsWith(matrix.node, '26.1') || startsWith(matrix.node, '26.2') }}
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
-          tasks=""
-          for node in ${{ needs.nodes.outputs.fabric }}; do
-            case "$node" in
-              1.*|26.1*|26.2*) tasks="$tasks :$node:runClientCheck" ;;
-            esac
-          done
-          ./gradlew --no-daemon $tasks
+          ./gradlew --no-daemon ":${{ matrix.node }}:runClientCheck"
       - name: Upload self-test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: selftest-reports-fabric
+          name: selftest-reports-${{ matrix.node }}
           path: |
             run/selftest-*/selftest-report.json
             run/selftest-*/logs/latest.log
@@ -121,7 +115,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       - name: Self-test the Paper plugin on ${{ matrix.node }}
-        run: ./gradlew --no-daemon ":${{ matrix.node }}:runSelfTest"
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:build" ":${{ matrix.node }}:runSelfTest"
       - name: Upload self-test reports
         if: failure()
         uses: actions/upload-artifact@v4

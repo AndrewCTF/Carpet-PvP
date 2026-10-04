@@ -223,6 +223,8 @@ public final class SelfTest
             Map.entry("fake_sword_block", "it needs the carpet swordBlockHitting rule"),
             Map.entry("mace_stun_slam_one_fall", "it needs the fake player critical hit mixin"),
             Map.entry("sword_breach_swap", "it needs the fake player critical hit mixin"),
+            Map.entry("mace_stun_slam", "it needs the fake player critical hit mixin"),
+            Map.entry("mace_breach_swap", "it needs the fake player critical hit mixin"),
             Map.entry("autosetup_login_recovers", "a fake player that logs out on Paper leaves no session file to recover"),
             Map.entry("explosion_rules", "it needs the carpet explosionNoBlockDamage rule"),
             Map.entry("xp_explosions", "it needs the carpet xpFromExplosions rule"),
