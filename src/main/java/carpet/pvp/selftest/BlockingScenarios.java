@@ -90,7 +90,7 @@ final class BlockingScenarios
                 }
                 // The shield has stopped a hit and the health has not moved: now take it away and let the same
                 // attacker carry on.
-                SelfTest.run(server, "player " + a + " unequip offhand");
+                SelfTest.run(server, SelfTest.cmd(a + " unequip offhand"));
                 phase[0] = 2;
                 return SelfTest.pending(SelfTest.fmt("%s blocked a hit with its shield and is still on %.1f health,"
                         + " its shield took %d of it", a, shield.getHealth(), stopped[0]));
@@ -262,7 +262,7 @@ final class BlockingScenarios
                                     + " again", a));
                 }
                 // The axe has done its work, and nothing else is swinging at the shield any more.
-                SelfTest.run(server, "player " + b + " stop");
+                SelfTest.run(server, SelfTest.cmd(b + " stop"));
                 phase[0] = 2;
                 return SelfTest.pending(SelfTest.fmt("the axe took the shield of %s down at %.1f health", a,
                         shield.getHealth()));
@@ -308,8 +308,8 @@ final class BlockingScenarios
                     return SelfTest.pending(SelfTest.fmt("waiting for %s, %s and %s to finish loading", a, b, c));
                 }
                 SelfTest.run(server, "carpet swordBlockHitting true");
-                SelfTest.run(server, "player " + a + " equip mainhand minecraft:diamond_sword");
-                SelfTest.run(server, "player " + a + " use continuous");
+                SelfTest.run(server, SelfTest.cmd(a + " equip mainhand minecraft:diamond_sword"));
+                SelfTest.run(server, SelfTest.cmd(a + " use continuous"));
                 phase[0] = 1;
                 return SelfTest.pending(SelfTest.fmt("%s is holding its sword up with the rule on", a));
             }
@@ -372,8 +372,8 @@ final class BlockingScenarios
      */
     private static List<String> blocker(String name)
     {
-        return List.of("player " + name + " equip shield minecraft:shield",
-                "player " + name + " use continuous");
+        return List.of(SelfTest.cmd(name + " equip shield minecraft:shield"),
+                SelfTest.cmd(name + " use continuous"));
     }
 
     /** How much wear a blocking item has taken, which is how many hits it stopped. */

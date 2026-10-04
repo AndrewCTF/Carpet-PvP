@@ -1,6 +1,5 @@
 package carpet.pvp;
 
-import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.style.BotStyle;
@@ -92,7 +91,7 @@ public final class BotBrain
         BotPvpConfig cfg = bot.getPvpConfig();
         if (cfg == null) return;
 
-        EntityPlayerActionPack pack = ((ServerPlayerInterface) bot).getActionPack();
+        EntityPlayerActionPack pack = bot.getActionPack();
         if (pack == null) return;
 
         // 1) Survival reflexes run regardless of the combat toggle.

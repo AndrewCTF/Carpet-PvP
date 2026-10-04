@@ -2,6 +2,7 @@ package carpet.mixins;
 
 import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
+import carpet.patches.EntityPlayerMPFake;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
@@ -48,6 +49,10 @@ public abstract class ServerPlayer_actionPackMixin implements ServerPlayerInterf
     @Inject(method = "tick", at = @At(value = "HEAD"))
     private void onTick(CallbackInfo ci)
     {
-        actionPack.onUpdate();
+        // A fake player owns its own pack and ticks it from its own tick, so it is not done twice.
+        if (!((Object) this instanceof EntityPlayerMPFake))
+        {
+            actionPack.onUpdate();
+        }
     }
 }

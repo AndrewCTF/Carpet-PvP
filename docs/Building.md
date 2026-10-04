@@ -132,11 +132,16 @@ version only:
 excluded_mixins=CoralFeature_renewableCoralMixin,PieceGeneratorSupplier_plopMixin
 ```
 
+The three lists in `versions/*/gradle.properties` are long — 26.3 excludes twenty-three, 26.2
+twenty-one, 1.21.11 one — because most of them are Scarpet and fake-player mixins that only exist for
+1.21.11. Read the file rather than copying the example above.
+
 A mixin belongs in that list only when it really cannot apply. Two cases need it:
 
 - the file only exists for other versions, because it is a whole-file `//? if <26.1 {` block;
 - the target class or method is gone or was renamed in a way a condition cannot express, as with
-  `PieceGeneratorSupplier_plopMixin`, which `@Redirect`s inside a lambda of an interface.
+  `PieceGeneratorSupplier_plopMixin`, which `@Redirect`s inside a lambda of an interface. That one is
+  excluded on both 26.3 and 1.21.11.
 
 Everything else must work on every version, even the old ones: a rule that works on 26.3 and
 existed on 1.21.11 has to work on 1.21.11 too.
@@ -178,6 +183,7 @@ Each combination gets its own directory under `run/`, so they can all be up at o
 | `:26.2:runServer` | `run/26.2/server` |
 | `:1.21.11:runServer` | `run/1.21.11/server` |
 | `:26.3:runSelfTest` | `run/selftest-26.3` |
+| `:26.3:runClientCheck` | `run/26.3/clientCheck` |
 
 The world is per Minecraft version because an older server cannot open a newer world.
 
@@ -198,6 +204,29 @@ The same check can be run without a server:
 ./gradlew :26.3:webuiTest      # editor graph compiler, needs node
 ```
 
+### `runClientCheck`
+
+```
+./gradlew runClientCheck              # every version
+./gradlew :1.21.11:runClientCheck     # one version
+```
+
+The audit above runs on the server, so it never touches the `client` list of
+`carpet.mixins.json`: a client mixin whose target moved only fails the first time the game loads
+that class, which for a rendering class can be minutes into a session or not at all.
+`runClientCheck` is the same check on the client. It
+
+- starts an `Xvfb` on the first display of `:90`..`:99` that is free (each version starts at its
+  own, so the three run at once), with Mesa's software GLX because the machine has no GPU, and
+  stops it when the run is over,
+- runs the dev client with `-Dcarpet.mixinAudit=true` until `ClientLifecycleEvents.CLIENT_STARTED`,
+- force-loads every class a client mixin targets, so each one is applied and checked,
+- then quits.
+
+It fails when the client reports a mixin failure, when it never reached the end of the audit, and
+when the run times out. It is not part of `build`, because it needs `Xvfb` and a display; run it
+before a release or after touching anything under the `client` list.
+
 ### Self-test
 
 ```
@@ -205,7 +234,8 @@ The same check can be run without a server:
 ./gradlew :26.3:runSelfTest -PselfTest=spawn,nav_goto   # chosen scenarios, one version
 ```
 
-See [SelfTest.md](SelfTest.md).
+There are 116 scenarios, 52 built into `SelfTest.java` and 64 registered in `ScenarioIndex.java`.
+See [SelfTest.md](SelfTest.md) for the table and for how to add one.
 
 All three self-test servers start at once, so each one is given its own world directory, gets the
 Minecraft server on an ephemeral port (`server-port=0`) and is told to let the CarpetLogic web
@@ -216,6 +246,20 @@ instead of the `carpetLogicPort` rule). Without that the second server to start 
 `Exception stopping the server` anywhere in `run/selftest-<version>/logs/latest.log` fails the
 task, because a shutdown that throws loses whatever still had to be written even when every
 scenario passed.
+
+## Checking the documentation
+
+```
+scripts/check-docs.py
+```
+
+Reads every page under `docs/` and the README and checks that each relative link and anchor
+resolves, that every command word is a command the code registers, that every rule name is a field
+in `CarpetSettings`, that every bot setting is in `BotPvpConfig.KEYS` or `StyleIndex.options()`, and
+that every self-test scenario in `SelfTest.java` and `ScenarioIndex.java` has a row in
+`docs/SelfTest.md` and the other way round. It exits 1 on a problem. Targets that another piece of
+work still has to deliver — `docs/Paper.md` and the screenshots the README shows — are listed as
+expected rather than as failures.
 
 ## Where the jars land
 
@@ -302,3 +346,18 @@ Say `26.4`.
 
 7. Bump `mod_version` in `gradle.properties` when you release. The release workflow picks up every
    directory under `versions/` on its own.
+## Related pages
+
+- [README.md](../README.md) — what the mod is and where the docs are
+- [Commands.md](Commands.md) — every command the mod registers
+- [Rules.md](Rules.md) — the rules the code sets and their defaults
+- [SelfTest.md](SelfTest.md) — the self-test scenarios, how to run them and how to add one
+- [Bots.md](Bots.md) — the PvP bots
+- [CarpetLogic.md](CarpetLogic.md) — the web editor `webuiTest` exercises
+- [FakePlayers.md](FakePlayers.md) — fake players, navigation and gliding
+- [Kits.md](Kits.md) — the kit files and the `assets/carpet/kits` resources
+- [Practice.md](Practice.md) — drills, matches, spectating and traces
+- [AutoSetup.md](AutoSetup.md) — `/auto-setup`
+- [Menus.md](Menus.md) — `/bot gui`
+- [SwordBlocking.md](SwordBlocking.md) — the mixins behind `swordBlockHitting`
+- [Paper.md](Paper.md) — the Paper plugin build

@@ -32,11 +32,13 @@ final class ScenarioIndex
         SCENARIOS.put("trace_records_fight", MatchScenarios::traceRecordsFight);
         SCENARIOS.put("drill_aim_scores", DrillScenarios::aimScores);
         SCENARIOS.put("drill_skips_without_needs", DrillScenarios::skipsWithoutWhatItNeeds);
+        SCENARIOS.put("drill_stunslam_shield", DrillScenarios::stunslamShield);
         SCENARIOS.put("gui_toggle_option", GuiScenarios::toggleOption);
         SCENARIOS.put("gui_cycle_style", GuiScenarios::cycleStyle);
         SCENARIOS.put("gui_spawn", GuiScenarios::spawn);
         SCENARIOS.put("gui_no_item_theft", GuiScenarios::noItemTheft);
         SCENARIOS.put("gui_kit_editor_roundtrip", GuiScenarios::kitEditorRoundtrip);
+        SCENARIOS.put("gui_quick_fight", QuickFightScenarios::quickFight);
         SCENARIOS.put("logic_combat_start_stop", CombatNodeScenarios::combatStartStop);
         SCENARIOS.put("logic_fight_node", CombatNodeScenarios::fightNode);
         SCENARIOS.put("logic_combat_option", CombatNodeScenarios::combatOption);
@@ -47,12 +49,15 @@ final class ScenarioIndex
         SCENARIOS.put("autosetup_each_mode", AutoSetupScenarios::eachMode);
         SCENARIOS.put("autosetup_crash_safe", AutoSetupScenarios::crashSafe);
         SCENARIOS.put("autosetup_rules_restored", AutoSetupScenarios::rulesRestored);
+        SCENARIOS.put("autosetup_login_recovers", AutoSetupRestoreScenarios::loginRecovers);
         SCENARIOS.put("ranged_kit", RangedScenarios::rangedKit);
         SCENARIOS.put("bow_hits_static", RangedScenarios::bowHitsStatic);
         SCENARIOS.put("bow_hits_moving", RangedScenarios::bowHitsMoving);
         SCENARIOS.put("crossbow_cycle", RangedScenarios::crossbowCycle);
         SCENARIOS.put("trident_throw", RangedScenarios::tridentThrow);
         SCENARIOS.put("spear_reach", RangedScenarios::spearReach);
+        SCENARIOS.put("spear_thrust_damage", SpearThrustScenarios::thrustDamage);
+        SCENARIOS.put("ranged_closes_ground", RangedCloseScenarios::closesGround);
         SCENARIOS.put("tnt_cart_safe", RangedScenarios::tntCartSafe);
         SCENARIOS.put("ranged_keeps_distance", RangedScenarios::rangedKeepsDistance);
         SCENARIOS.put("ranged_duel", RangedScenarios::rangedDuel);
@@ -60,6 +65,7 @@ final class ScenarioIndex
         SCENARIOS.put("sword_ladder", SwordScenarios::ladder);
         SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);
         SCENARIOS.put("sword_shield_play", SwordScenarios::shieldPlay);
+        SCENARIOS.put("sword_only", SwordScenarios::swordOnly);
         SCENARIOS.put("sword_settings", SwordScenarios::swordSettings);
         SCENARIOS.put("crystal_damage_matches_model", CrystalScenarios::damageMatchesModel);
         SCENARIOS.put("crystal_place_and_hit", CrystalScenarios::placeAndHit);
@@ -71,7 +77,9 @@ final class ScenarioIndex
         SCENARIOS.put("mace_smash_damage", MaceScenarios::smashDamage);
         SCENARIOS.put("mace_stun_slam", MaceScenarios::stunSlam);
         SCENARIOS.put("mace_no_fall_damage_on_miss", MaceScenarios::noFallDamageOnMiss);
-        SCENARIOS.put("mace_attribute_swap_probe", MaceScenarios::attributeSwapProbe);
+        SCENARIOS.put("fake_player_fall_distance", FallDistanceScenarios::fallDistance);
+        SCENARIOS.put("mace_swap_probe", MaceSwapScenarios::swapProbe);
+        SCENARIOS.put("mace_breach_swap_probe", MaceSwapScenarios::breachSwapProbe);
         SCENARIOS.put("mace_duel", MaceScenarios::duel);
         SCENARIOS.put("sword_hits_passive_target", PassiveTargetScenarios::hitsPassiveTarget);
         SCENARIOS.put("smp_heals", SmpScenarios::heals);
@@ -82,5 +90,7 @@ final class ScenarioIndex
         SCENARIOS.put("fake_block_explosion", BlockingScenarios::explosion);
         SCENARIOS.put("fake_block_axe", BlockingScenarios::axeBreaks);
         SCENARIOS.put("fake_sword_block", BlockingScenarios::swordBlock);
+        SCENARIOS.put("bot_stop_stats_trace", BotCommandScenarios::fightingCommands);
+        SCENARIOS.put("logic_admin_login", AdminLoginScenarios::adminLogin);
     }
 }

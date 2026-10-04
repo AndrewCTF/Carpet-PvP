@@ -3,16 +3,14 @@ package carpet.pvp.autosetup;
 import carpet.pvp.BotPvpConfig;
 import carpet.pvp.style.StyleIndex;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
  * The fights {@code /auto-setup} can set up: one combat style and the arena that suits it.
  *
- * <p>A mode whose style has no implementation yet is still offered and falls back to the sword, so
- * that the kit and the arena a player asked for are what they get either way. Only ranged waits
- * for a style of its own, since there is nothing to practice against without one.</p>
+ * <p>Every mode here has a style of its own behind it and a kit of its own to hand out, so what a
+ * player picks is what they fight.</p>
  */
 public enum AutoMode
 {
@@ -43,20 +41,13 @@ public enum AutoMode
         return label;
     }
 
-    /** True while the mode is worth offering: the four PvP modes always, ranged once it is written. */
-    public boolean isOffered()
-    {
-        return this != RANGED || StyleIndex.has(style);
-    }
-
-    /** The kit both fighters start with; a mode without a kit of its own gets the sword's. */
+    /** The kit both fighters start with, which every style of the menu has one of. */
     public String kitName()
     {
-        String kit = StyleIndex.kit(style);
-        return kit != null ? kit : StyleIndex.kit(BotPvpConfig.CombatStyle.MELEE);
+        return StyleIndex.kit(style);
     }
 
-    /** A mode by the name a player types, which is also what the session file keeps. */
+    /** A mode by the name a player types, which is what the command and the menu run. */
     public static AutoMode of(String name)
     {
         String wanted = name.toLowerCase(Locale.ROOT);
@@ -70,12 +61,7 @@ public enum AutoMode
     /** The modes the menu offers, in the order it lists them. */
     public static List<AutoMode> offered()
     {
-        List<AutoMode> modes = new ArrayList<>();
-        for (AutoMode mode : values())
-        {
-            if (mode.isOffered()) modes.add(mode);
-        }
-        return modes;
+        return List.of(values());
     }
 
     /** Every mode name, for the error message of a mistyped one. */

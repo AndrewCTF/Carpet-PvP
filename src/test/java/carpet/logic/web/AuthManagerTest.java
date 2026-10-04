@@ -7,9 +7,11 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthManagerTest
 {
@@ -63,6 +65,40 @@ class AuthManagerTest
             assertNotNull(auth.validate(token));
         }
         assertNull(auth.validate(console).owner());
+    }
+
+    @Test
+    void signingOutEndsThatSessionAndNoOther()
+    {
+        AuthManager auth = new AuthManager();
+        UUID steve = UUID.randomUUID();
+        String one = auth.issue(steve, "Steve", HOUR);
+        String other = auth.issue(steve, "Steve", HOUR);
+
+        assertTrue(auth.revoke(one));
+        assertNull(auth.validate(one));
+        assertNotNull(auth.validate(other));
+        assertFalse(auth.revoke(one), "a session ends once");
+        assertFalse(auth.revoke(null));
+        assertFalse(auth.revoke("not-a-token"));
+    }
+
+    @Test
+    void onlyASignInMakesAnAdminSession()
+    {
+        AuthManager auth = new AuthManager();
+        UUID steve = UUID.randomUUID();
+        String fromTheGame = auth.issue(steve, "Steve", HOUR);
+        String signedIn = auth.issue(steve, "Steve", HOUR, true);
+        String someoneElse = auth.issue(UUID.randomUUID(), "Alex", HOUR, true);
+
+        assertFalse(auth.validate(fromTheGame).admin());
+        assertTrue(auth.validate(signedIn).admin());
+
+        auth.revokeAdmin(steve);
+        assertNull(auth.validate(signedIn), "a new password signs the old one's sessions out");
+        assertNotNull(auth.validate(fromTheGame), "but not a link that was opened in game");
+        assertNotNull(auth.validate(someoneElse), "and nobody else's");
     }
 
     @Test

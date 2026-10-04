@@ -4,6 +4,7 @@ import carpet.pvp.BotPvpConfig;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -72,6 +73,11 @@ final class StunslamDrill implements Drill
         if (bot == null) return;
         Window window = (Window) run.state();
         ServerPlayer player = run.player();
+        // The sword kit is a sword and nothing else, so the shield this drill is about is the drill's own.
+        if (!bot.bot().getOffhandItem().is(Items.SHIELD))
+        {
+            bot.bot().setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
+        }
         bot.tick(player, 0, 0, false, false, true, false);
         if (bot.bot().getCooldowns().isOnCooldown(new ItemStack(Items.SHIELD)))
         {

@@ -1,18 +1,21 @@
 package carpet.utils;
 
-import carpet.CarpetSettings;
 import net.minecraft.server.MinecraftServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 /**
- * Delayed server-thread tasks. Delays are counted in game ticks and the due tasks are run from
- * {@link carpet.CarpetServer#tick(MinecraftServer)}, so nothing touches the world off the server thread.
+ * Delayed server-thread tasks. Delays are counted in game ticks and the due tasks are run from the
+ * host's tick (Carpet's on Fabric, the plugin's repeating task on Paper), so nothing touches the
+ * world off the server thread.
  */
 public final class DelayedTasks
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DelayedTasks.class);
     private static final List<Entry> TASKS = new ArrayList<>();
 
     private DelayedTasks() {}
@@ -66,7 +69,7 @@ public final class DelayedTasks
             }
             catch (Exception e)
             {
-                CarpetSettings.LOG.error("Delayed task failed", e);
+                LOGGER.error("Delayed task failed", e);
             }
         }
     }

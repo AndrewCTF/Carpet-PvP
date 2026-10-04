@@ -9,6 +9,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.KineticWeapon;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The thrust of a charged spear.
@@ -50,68 +51,64 @@ public final class Spear
     }
 
     /**
-     * Whether a thrust at the live target would do anything, which is the model a bot asks before it commits to
-     * the run. The gate is the one the game puts on the damage itself: a charge that is long enough past the
-     * wind-up and a closing speed over the material's threshold.
+     * True while the bot still has the button down but the game has stopped counting the charge, which is
+     * what happens once the weapon's own window has run out. A player lets go of the button for a tick and
+     * starts the charge again, because nothing more can land out of the one that ended.
      */
-    public boolean worthIt(LivingEntity target, ItemStack spear)
+    public boolean spent()
     {
-        KineticWeapon.Condition condition = damageCondition(spear);
-        if (condition == null)
-        {
-            return false;
-        }
-        int charge = held() - windUp(spear);
-        if (charge < 0)
-        {
-            return false;
-        }
-        double speed = closingSpeed(target);
-        return SpearMath.damages(charge, condition.maxDurationTicks(), speed, condition.minRelativeSpeed());
+        return body.holdingItem() && !bot.isUsingItem();
     }
 
-    /** The health a landed thrust would take off the live target, which is what the run is being judged on. */
-    public float damageOf(LivingEntity target, ItemStack spear)
+    /**
+     * How far the bot's eyes are from the nearest point of the target's box, which is the distance the reach
+     * window is measured against, both here and in the game.
+     */
+    public double reachOf(LivingEntity target)
     {
-        KineticWeapon weapon = spear.get(DataComponents.KINETIC_WEAPON);
-        if (weapon == null)
-        {
-            return 0.0F;
-        }
-        // The game builds this on the attacker's plain base damage, which carries none of the item's modifiers.
-        double base = bot.getAttributeBaseValue(Attributes.ATTACK_DAMAGE);
-        return SpearMath.thrustDamage(base, closingSpeed(target), weapon.damageMultiplier());
+        AABB box = target.getBoundingBox();
+        double dx = Math.max(Math.max(box.minX - bot.getX(), bot.getX() - box.maxX), 0.0);
+        double dy = Math.max(Math.max(box.minY - bot.getEyeY(), bot.getEyeY() - box.maxY), 0.0);
+        double dz = Math.max(Math.max(box.minZ - bot.getZ(), bot.getZ() - box.maxZ), 0.0);
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     /** True when the target is inside the reach window of the spear, which the bot reads off the live target. */
     public boolean inReach(LivingEntity target)
     {
-        AABB box = target.getBoundingBox();
-        return SpearMath.inReach(bot.getX(), bot.getEyeY(), bot.getZ(), box.minX, box.minY, box.minZ,
-                box.maxX, box.maxY, box.maxZ);
+        return SpearMath.inReach(reachOf(target));
     }
 
     /**
-     * How fast the bot and the target close on each other along the direction the bot is looking, which is what
-     * the game measures: the attacker's motion along the view, less the target's, never below nothing.
+     * Whether the two are closing on each other fast enough for a thrust to do any damage, which is the gate the
+     * game puts on the damage itself and nothing else. The charge age is deliberately left out: the bot charges
+     * while it runs in, so by the time it arrives the wind-up is always behind it, and what decides whether the
+     * run is worth anything is the speed in front of the spear.
+     */
+    public boolean fast(LivingEntity target, ItemStack spear)
+    {
+        KineticWeapon.Condition condition = damageCondition(spear);
+        return condition != null && closingSpeed(target) >= condition.minRelativeSpeed();
+    }
+
+    /**
+     * How fast the bot and the target close on each other along the direction the bot is looking, in blocks a
+     * second, which is what the game measures: the attacker's motion along the view, less the target's, never
+     * below nothing.
+     *
+     * <p>The game reads that motion off {@code getKnownSpeed}, which is a velocity of a block <em>a tick</em>,
+     * and {@code KineticWeapon.getMotion} is what turns it into a block a second before the condition sees it.
+     * The gate on the damage is written in that unit as well: a relative speed of 4.6 is a closing speed of 4.6
+     * blocks a second, which is what a sprint is worth. Leaving it per tick would make every gate twenty times
+     * too high and the thrust would never be worth committing to.</p>
      */
     public double closingSpeed(LivingEntity target)
     {
-        double mine = SpearMath.along(bot.getDeltaMovement().x, bot.getDeltaMovement().y, bot.getDeltaMovement().z,
-                bot.getYRot(), bot.getXRot());
-        double theirs = SpearMath.along(target.getDeltaMovement().x, target.getDeltaMovement().y,
-                target.getDeltaMovement().z, bot.getYRot(), bot.getXRot());
-        return SpearMath.closingSpeed(mine, theirs);
-    }
-
-    /**
-     * How long one charge is good for: the thrust is only behind its gate while the charge is younger than
-     * this, so a bot that has held on for longer has to let go and start again, as a player has to.
-     */
-    public static int chargeWindow(ItemStack spear)
-    {
-        KineticWeapon.Condition condition = damageCondition(spear);
-        return condition == null ? 0 : condition.maxDurationTicks() + windUp(spear);
+        Vec3 mine = bot.getKnownSpeed();
+        Vec3 theirs = target.getKnownSpeed();
+        return SpearMath.TICKS_A_SECOND * SpearMath.closingSpeed(
+                SpearMath.along(mine.x, mine.y, mine.z, bot.getYRot(), bot.getXRot()),
+                SpearMath.along(theirs.x, theirs.y, theirs.z, bot.getYRot(), bot.getXRot()));
     }
 
     /** Ticks the weapon holds the spear back before the first thrust can land. */

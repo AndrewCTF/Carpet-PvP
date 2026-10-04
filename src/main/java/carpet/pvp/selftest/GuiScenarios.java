@@ -234,7 +234,7 @@ final class GuiScenarios
                 {
                     for (String name : botNames(server))
                     {
-                        if (!before.contains(name)) SelfTest.run(server, "player " + name + " disconnect");
+                        if (!before.contains(name)) SelfTest.run(server, SelfTest.cmd(name + " disconnect"));
                     }
                 }
             });
@@ -309,7 +309,7 @@ final class GuiScenarios
                 {
                     for (String name : botNames(server))
                     {
-                        if (!before.contains(name)) SelfTest.run(server, "player " + name + " disconnect");
+                        if (!before.contains(name)) SelfTest.run(server, SelfTest.cmd(name + " disconnect"));
                     }
                 }
             });

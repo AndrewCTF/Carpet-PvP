@@ -1,0 +1,86 @@
+# Carpet PvP on Paper: fake player bots, navigation, kits and a combat brain.
+#
+# These are the same values Carpet's rules carry in the Fabric mod. They are read once at start-up,
+# and /bot option reads and writes the ones a running server can change.
+
+fakePlayer:
+  # Let a bot be spawned under a name that has never joined, on a server without authentication.
+  allowSpawningOfflinePlayers: true
+  # Drop what a bot is carrying when it dies. Otherwise it keeps its inventory, like on Fabric.
+  dropInventoryOnDeath: false
+  # Show bots in the player list's name lookup. Off keeps server owners from seeing them.
+  listInPlayerList: false
+  fallDamage: true
+  # A fake player hit with a shield that a weapon disabled is stunned for a moment.
+  shieldStunning: false
+
+navigation:
+  # Off by default. /bot nav ... says so until this is on.
+  enabled: false
+  elytraGlide: false
+  breakBlocks: false
+  placeBlocks: false
+  autoTool: true
+  autoEat: true
+  autoEatBelow: 10
+  avoidLava: true
+  avoidFire: true
+  avoidCobwebs: true
+  breakCobwebs: true
+  avoidPowderSnow: true
+  allowParkour: true
+  allowPillar: false
+  allowBreakThrough: false
+  allowDescendMine: false
+  allowSprint: true
+  mobAvoidance: false
+  mobAvoidanceRadius: 8
+  maxFallHeight: 4
+  avoidSoulSand: false
+  allowOpenDoors: true
+  allowOpenFenceGates: true
+  allowSwimming: false
+  # Node expansions one bot, and all the bots together, may pathfind in a single tick.
+  searchBudget: 1500
+  searchBudgetTotal: 12000
+
+combat:
+  # Lets a bot attack on every tick instead of waiting for the attack cooldown.
+  spamClickCombat: false
+  # The combat brain on: a bot picks a target and engages it.
+  botCombat: false
+  autoTarget: true
+  targetPlayers: true
+  targetMobs: false
+  targetBots: true
+  revenge: true
+  targetRange: 16.0
+  retreatHealth: 0
+  autoTotem: true
+  autoShield: false
+  autoFood: true
+  autoWeapon: false
+  # One of MELEE, CRYSTAL, ANCHOR, RANGED, MACE, SMP.
+  style: MELEE
+  # One of BEGINNER, AVERAGE, SKILLED, EXPERT.
+  difficulty: AVERAGE
+  preferSword: true
+  shieldBreak: false
+  critical: true
+  strafe: true
+  bhop: false
+  wtap: true
+  shieldPlay: true
+  meleeRange: 3.0
+  attackCooldown: 0
+  missChance: 0
+  mistakeChance: 0
+  reactionDelay: 0
+  skill: 0.6
+  pingTicks: 1
+  clicksPerSecond: 10.0
+  plannerRange: 8.0
+  plannerHorizon: 12
+  plannerPopulation: 10
+  # Simulated ticks every bot of the server may plan per server tick, split between them.
+  simBudget: 20000

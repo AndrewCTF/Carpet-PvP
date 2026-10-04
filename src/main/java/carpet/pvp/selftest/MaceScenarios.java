@@ -80,15 +80,15 @@ final class MaceScenarios
                 if (SelfTest.warmingUp(server, a)) return SelfTest.pending(a + " is still loading");
                 SelfTest.run(server, "bot kit give " + a + " mace");
                 if (charges(bot) <= 0) return SelfTest.pending(a + " has no wind charges yet");
-                SelfTest.run(server, "player " + a + " hotbar 3");
-                SelfTest.run(server, "player " + a + " look down");
+                SelfTest.run(server, SelfTest.cmd(a + " hotbar 3"));
+                SelfTest.run(server, SelfTest.cmd(a + " look down"));
                 phase[0] = 1;
                 return SelfTest.pending(a + " is looking down at its own feet");
             }
             if (phase[0] == 1)
             {
                 if (bot.getXRot() < 85.0F) return SelfTest.pending(a + " has not looked down yet");
-                SelfTest.run(server, "player " + a + " use once");
+                SelfTest.run(server, SelfTest.cmd(a + " use once"));
                 phase[0] = 2;
                 return SelfTest.pending(a + " threw a wind charge at its feet");
             }
@@ -131,7 +131,7 @@ final class MaceScenarios
                     return new Probe(false, SelfTest.fmt("waiting for %s and %s to finish loading", a, b));
                 }
                 maceBot(server, a, "expert");
-                SelfTest.run(server, "player " + b + " equip chest minecraft:netherite_chestplate");
+                SelfTest.run(server, SelfTest.cmd(b + " equip chest minecraft:netherite_chestplate"));
                 // A dummy that cannot die keeps the bot landing smashes instead of killing it once and
                 // being put back at its spawn point with its health and its position made new.
                 topUp(server, b);
@@ -219,8 +219,8 @@ final class MaceScenarios
                     return new Probe(false, SelfTest.fmt("waiting for %s and %s to finish loading", a, b));
                 }
                 SelfTest.shieldKit(b).forEach(command -> SelfTest.run(server, command));
-                SelfTest.run(server, "player " + b + " equip chest minecraft:netherite_chestplate");
-                SelfTest.run(server, "player " + b + " use continuous");
+                SelfTest.run(server, SelfTest.cmd(b + " equip chest minecraft:netherite_chestplate"));
+                SelfTest.run(server, SelfTest.cmd(b + " use continuous"));
                 phase[0] = 1;
                 held[0] = 0;
                 return new Probe(false, SelfTest.fmt("%s is raising its shield", b));
@@ -342,92 +342,6 @@ final class MaceScenarios
     }
 
     /**
-     * Whether this version still lets a fighter combine one item's attack cooldown with another item's
-     * damage. The same dummy is hit twice with the same wait, once with the cooldown charged under the mace
-     * and once with it charged under the axe and the mace swapped in on the tick of the hit. The scenario
-     * passes either way; what it records is the answer the style obeys.
-     */
-    static Scenario attributeSwapProbe(String a, String b, String c, Vec3 origin)
-    {
-        Vec3 dummy = origin.add(0.0D, 0.0D, 2.0D);
-        int[] phase = {0};
-        int[] chargedFor = {0};
-        int[] settle = {0};
-        float[] top = {20.0F};
-        float[] bottom = {20.0F};
-        float[] charged = {0.0F};
-        return new Scenario(600, List.of(new Bot(a, origin), new Bot(b, dummy, 180.0D)), List.of(), server ->
-        {
-            if (phase[0] == 0)
-            {
-                if (SelfTest.warmingUp(server, a, b))
-                {
-                    return new Probe(false, SelfTest.fmt("waiting for %s and %s to finish loading", a, b));
-                }
-                // The axe goes into the hotbar slot the bot holds, the mace into the next free one, so the
-                // two can be swapped between on the tick of a hit.
-                SelfTest.run(server, "player " + a + " equip mainhand minecraft:iron_axe");
-                SelfTest.run(server, "give " + a + " minecraft:mace");
-                topUp(server, b);
-                phase[0] = 1;
-                chargedFor[0] = 0;
-                settle[0] = 0;
-                return new Probe(false, SelfTest.fmt("%s holds an axe in one hotbar slot and a mace in another", a));
-            }
-            ServerPlayer target = SelfTest.player(server, b);
-            float health = target.getHealth();
-            if (phase[0] == 1 || phase[0] == 3)
-            {
-                if (chargedFor[0]++ == 0)
-                {
-                    SelfTest.run(server, "player " + a + " hotbar " + (phase[0] == 1 ? 2 : 1));
-                    top[0] = target.getMaxHealth();
-                    bottom[0] = health;
-                    settle[0] = 0;
-                }
-                int wait = phase[0] == 1 ? MaceSwap.MACE_TICKS : MaceSwap.AXE_TICKS;
-                if (chargedFor[0] <= wait)
-                {
-                    return SelfTest.pending(SelfTest.fmt("charging the %s for %d of %d ticks",
-                            phase[0] == 1 ? "mace" : "axe", chargedFor[0], wait));
-                }
-                if (phase[0] == 3)
-                {
-                    // The swap the technique is about: the item in hand changes on the tick of the hit.
-                    SelfTest.run(server, "player " + a + " hotbar 2");
-                }
-                SelfTest.run(server, "player " + a + " attack once");
-                phase[0]++;
-                settle[0] = SETTLE_TICKS;
-                chargedFor[0] = 0;
-                return SelfTest.pending(a + " swung with the mace in hand");
-            }
-            if (settle[0] > 0)
-            {
-                // Whatever the swing was worth, the dummy's health at its lowest over the next few ticks.
-                bottom[0] = Math.min(bottom[0], health);
-                settle[0]--;
-                return SelfTest.pending(SelfTest.fmt("reading what the swing did: %.2f so far",
-                        top[0] - bottom[0]));
-            }
-            float dealt = top[0] - bottom[0];
-            if (phase[0] == 2)
-            {
-                charged[0] = dealt;
-                phase[0] = 3;
-                chargedFor[0] = 0;
-                return SelfTest.pending(SelfTest.fmt("the mace charged under the mace hit for %.2f, now the swap",
-                        dealt));
-            }
-            MaceSwap.record(charged[0], dealt);
-            return new Probe(true, SelfTest.fmt(
-                    "a mace hit charged under the mace itself did %.2f, and the same wait charged under an axe with"
-                            + " the mace swapped in on the tick of the hit did %.2f, so on this version the swap is %s",
-                    charged[0], dealt, MaceSwap.describe()));
-        });
-    }
-
-    /**
      * The mace style against the sword style, both expert and both in netherite, with the mace bot on the
      * far side every other round. The rounds are the point of the scenario: the mace bot has to win a
      * clear majority of them.
@@ -520,8 +434,8 @@ final class MaceScenarios
             }
             maceHits[0] += (float) SelfTest.stats(mace).damageDealt;
             swordHits[0] += (float) SelfTest.stats(sword).damageDealt;
-            SelfTest.run(server, "player " + maceName + " disconnect");
-            SelfTest.run(server, "player " + swordName + " disconnect");
+            SelfTest.run(server, SelfTest.cmd(maceName + " disconnect"));
+            SelfTest.run(server, SelfTest.cmd(swordName + " disconnect"));
             round[0]++;
             ticks[0] = 0;
             down[0] = 0;
@@ -547,10 +461,10 @@ final class MaceScenarios
         Vec3 spot = origin.add(0.0D, 0.0D, round * 40.0D);
         Vec3 near = round % 2 == 0 ? spot : spot.add(0.0D, 0.0D, DUEL_RANGE);
         Vec3 far = round % 2 == 0 ? spot.add(0.0D, 0.0D, DUEL_RANGE) : spot;
-        SelfTest.run(server, "player " + maceName + " spawn at " + SelfTest.coords(near)
-                + " facing 0 0 in minecraft:overworld in survival");
-        SelfTest.run(server, "player " + swordName + " spawn at " + SelfTest.coords(far)
-                + " facing 180 0 in minecraft:overworld in survival");
+        SelfTest.run(server, SelfTest.cmd(maceName + " spawn at " + SelfTest.coords(near)
+                + " facing 0 0 in minecraft:overworld in survival"));
+        SelfTest.run(server, SelfTest.cmd(swordName + " spawn at " + SelfTest.coords(far)
+                + " facing 180 0 in minecraft:overworld in survival"));
         ServerPlayer mace = SelfTest.player(server, maceName);
         ServerPlayer sword = SelfTest.player(server, swordName);
         if (mace == null || sword == null)

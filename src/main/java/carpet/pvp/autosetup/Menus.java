@@ -100,7 +100,18 @@ public final class Menus
                     all[i] == currentDifficulty ? ChatFormatting.GREEN : ChatFormatting.AQUA));
         }
         player.sendSystemMessage(levels);
-        tell(player, "gy  the arena is built next to you", "g , ", "gy  /auto-setup stop", "g  takes it away again");
+        player.sendSystemMessage(hint());
+    }
+
+    /**
+     * The line under the buttons of the mode menu. Every piece is two spaces of indent or a colour
+     * letter and a space and then the text, the way {@link #tell} reads: one letter per piece, so a
+     * second letter would be swallowed rather than shown.
+     */
+    static MutableComponent hint()
+    {
+        return line("  ", "g the arena is built next to you", "g , ", "y /auto-setup stop",
+                "g  takes it away again");
     }
 
     /** A session that has just been cleaned up. */
@@ -130,12 +141,18 @@ public final class Menus
     public static void tell(ServerPlayer player, Object... parts)
     {
         if (player == null) return;
+        player.sendSystemMessage(line(parts));
+    }
+
+    /** The line a set of pieces makes, which {@link #tell} sends and the tests read. */
+    static MutableComponent line(Object... parts)
+    {
         MutableComponent line = Component.literal("");
         for (Object part : parts)
         {
             line.append(part instanceof Component component ? component : styled(String.valueOf(part)));
         }
-        player.sendSystemMessage(line);
+        return line;
     }
 
     private static MutableComponent styled(String text)

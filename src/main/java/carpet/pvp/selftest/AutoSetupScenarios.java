@@ -1,11 +1,11 @@
 package carpet.pvp.selftest;
 
-import carpet.CarpetSettings;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.autosetup.ArenaBlocks;
 import carpet.pvp.autosetup.AutoMode;
 import carpet.pvp.autosetup.AutoSetupManager;
 import carpet.pvp.autosetup.AutoSetupSession;
+import carpet.pvp.autosetup.AutoSetupSettings;
 import carpet.pvp.kit.Kit;
 import carpet.pvp.kit.KitStore;
 import carpet.pvp.selftest.SelfTest.Bot;
@@ -35,8 +35,20 @@ final class AutoSetupScenarios
 {
     private AutoSetupScenarios() {}
 
-    /** The rules the scenarios are allowed to leave as they found them. */
+    /** The setting the scenarios turn off and on again around a session. */
     private static final String NAVIGATION = "fakePlayerNavigation";
+
+    /** Puts navigation where a scenario wants it, through the same door a session uses. */
+    private static void navigation(boolean on)
+    {
+        AutoSetupSettings.set(NAVIGATION, String.valueOf(on));
+    }
+
+    /** What the host of this run has navigation at right now. */
+    private static boolean navigation()
+    {
+        return Boolean.parseBoolean(AutoSetupSettings.value(NAVIGATION));
+    }
 
     /**
      * A player with a distinctive inventory starts a session, fights a beginner sword bot in an
@@ -96,7 +108,7 @@ final class AutoSetupScenarios
                 {
                     // what the bot is doing goes into the message, so a timeout here says why
                     return pending(SelfTest.fmt("waiting for %s to land a hit on %s: %.1f blocks apart, combat %s, navigation %s, the bot %s",
-                            session.botName(), a, bot.distanceTo(player), bot.getPvpConfig().combat, CarpetSettings.fakePlayerNavigation,
+                            session.botName(), a, bot.distanceTo(player), bot.getPvpConfig().combat, navigation(),
                             bot.getBotBrain() == null || bot.getBotBrain().body() == null ? "has no body yet" : bot.getBotBrain().body().stats().describe()));
                 }
                 // The round ends when the bot goes down, which puts the menu up and the score on it;
@@ -116,7 +128,12 @@ final class AutoSetupScenarios
                 if (session == null) return pending("waiting for the session");
                 if (session.stage() != AutoSetupSession.Stage.MENU)
                 {
-                    return pending("waiting for the round to end, the bot is on " + session.botWins());
+                    // what the bot is doing goes into the message, so a timeout here says why
+                    ServerPlayer opponent = server.getPlayerList().getPlayerByName(session.botName());
+                    return pending(SelfTest.fmt("waiting for the round to end, the bot is on %d and %s",
+                            session.botWins(), opponent == null ? "is gone"
+                                    : SelfTest.fmt("has %.1f of %.1f health", opponent.getHealth(),
+                                            opponent.getMaxHealth())));
                 }
                 if (session.playerWins() != 1 || session.botWins() != 0)
                 {
@@ -262,7 +279,7 @@ final class AutoSetupScenarios
             if (phase[0] == 0)
             {
                 if (SelfTest.warmingUp(server, a)) return pending(a + " is still loading");
-                SelfTest.run(server, "carpet " + NAVIGATION + " false");
+                navigation(false);
                 give(server, a);
                 held.value = SelfTest.slots(player);
                 world.value = snapshot(server, origin);
@@ -297,7 +314,7 @@ final class AutoSetupScenarios
                 {
                     return new Probe(false, "the file of " + a + " was not read back");
                 }
-                SelfTest.run(server, "player " + bot + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(bot + " disconnect"));
                 phase[0] = 2;
                 return pending("the manager restarted and is holding the things of " + a + " back");
             }
@@ -313,14 +330,14 @@ final class AutoSetupScenarios
             {
                 return new Probe(false, "the file of " + a + " was left behind");
             }
-            if (CarpetSettings.fakePlayerNavigation)
+            if (navigation())
             {
-                return new Probe(false, "carpet " + NAVIGATION + " was left on");
+                return new Probe(false, NAVIGATION + " was left on");
             }
             String changed = difference(origin, world.value, snapshot(server, origin));
             return new Probe(changed == null, changed != null ? "after the restart " + changed
                     : SelfTest.fmt("after a restart that threw the session away, %s had all %d of its slots back, "
-                            + "carpet %s is off again and the arena is gone", a, held.value.size(), NAVIGATION));
+                            + "%s is off again and the arena is gone", a, held.value.size(), NAVIGATION));
         });
     }
 
@@ -334,39 +351,39 @@ final class AutoSetupScenarios
             if (phase[0] == 0)
             {
                 if (SelfTest.warmingUp(server, a)) return pending(a + " is still loading");
-                SelfTest.run(server, "carpet " + NAVIGATION + " false");
-                if (CarpetSettings.fakePlayerNavigation)
+                navigation(false);
+                if (navigation())
                 {
-                    return new Probe(false, "carpet " + NAVIGATION + " could not be turned off for this scenario");
+                    return new Probe(false, NAVIGATION + " could not be turned off for this scenario");
                 }
                 if (SelfTest.result(server, as(a, "auto-setup sword beginner")) < 1)
                 {
                     return pending("/auto-setup sword beginner did not start a session");
                 }
                 phase[0] = 1;
-                return pending(a + " is setting a session up with carpet " + NAVIGATION + " off");
+                return pending(a + " is setting a session up with " + NAVIGATION + " off");
             }
             if (phase[0] == 1)
             {
                 if (AutoSetupManager.session(player) == null) return pending("waiting for the session to start");
-                if (!CarpetSettings.fakePlayerNavigation)
+                if (!navigation())
                 {
-                    return new Probe(false, "carpet " + NAVIGATION + " was not turned on for the session");
+                    return new Probe(false, NAVIGATION + " was not turned on for the session");
                 }
                 if (SelfTest.result(server, as(a, "auto-setup stop")) < 1)
                 {
                     return pending("/auto-setup stop did not stop the session");
                 }
                 phase[0] = 2;
-                return pending("the session is stopping with carpet " + NAVIGATION + " on");
+                return pending("the session is stopping with " + NAVIGATION + " on");
             }
             if (AutoSetupManager.session(player) != null) return pending("waiting for the session to end");
-            boolean back = !CarpetSettings.fakePlayerNavigation;
-            SelfTest.run(server, "carpet " + NAVIGATION + " true");
+            boolean back = !navigation();
+            navigation(true);
             return new Probe(back, back
-                    ? SelfTest.fmt("carpet %s was turned on for the session and put back to false when it ended",
+                    ? SelfTest.fmt("%s was turned on for the session and put back to false when it ended",
                             NAVIGATION)
-                    : SelfTest.fmt("carpet %s was still on after the session ended", NAVIGATION));
+                    : SelfTest.fmt("%s was still on after the session ended", NAVIGATION));
         });
     }
 

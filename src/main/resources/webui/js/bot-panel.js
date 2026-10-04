@@ -28,7 +28,8 @@ const BotPanel = (() => {
 
     function init() {
         document.getElementById("spawn-bot-btn").addEventListener("click", spawnBot);
-        document.getElementById("remove-bot-btn").addEventListener("click", removeBot);
+        // Enter in the name field presses Spawn; the form itself goes nowhere.
+        document.getElementById("spawn-form").addEventListener("submit", (e) => e.preventDefault());
         document.getElementById("target-bot-select").addEventListener("change", (e) => selectBot(e.target.value));
 
         API.on("botUpdate", (update) => {
@@ -46,7 +47,10 @@ const BotPanel = (() => {
 
         for (const tab of document.querySelectorAll(".rp-tab")) {
             tab.addEventListener("click", () => {
-                for (const other of document.querySelectorAll(".rp-tab")) other.classList.toggle("active", other === tab);
+                for (const other of document.querySelectorAll(".rp-tab")) {
+                    other.classList.toggle("active", other === tab);
+                    other.setAttribute("aria-selected", String(other === tab));
+                }
                 for (const panel of document.querySelectorAll(".rp-tab-panel")) {
                     panel.classList.toggle("active", panel.dataset.panel === tab.dataset.tab);
                 }
@@ -54,7 +58,6 @@ const BotPanel = (() => {
         }
 
         render();
-        loadHistory();
     }
 
     /**
@@ -112,7 +115,9 @@ const BotPanel = (() => {
             listed = signature;
             views.clear();
             list.replaceChildren();
-            if (names.length === 0) list.append(el("div", "empty-hint", "No bots on the server"));
+            if (names.length === 0) {
+                list.append(el("div", "empty-hint", "No bots on the server. Spawn one above, or in game with /bot spawn or /player <name> spawn."));
+            }
             for (const name of names) {
                 const view = botCard(name);
                 views.set(name, view);
@@ -126,13 +131,15 @@ const BotPanel = (() => {
      * Builds the card of one bot. Only its shape is here; the numbers are put in by patchCard.
      */
     function botCard(name) {
-        const view = { name: name, values: {} };
+        const view = { name: name, values: {}, rows: {} };
         view.card = el("div", "bot-card");
+        view.card.title = "Click to make this the bot the program runs on";
         view.card.addEventListener("click", () => selectBot(name));
 
         const head = el("div", "bot-card-head");
         view.badge = el("span", "bot-status-badge idle", "Idle");
-        head.append(el("span", "bot-name", name), view.badge);
+        view.tag = el("span", "bot-target-tag hidden", "runs here");
+        head.append(el("span", "bot-name", name), view.tag, view.badge);
 
         const bar = el("div", "hp-bar");
         view.fill = el("div", "hp-fill");
@@ -146,6 +153,7 @@ const BotPanel = (() => {
             view.values[label] = el("span", "status-value" + (label === "Error" ? " status-error" : ""), DASH);
             const line = el("div", "status-row");
             line.append(el("span", "status-label", label), view.values[label]);
+            view.rows[label] = line;
             rows.append(line);
         }
 
@@ -166,6 +174,10 @@ const BotPanel = (() => {
 
         const values = cardValues(bot, program, pvp);
         for (const label of ROWS) view.values[label].textContent = values[label];
+        // What a program is doing and what went wrong only take a line while there is something to say.
+        view.rows.Action.classList.toggle("hidden", values.Action === DASH);
+        view.rows.Error.classList.toggle("hidden", values.Error === DASH);
+        view.tag.classList.toggle("hidden", bot.name !== state.targetBot);
 
         const badge = programState(program, bot);
         view.badge.className = "bot-status-badge " + badge.state;
@@ -180,7 +192,7 @@ const BotPanel = (() => {
     function cardValues(bot, program, pvp) {
         return {
             Position: [bot.x, bot.y, bot.z].map(one).join(", "),
-            World: bot.dimension,
+            World: String(bot.dimension).replace(/^minecraft:/, ""),
             Style: pvp.style || DASH,
             Combat: pvp.combat === undefined ? DASH : pvp.combat ? "on" : "off",
             Target: bot.target || DASH,
@@ -211,8 +223,10 @@ const BotPanel = (() => {
             setSetting(view.name, "combat", value, "Could not turn the combat AI of " + view.name + " " + value);
         });
         bar.append(view.run, view.combat);
-        bar.append(button("Bring me", "sm", () => act("Could not bring " + view.name + " here", () =>
-            API.tpBot(view.name).then(() => log(view.name + " is here")))));
+        const bring = button("Bring me", "sm", () => act("Could not bring " + view.name + " here", () =>
+            API.tpBot(view.name).then(() => log(view.name + " is here"))));
+        bring.title = "Teleport this bot to where you stand in game";
+        bar.append(bring);
         bar.append(button("Remove", "sm red", () => act("Could not remove " + view.name, () =>
             API.removeBot(view.name).then((result) => {
                 log(result.success ? "Removed bot " + view.name : "There is no bot named " + view.name,
@@ -226,6 +240,7 @@ const BotPanel = (() => {
     // /player <name> ai would refuse.
     function setting(view) {
         const form = el("div", "bot-card-setting");
+        form.title = "One setting of this bot's combat AI, as /bot option takes it";
         const pick = el("select", "sm-select");
         for (const key of state.combatSettings) pick.append(new Option(key, key));
         const value = el("input", "sm-input");
@@ -233,13 +248,17 @@ const BotPanel = (() => {
         value.maxLength = 64;
         value.spellcheck = false;
         value.placeholder = "value";
-        form.append(pick, value, button("Set", "sm", () => {
+        const set = button("Set", "sm", () => {
             if (!value.value.trim()) {
                 log("A setting needs a value", "error");
                 return;
             }
             setSetting(view.name, pick.value, value.value.trim(), "Could not set " + pick.value + " on " + view.name);
-        }));
+        });
+        // The fields are on a card that is clicked to pick the bot: using them is not picking.
+        for (const field of [pick, value]) field.addEventListener("click", (e) => e.stopPropagation());
+        value.addEventListener("keydown", (e) => { if (e.key === "Enter") set.click(); });
+        form.append(pick, value, set);
         return form;
     }
 
@@ -278,7 +297,7 @@ const BotPanel = (() => {
         const list = document.getElementById("match-list");
         list.replaceChildren();
         if (state.matches.length === 0) {
-            list.append(el("div", "empty-hint", "No finished fights yet"));
+            list.append(el("div", "empty-hint", "No finished fights yet. A fight between bots is listed here when it ends."));
             return;
         }
         for (const match of state.matches) list.append(matchRow(match));
@@ -302,16 +321,31 @@ const BotPanel = (() => {
         // thrown shut by the next status update.
         if (JSON.stringify(names) !== targeted) {
             targeted = JSON.stringify(names);
-            select.replaceChildren(new Option("Select a bot…", ""));
+            select.replaceChildren(new Option(names.length === 0 ? "No bot" : "Choose a bot", ""));
             for (const name of names) select.append(new Option(name, name));
+            document.getElementById("bots-count").textContent = names.length === 0 ? "" : String(names.length);
         }
         select.value = state.targetBot;
-        document.getElementById("run-target").textContent = state.targetBot ? "Runs on " + state.targetBot : "No bot selected";
+        const hint = document.getElementById("run-target");
+        hint.textContent = state.targetBot ? "Runs on " + state.targetBot
+            : names.length === 0 ? "No bot selected: spawn one in the Bots panel" : "No bot selected";
+        hint.classList.toggle("hidden", Boolean(state.targetBot));
         const program = state.programs[state.targetBot];
         const badge = programState(program, state.bots[state.targetBot]);
         const label = document.getElementById("exec-state");
-        label.textContent = badge.label;
-        label.className = "rp-status-value" + (badge.state === "running" ? " status-running" : badge.state === "error" ? " status-error" : "");
+        label.textContent = runLine(badge, program);
+        label.className = "run-state" + (badge.state === "running" ? " status-running" : badge.state === "error" ? " status-error" : "");
+        label.classList.toggle("hidden", !state.targetBot);
+        document.getElementById("btn-stop").disabled = badge.state !== "running";
+    }
+
+    // What the run bar says about the chosen bot's program: its state, and what it is doing or what stopped it.
+    function runLine(badge, program) {
+        if (!program) return badge.label;
+        const name = program.programName ? " · " + program.programName : "";
+        if (badge.state === "running" && program.currentAction) return badge.label + name + " · " + program.currentAction;
+        if (badge.state === "error" && program.error) return badge.label + name + " · " + program.error;
+        return badge.label + name;
     }
 
     // ── Selecting and spawning ────────────────────────────────────
@@ -335,17 +369,6 @@ const BotPanel = (() => {
         }
     }
 
-    async function removeBot() {
-        const name = document.getElementById("bot-name-input").value.trim();
-        if (!name) return;
-        try {
-            const result = await API.removeBot(name);
-            log(result.success ? "Removed bot " + name : "There is no bot named " + name, result.success ? "info" : "error");
-        } catch (e) {
-            complain(e, "Could not remove " + name);
-        }
-    }
-
     function programState(program, bot) {
         if (bot && bot.alive === false) return { state: "error", label: "dead" };
         if (!program) return { state: "idle", label: "Idle" };
@@ -359,7 +382,7 @@ const BotPanel = (() => {
 
     function getTargetBot() { return state.targetBot; }
 
-    return { init, state, applyEvent, applySnapshot, render, selectBot, getTargetBot };
+    return { init, state, applyEvent, applySnapshot, render, selectBot, getTargetBot, loadHistory };
 })();
 
 if (typeof module !== "undefined") module.exports = BotPanel;

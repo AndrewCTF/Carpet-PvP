@@ -164,7 +164,7 @@ public final class AutoSetupSession
     {
         removeBot();
         ServerPlayer player = player();
-        boolean givenBack = AutoSetupManager.giveBack(server, player, saved);
+        boolean givenBack = AutoSetupManager.giveBack(server, playerName, player, saved);
         boolean forgotten = AutoSetupManager.forget(this, givenBack);
         if (player != null && !quiet && forgotten) Menus.stopped(player);
         return givenBack;
@@ -239,11 +239,16 @@ public final class AutoSetupSession
         return server;
     }
 
+    /** What was saved of the player before the session touched anything, or null before it did. */
+    SavedState savedState()
+    {
+        return saved;
+    }
+
     /** What has to be on disk for this session to be recoverable. */
     SessionFile file()
     {
-        return new SessionFile(SessionFile.VERSION, playerName, mode.name().toLowerCase(Locale.ROOT),
-                difficulty.name().toLowerCase(Locale.ROOT), saved);
+        return new SessionFile(SessionFile.VERSION, playerName, saved);
     }
 
     // ===== the rounds =====
@@ -456,18 +461,20 @@ public final class AutoSetupSession
                 slots, List.of(), new ArenaBlocks());
     }
 
-    /** Turns on the rules a session needs, keeping what each of them was at. */
-    private static List<String> switchRulesOn()
+    /** Turns on the settings a session needs and holds on to them until it ends. */
+    private List<String> switchRulesOn()
     {
-        List<String> changed = new ArrayList<>();
-        for (String rule : AutoSetupSettings.neededRules())
+        List<String> held = new ArrayList<>();
+        for (String setting : AutoSetupSettings.neededSettings())
         {
-            String wanted = AutoSetupSettings.wantedValue(rule);
-            String now = AutoSetupSettings.value(rule);
-            if (now == null || wanted == null || wanted.equals(now)) continue;
-            if (AutoSetupSettings.set(rule, wanted)) changed.add(rule + "=" + now);
+            String wanted = AutoSetupSettings.wantedValue(setting);
+            String was = AutoSetupSettings.value(setting);
+            if (was == null || wanted == null) continue;
+            if (!wanted.equals(was)) AutoSetupSettings.set(setting, wanted);
+            String line = AutoSetupManager.hold(playerName, setting, was);
+            if (line != null) held.add(line);
         }
-        return changed;
+        return held;
     }
 
     /** A player's stack as the text the session file keeps; an empty slot is an empty string. */

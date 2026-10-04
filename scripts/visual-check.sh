@@ -26,7 +26,13 @@ SLOG="$OUT/server.log"; CLOG="$OUT/client.log"; : > "$SLOG"; : > "$CLOG"
 SP=$!; CP=
 say() { echo "$1" >&3; }
 waitfor() { local t=0; until grep -qE "$2" "$1"; do sleep 1; t=$((t+1)); if [ "$t" -ge "$3" ]; then return 1; fi; done; return 0; }
-cleanup() { say "stop"; sleep 5; kill $CP "$SP" 2>/dev/null; kill "$XP" 2>/dev/null; }
+# The server is given time to save and stop before anything is killed: a second check started while
+# the first one's server was still writing its world found a half-written world and refused to boot.
+cleanup() {
+  say "stop"; kill $CP 2>/dev/null
+  local t=0; while kill -0 "$SP" 2>/dev/null && [ "$t" -lt 90 ]; do sleep 1; t=$((t+1)); done
+  kill "$SP" 2>/dev/null; kill "$XP" 2>/dev/null
+}
 if ! waitfor "$SLOG" 'Done \([0-9.]+s\)!' 300; then echo "RESULT server_boot=FAIL"; tail -20 "$SLOG"; kill "$SP" "$XP"; exit 1; fi
 echo "RESULT server_boot=OK port=$PORT"
 # A flat world breeds slimes, and one of them kills a player who joins in survival before the first

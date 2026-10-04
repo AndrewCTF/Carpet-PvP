@@ -8,19 +8,22 @@
    ═══════════════════════════════════════════════════════════════ */
 const Nodes = (() => {
 
-    const CATEGORY_STYLE = {
-        Control:    { color: "#f59e0b", bg: "#2d2820" },
-        Movement:   { color: "#06b6d4", bg: "#202830" },
-        Combat:     { color: "#f43f5e", bg: "#2d2025" },
-        Equipment:  { color: "#f97316", bg: "#2d2820" },
-        Look:       { color: "#8b5cf6", bg: "#252030" },
-        Navigation: { color: "#22c55e", bg: "#202d22" },
-        Elytra:     { color: "#10b981", bg: "#202d28" },
-        Crystal:    { color: "#ec4899", bg: "#2d2028" },
-        Conditions: { color: "#0ea5e9", bg: "#202530" },
-        Variables:  { color: "#eab308", bg: "#2d2b1c" },
-        Events:     { color: "#d946ef", bg: "#2d2030" },
+    // The node categories, in the order the library lists them. Each has the colour of one of the game's
+    // sixteen dyes, the colours a carpet comes in, and the ink that can be read on it.
+    const CATEGORIES = {
+        Control:    { label: "Control flow",  color: "#f9801d", ink: "#1a1005" },
+        Movement:   { label: "Movement",      color: "#169c9c", ink: "#031616" },
+        Combat:     { label: "Combat",        color: "#b02e26", ink: "#ffffff" },
+        Navigation: { label: "Navigation",    color: "#80c71f", ink: "#0e1a02" },
+        Look:       { label: "Look and aim",  color: "#8932b8", ink: "#ffffff" },
+        Equipment:  { label: "Equipment",     color: "#835432", ink: "#ffffff" },
+        Conditions: { label: "Conditions",    color: "#3ab3da", ink: "#04161d" },
+        Events:     { label: "Events",        color: "#c74ebd", ink: "#1a0518" },
+        Variables:  { label: "Variables",     color: "#fed83d", ink: "#1c1702" },
+        Crystal:    { label: "Crystal PvP",   color: "#f38baa", ink: "#210a12" },
+        Elytra:     { label: "Elytra flight", color: "#9d9d97", ink: "#131312" },
     };
+    const NODE_BODY = "#1f2125";
 
     const FLOW_IN = [["in", "flow"]];
     const FLOW_OUT = [["next", "flow"]];
@@ -176,8 +179,16 @@ const Nodes = (() => {
         }
     }
 
+    // A node is a block with its category's carpet on top, and square sockets.
+    function dress(node, style) {
+        node.color = style.color;
+        node.bgcolor = NODE_BODY;
+        node.boxcolor = style.ink;
+        for (const slot of (node.inputs || []).concat(node.outputs || [])) slot.shape = LiteGraph.BOX_SHAPE;
+    }
+
     function define(type, ui, params, isCondition) {
-        const style = CATEGORY_STYLE[type.split("/")[0]];
+        const style = CATEGORIES[type.split("/")[0]];
         const inputs = ui.inputs || (isCondition ? [] : FLOW_IN);
         const outputs = ui.outputs || (isCondition ? [["condition", "condition"]] : FLOW_OUT);
         const fromServer = FROM_SERVER[type] || {};
@@ -186,11 +197,13 @@ const Nodes = (() => {
             outputs.forEach(([name, kind]) => this.addOutput(name, kind));
             params.forEach(p => addParam(this, p, fromServer[p.name]));
             this.title = ui.title;
-            this.color = style.color;
-            this.bgcolor = style.bg;
+            dress(this, style);
         }
         Node.title = ui.title;
         Node.desc = ui.desc;
+        Node.title_text_color = style.ink;
+        // A program saved by an earlier editor carries the look it was saved with: it gets today's.
+        Node.prototype.onConfigure = function() { dress(this, style); };
         LiteGraph.registerNodeType(type, Node);
     }
 
@@ -209,7 +222,7 @@ const Nodes = (() => {
         }
     }
 
-    return { register, NODES, MACROS };
+    return { register, NODES, MACROS, CATEGORIES };
 })();
 
 if (typeof module !== "undefined") module.exports = Nodes;

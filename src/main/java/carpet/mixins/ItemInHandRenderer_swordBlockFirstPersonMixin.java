@@ -27,6 +27,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
     @Unique private boolean carpet$pushed;
 
+//~ if <26.1 'submitArmWithItem' -> 'renderArmWithItem'
     @Inject(method = "submitArmWithItem", at = @At("HEAD"))
     private void carpet$blockHitStart(
             //? if >=26.3 {
@@ -77,6 +78,7 @@ public abstract class ItemInHandRenderer_swordBlockFirstPersonMixin {
         poseStack.rotate(new Quaternionf().rotationXYZ(0f, 0f, (float) Math.toRadians(roll)));
     }
 
+    //~ if <26.1 'submitArmWithItem' -> 'renderArmWithItem'
     @Inject(method = "submitArmWithItem", at = @At("RETURN"))
     private void carpet$blockHitEnd(
             //? if >=26.3 {

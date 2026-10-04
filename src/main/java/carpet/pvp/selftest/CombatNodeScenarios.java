@@ -1,7 +1,5 @@
 package carpet.pvp.selftest;
 
-import carpet.logic.CarpetLogic;
-import carpet.logic.program.ProgramExecutor.ProgramInfo;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBody;
 import carpet.pvp.BotPvpConfig;
@@ -249,7 +247,7 @@ final class CombatNodeScenarios
             {
                 if (SelfTest.warmingUp(server, a)) return SelfTest.pending("waiting for the bot to finish loading");
                 SelfTest.run(server, "give " + a + " minecraft:totem_of_undying");
-                SelfTest.run(server, "player " + a + " equip offhand minecraft:totem_of_undying");
+                SelfTest.run(server, SelfTest.cmd(a + " equip offhand minecraft:totem_of_undying"));
                 SelfTest.startProgram(server, a, program);
                 phase[0] = 1;
                 return SelfTest.pending(a + " is waiting with a when_totem_pop handler");
@@ -303,7 +301,7 @@ final class CombatNodeScenarios
                 {
                     return SelfTest.pending("waiting for " + a + " to land a hit");
                 }
-                CarpetLogic.INSTANCE.getProgramExecutor().stopProgram(a);
+                SelfTest.programStopper.accept(a);
                 hitsWhenStopped[0] = body.stats().hits;
                 lastX[0] = bot.getX();
                 phase[0] = 2;
@@ -326,8 +324,7 @@ final class CombatNodeScenarios
 
     private static String error(String botName)
     {
-        ProgramInfo info = CarpetLogic.INSTANCE.getProgramExecutor().getPrograms().get(botName);
-        return info == null ? null : info.error();
+        return SelfTest.programError.apply(botName);
     }
 
     private static String reason(String botName)

@@ -153,6 +153,7 @@ public final class NavController
     /** True while the bot is following a flow field shared with the other chasers of its target. */
     private boolean navFlowField = false;
     /** True once a search has come back with no path at all, which is what makes a mode move on. */
+
     private boolean navRouteFailed = false;
     /** Set by chase mode on the ticks when the bot should be looking at the target rather than at the route. */
     private boolean navAimAtTarget = false;
@@ -1316,7 +1317,7 @@ public final class NavController
 
         if (navWaypoints == null || navWaypointIndex >= navWaypoints.size())
         {
-            // Nothing to walk yet: a search is running or about to start, so the bot looks at the goal and waits
+                // Nothing to walk yet: a search is running or about to start, so the bot looks at the goal and waits
             // rather than setting off in a direction nothing has been planned for.
             lookAt(surface(view, goal), WAYPOINT_ANGLE);
             if (!search.searching())
@@ -1329,6 +1330,7 @@ public final class NavController
         followPath(view, settings, effectiveMode);
         return true;
     }
+
 
     /**
      * Puts something to walk: the shared field when a crowd chases one target, a straight line when the goal can
@@ -2016,7 +2018,11 @@ public final class NavController
         if (navTargetPos == null) return null;
         BlockPos around = BlockPos.containing(navTargetPos);
         int y = view.standYNear(around.getX(), around.getY(), around.getZ(), 8);
-        return y == LevelWalkability.NO_STAND ? null : new BlockPos(around.getX(), y, around.getZ());
+        if (y == LevelWalkability.NO_STAND)
+        {
+            return null;
+        }
+        return new BlockPos(around.getX(), y, around.getZ());
     }
 
     /** Where a player stands at this cell: the middle of it horizontally, on whatever is underfoot. */

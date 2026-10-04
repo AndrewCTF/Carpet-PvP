@@ -62,7 +62,9 @@ public final class StyleIndex
         OPTIONS.put("mace.chain", "true");
         OPTIONS.put("mace.pearl", "true");
         OPTIONS.put("mace.elytra", "true");
+        OPTIONS.put("mace.rocket", "true");
         OPTIONS.put("mace.stunslam", "true");
+        OPTIONS.put("mace.fallstunslam", "true");
         OPTIONS.put("mace.enchants", "true");
         OPTIONS.put("mace.bounce", "true");
         OPTIONS.put("mace.safeland", "true");
@@ -81,6 +83,8 @@ public final class StyleIndex
         OPTIONS.put("smp.retotem", "20");
         OPTIONS.put("smp.buffwindow", "240");
         OPTIONS.put("smp.peelback", "12");
+        OPTIONS.put("mace.breachswap", "true");
+        OPTIONS.put("mace.read", "true");
     }
 
     public static boolean has(CombatStyle style)

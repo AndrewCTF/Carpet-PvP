@@ -1,7 +1,10 @@
 package carpet.logic.web;
 
 import carpet.CarpetSettings;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import net.minecraft.server.MinecraftServer;
@@ -15,6 +18,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -30,13 +34,17 @@ import java.util.regex.Pattern;
 
 /**
  * The web editor's HTTP server, on the JDK's own com.sun.net.httpserver.
- * Static files are public; every /api/ route needs a token from {@link AuthManager}.
- * Request threads never touch the game: API calls are handed to the server thread.
+ * Static files are public; every /api/ route needs a token from {@link AuthManager}, except the two of
+ * {@link AdminLogin} while the admin sign-in is on. Request threads never touch the game: API calls are handed
+ * to the server thread.
  */
 public class WebServer
 {
     private static final Logger LOG = LogManager.getLogger("CarpetLogic");
     private static final int MAX_BODY_BYTES = 2 * 1024 * 1024;
+    /** A name, a password and a ticket: what somebody who has not signed in may send. */
+    private static final int MAX_LOGIN_BODY_BYTES = 4096;
+    private static final String NO_TOKEN = "Missing or expired token. Run /carpetlogic open in game for a link.";
     private static final int MAX_STREAMS = 16;
     private static final int STREAM_QUEUE_SIZE = 64;
     private static final int SERVER_THREAD_TIMEOUT_SECONDS = 5;
@@ -80,6 +88,7 @@ public class WebServer
     private final MinecraftServer server;
     private final AuthManager auth;
     private final Api api;
+    private final AdminLogin login;
     private final HttpServer http;
     private final ExecutorService executor;
     private final String url;
@@ -89,9 +98,18 @@ public class WebServer
 
     public WebServer(MinecraftServer server, AuthManager auth, Api api, String bindAddress, int port) throws IOException
     {
+        this(server, auth, api, null, bindAddress, port);
+    }
+
+    /**
+     * @param login the admin sign-in, or null for a server that has none
+     */
+    public WebServer(MinecraftServer server, AuthManager auth, Api api, AdminLogin login, String bindAddress, int port) throws IOException
+    {
         this.server = server;
         this.auth = auth;
         this.api = api;
+        this.login = login;
         InetAddress address = InetAddress.getByName(bindAddress);
         http = HttpServer.create(new InetSocketAddress(address, port), 0);
         http.createContext("/api/", exchange -> respond(exchange, this::handleApi));
@@ -145,7 +163,8 @@ public class WebServer
         }
         for (EventStream stream : streams)
         {
-            if (api.denied(stream.session) != null)
+            boolean signedOut = stream.session.admin() && !(login != null && login.enabled());
+            if (signedOut || api.denied(stream.session) != null)
             {
                 stream.close();
             }
@@ -216,16 +235,40 @@ public class WebServer
 
     private void handleApi(HttpExchange exchange) throws IOException
     {
+        String method = exchange.getRequestMethod();
+        String path = exchange.getRequestURI().getPath();
+        // While the admin sign-in is off its routes are not there at all: they are answered like any other path.
+        boolean signIn = login != null && login.enabled();
+        if (signIn && "POST".equals(method) && ("/api/login".equals(path) || "/api/password".equals(path)))
+        {
+            send(exchange, signIn(exchange, path));
+            return;
+        }
         String token = AuthManager.bearerToken(exchange.getRequestHeaders().getFirst("Authorization"));
         AuthManager.Session session = auth.validate(token);
+        if (session != null && session.admin() && !signIn)
+        {
+            // A session from the sign-in ends with the rule that offered it.
+            auth.revoke(token);
+            session = null;
+        }
         if (session == null)
         {
             exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
-            send(exchange, Api.error(401, "Missing or expired token. Run /carpetlogic open in game for a link."));
+            Api.Response refusal = Api.error(401, NO_TOKEN);
+            if (signIn)
+            {
+                // How a page without a token learns that it can offer the sign-in.
+                refusal.body().getAsJsonObject().addProperty("adminLogin", true);
+            }
+            send(exchange, refusal);
             return;
         }
-        String method = exchange.getRequestMethod();
-        String path = exchange.getRequestURI().getPath();
+        if ("POST".equals(method) && "/api/logout".equals(path))
+        {
+            send(exchange, signOut(token, session));
+            return;
+        }
         if ("GET".equals(method) && "/api/events".equals(path))
         {
             streamEvents(exchange, session, token);
@@ -238,7 +281,56 @@ public class WebServer
             return;
         }
         String text = new String(body, StandardCharsets.UTF_8);
-        send(exchange, onServerThread(() -> api.handle(method, path, session, text)));
+        AuthManager.Session caller = session;
+        send(exchange, onServerThread(() -> api.handle(method, path, caller, text)));
+    }
+
+    // The two routes somebody without a token may use. They only take JSON, which a page on another site
+    // cannot send without asking first, and that question is never answered.
+    private Api.Response signIn(HttpExchange exchange, String path) throws IOException
+    {
+        String type = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (type == null || !type.toLowerCase(Locale.ROOT).startsWith("application/json"))
+        {
+            return Api.error(415, "The request body must be application/json");
+        }
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_LOGIN_BODY_BYTES + 1);
+        if (body.length > MAX_LOGIN_BODY_BYTES)
+        {
+            return Api.error(413, "Request body is too large");
+        }
+        JsonObject request;
+        try
+        {
+            JsonElement json = JsonParser.parseString(new String(body, StandardCharsets.UTF_8));
+            if (!json.isJsonObject())
+            {
+                return Api.error(400, "Request body must be a JSON object");
+            }
+            request = json.getAsJsonObject();
+        }
+        catch (JsonParseException e)
+        {
+            return Api.error(400, "Request body is not valid JSON");
+        }
+        String address = LoginThrottle.key(exchange.getRemoteAddress().getAddress());
+        return "/api/login".equals(path) ? login.login(address, request) : login.setPassword(address, request);
+    }
+
+    // Signing out works whatever the session may do otherwise: in viewer mode, and for a player who has left.
+    private Api.Response signOut(String token, AuthManager.Session session)
+    {
+        auth.revoke(token);
+        for (EventStream stream : streams)
+        {
+            if (stream.session == session)
+            {
+                stream.close();
+            }
+        }
+        JsonObject result = new JsonObject();
+        result.addProperty("success", true);
+        return new Api.Response(200, result);
     }
 
     private void streamEvents(HttpExchange exchange, AuthManager.Session session, String token) throws IOException
@@ -362,6 +454,10 @@ public class WebServer
     private static void send(HttpExchange exchange, Api.Response response) throws IOException
     {
         byte[] content = response.body().toString().getBytes(StandardCharsets.UTF_8);
+        if (response.status() == 429 && response.body().getAsJsonObject().has("retryAfter"))
+        {
+            exchange.getResponseHeaders().set("Retry-After", response.body().getAsJsonObject().get("retryAfter").getAsString());
+        }
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         exchange.getResponseHeaders().set("Cache-Control", "no-store");

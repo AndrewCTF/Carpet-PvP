@@ -1,8 +1,9 @@
 package carpet.patches;
 
-import carpet.CarpetSettings;
+import net.minecraft.ChatFormatting;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
@@ -46,16 +47,16 @@ import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
-import carpet.fakes.ServerPlayerInterface;
-import carpet.utils.CommandHelper;
-import carpet.utils.DelayedTasks;
-import carpet.utils.Messenger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import carpet.helpers.EntityPlayerActionPack;
 import carpet.pvp.BotBrain;
 import carpet.pvp.BotPvpConfig;
+import carpet.pvp.BotSettings;
+import carpet.utils.DelayedTasks;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -80,6 +81,10 @@ public class EntityPlayerMPFake extends ServerPlayer
     private static final Set<String> spawning = new HashSet<>();
     private static final int DEFAULT_SHIELD_DISABLE_TICKS = 100;
     private static final double TICKS_PER_SECOND = 20.0D;
+    private static final Method DISABLE_BLOCKING = disableBlockingMethod(4);
+    private static final Method DISABLE_BLOCKING_WITH_ATTACKER = disableBlockingMethod(5);
+
+    private final EntityPlayerActionPack actionPack;
 
     public Runnable fixStartingPosition = () -> {};
     public boolean isAShadow;
@@ -89,6 +94,10 @@ public class EntityPlayerMPFake extends ServerPlayer
     // PvP combat-AI state (lazily initialised so it also covers shadow players).
     private BotPvpConfig pvpConfig;
     private BotBrain botBrain;
+    /** Knockback a hit handed us, waiting for the next tick to apply. See {@link #setPendingKnockback}. */
+    private Vec3 pendingKnockback;
+    /** What this player's velocity was before the hit being processed, to tell knockback from a repeat. */
+    private Vec3 velocityBeforeDamage;
     /** UUID of the most recent attacker, used by the combat-AI revenge logic. */
     public UUID lastAttackerUUID;
     /**
@@ -105,6 +114,32 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         if (pvpConfig == null) pvpConfig = new BotPvpConfig();
         return pvpConfig;
+    }
+
+    /**
+     * A hit on a fake player leaves it with no knockback of its own: vanilla sends the victim the
+     * motion it was given and puts its velocity back, expecting a client to apply it. The fake
+     * packet listener catches that motion packet and hands it here, and the next tick turns it into
+     * real movement.
+     */
+    public void setPendingKnockback(Vec3 velocity)
+    {
+        pendingKnockback = velocity;
+    }
+
+    /** Remembers the velocity a hit is about to change, so the motion packet it sends can be read. */
+    public void noteDamage()
+    {
+        velocityBeforeDamage = getDeltaMovement();
+    }
+
+    /**
+     * Whether the given velocity is one a hit produced, rather than the one it started from. Vanilla
+     * also sends motion packets that only repeat the velocity the player already has.
+     */
+    public boolean isKnockback(Vec3 velocity)
+    {
+        return velocityBeforeDamage == null || !velocity.equals(velocityBeforeDamage);
     }
 
     /** The per-bot combat-AI driver, ticked each game tick from the action pack. */
@@ -164,7 +199,7 @@ public class EntityPlayerMPFake extends ServerPlayer
         if (!server.usesAuthentication())
         {
             // Offline mode: the profile is built locally, so Mojang is never asked and the name stays as typed.
-            if (!CarpetSettings.allowSpawningOfflinePlayers) return false;
+            if (!BotSettings.allowSpawningOfflinePlayers) return false;
             GameProfile profile = offlineProfile(username);
             return canPlace(profile, server, source) && placeFake(profile, server, worldIn, pos, yaw, pitch, dimensionId, gamemode, flying);
         }
@@ -178,10 +213,11 @@ public class EntityPlayerMPFake extends ServerPlayer
             GameProfile profile = p == null ? null : p.orElse(null);
             if (profile == null)
             {
-                if (!CarpetSettings.allowSpawningOfflinePlayers)
+                if (!BotSettings.allowSpawningOfflinePlayers)
                 {
-                    Messenger.m(source, "rb Player " + username + " doesn't exist and cannot spawn in online mode. " +
-                            "Turn the server offline or the allowSpawningOfflinePlayers on to spawn non-existing players");
+                    source.sendSuccess(() -> Component.literal("Player " + username + " doesn't exist and cannot spawn in online mode. "
+                            + "Turn the server offline or the allowSpawningOfflinePlayers on to spawn non-existing players")
+                            .withStyle(ChatFormatting.RED), false);
                     return;
                 }
                 profile = offlineProfile(username);
@@ -204,12 +240,14 @@ public class EntityPlayerMPFake extends ServerPlayer
         NameAndId nameAndId = new NameAndId(profile.id(), profile.name());
         if (players.getBans().isBanned(nameAndId))
         {
-            Messenger.m(source, "r Player ", "rb " + nameAndId.name(), "r  is banned on this server");
+            source.sendSuccess(() -> Component.literal("Player " + nameAndId.name() + " is banned on this server")
+                    .withStyle(ChatFormatting.RED), false);
             return false;
         }
-        if (players.isUsingWhitelist() && players.isWhiteListed(nameAndId) && !CommandHelper.hasPermissionLevel(source, 2))
+        if (players.isUsingWhitelist() && players.isWhiteListed(nameAndId) && !Commands.LEVEL_GAMEMASTERS.check(source.permissions()))
         {
-            Messenger.m(source, "r Whitelisted players can only be spawned by operators");
+            source.sendSuccess(() -> Component.literal("Whitelisted players can only be spawned by operators")
+                    .withStyle(ChatFormatting.RED), false);
             return false;
         }
         return true;
@@ -220,7 +258,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, profile, ClientInformation.createDefault(), false);
         instance.fixStartingPosition = () -> instance.snapTo(pos.x, pos.y, pos.z, (float) yaw, (float) pitch);
-        server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), instance, new CommonListenerCookie(profile, 0, instance.clientInformation(), false));
+        join(server, instance, profile, false);
         instance.teleportTo(worldIn, pos.x, pos.y, pos.z, Set.of(), (float) yaw, (float) pitch, true);
         instance.setHealth(20.0F);
         instance.unsetRemoved();
@@ -242,6 +280,19 @@ public class EntityPlayerMPFake extends ServerPlayer
         return true;
     }
 
+    /**
+     * Puts the fake player into the player list and swaps the vanilla packet listener the join
+     * created for the fake one, which drops the packets a client would have handled. The listener's
+     * constructor is what assigns {@code player.connection}, so building it afterwards is enough.
+     */
+    private static void join(MinecraftServer server, EntityPlayerMPFake fake, GameProfile profile, boolean transferred)
+    {
+        FakeClientConnection connection = new FakeClientConnection(PacketFlow.SERVERBOUND);
+        CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, transferred);
+        server.getPlayerList().placeNewPlayer(connection, fake, cookie);
+        new NetHandlerPlayServerFake(server, connection, fake, cookie);
+    }
+
     private static CompletableFuture<Optional<GameProfile>> fetchGameProfile(MinecraftServer server, String name) {
         ProfileResolver resolver = server.services().profileResolver();
         // The lookup blocks on the network, so it goes to the vanilla background pool instead of the server thread.
@@ -256,12 +307,13 @@ public class EntityPlayerMPFake extends ServerPlayer
         GameProfile gameprofile = player.getGameProfile();
         EntityPlayerMPFake playerShadow = new EntityPlayerMPFake(server, worldIn, gameprofile, player.clientInformation(), true);
         playerShadow.setChatSession(player.getChatSession());
-        server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
+        join(server, playerShadow, gameprofile, true);
 
         playerShadow.setHealth(player.getHealth());
         playerShadow.connection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         playerShadow.gameMode.changeGameModeForPlayer(player.gameMode.getGameModeForPlayer());
-        ((ServerPlayerInterface) playerShadow).getActionPack().copyFrom(((ServerPlayerInterface) player).getActionPack());
+        // The player's own action pack comes from Carpet's mixin, which only exists on Fabric, so the
+        // caller hands it over once the shadow is in place.
         // this might create problems if a player logs back in...
         playerShadow.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
         playerShadow.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, player.getEntityData().get(DATA_PLAYER_MODE_CUSTOMISATION));
@@ -303,6 +355,17 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         super(server, worldIn, profile, cli);
         isAShadow = shadow;
+        actionPack = new EntityPlayerActionPack(this);
+    }
+
+    /**
+     * The fake player's own action pack. A real player gets one from Carpet's mixin into
+     * {@link ServerPlayer}; a fake player owns it outright, so the same code works where there is no
+     * mixin to add it. It is ticked from {@link #tick()}.
+     */
+    public EntityPlayerActionPack getActionPack()
+    {
+        return actionPack;
     }
 
     @Override
@@ -530,7 +593,7 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     @Override
     public void kill(ServerLevel level) {
-        kill(Messenger.s("Killed"));
+        kill(Component.literal("Killed"));
     }
 
     public void kill(Component reason) {
@@ -569,11 +632,22 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     @Override
     public void tick() {
+        if (pendingKnockback != null)
+        {
+            setDeltaMovement(pendingKnockback);
+            pendingKnockback = null;
+        }
+        actionPack.onUpdate();
         if (this.level().getServer().getTickCount() % 10 == 0)
         {
             this.connection.resetPosition();
             ((net.minecraft.server.level.ServerLevel)this.level()).getChunkSource().move(this);
         }
+        // A real player's known movement is the distance its client last reported it had moved, which is where
+        // the game reads a player's speed from: a spear reads the closing speed of two fighters out of it. A
+        // fake player has no client, so it reports the distance the server moved it by this tick. Not its
+        // velocity: that already has the tick's friction taken off and reads a sprint as a little over half.
+        Vec3 before = position();
         try
         {
             super.tick();
@@ -584,8 +658,19 @@ public class EntityPlayerMPFake extends ServerPlayer
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
         }
+        setKnownMovement(position().subtract(before));
 
 
+    }
+
+    /** Vanilla keeps the shield's cooldown method, Paper's copy of it takes the attacker as well. */
+    private static Method disableBlockingMethod(int parameterCount)
+    {
+        for (Method method : BlocksAttacks.class.getMethods())
+        {
+            if (method.getName().equals("disable") && method.getParameterCount() == parameterCount) return method;
+        }
+        return null;
     }
 
     private void shakeOff()
@@ -613,15 +698,20 @@ public class EntityPlayerMPFake extends ServerPlayer
 
         this.level().getScoreboard().forAllObjectives(ObjectiveCriteria.DEATH_COUNT, this, ScoreAccess::increment);
 
-        if (CarpetSettings.fakePlayerDropInventoryOnDeath) {
-            this.dropAllDeathLoot(this.level(), cause);
+        if (BotSettings.fakePlayerDropInventoryOnDeath) {
+            this.dropFakePlayerLoot(this.level(), cause);
         }
 
         // Keep fake players in-world and immediately schedule a respawn.
         DelayedTasks.scheduleNextTick(this.level().getServer(), this::respawn);
     }
 
-    protected void dropAllDeathLoot(ServerLevel serverLevel, DamageSource damageSource) {
+    /**
+     * What a fake player drops when it dies and the rule asks for it. Not an override: Paper declares
+     * its own {@code dropAllDeathLoot} that returns an event, so a method of that name here would be an
+     * override of something that does not return what this one does.
+     */
+    private void dropFakePlayerLoot(ServerLevel serverLevel, DamageSource damageSource) {
         boolean keepInventory = serverLevel.getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
 
         if (!keepInventory) {
@@ -751,12 +841,24 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     @Override
     public boolean allowsListing() {
-        return CarpetSettings.allowListingFakePlayers;
+        return BotSettings.allowListingFakePlayers;
+    }
+
+    /**
+     * Nothing but the server moves a fake player, so the server is the authority on its movement, as it is for
+     * the game's own test players. A player is otherwise left to its client, and the game then skips what the
+     * client would have reported for it: the fall it counts in {@code Entity.move} first of all, and with it
+     * fall damage, critical hits and a mace's smash. A vehicle follows its controlling passenger in this.
+     */
+    @Override
+    public boolean isClientAuthoritative()
+    {
+        return false;
     }
 
     @Override
     protected void checkFallDamage(double y, boolean onGround, BlockState state, BlockPos pos) {
-        if (!CarpetSettings.fakePlayerFallDamage) {
+        if (!BotSettings.fakePlayerFallDamage) {
             return;
         }
         super.checkFallDamage(y, onGround, state, pos);
@@ -826,6 +928,7 @@ public class EntityPlayerMPFake extends ServerPlayer
     public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float f) {
         // Record the attacker so the combat-AI revenge logic can retaliate.
         if (f > 0.0f && source.getEntity() instanceof LivingEntity attacker && attacker != this) {
+            noteDamage();
             this.lastAttackerUUID = attacker.getUUID();
             this.lastAttackerTick = serverLevel.getGameTime();
         }
@@ -871,7 +974,31 @@ public class EntityPlayerMPFake extends ServerPlayer
             this.stopUsingItem();
             return;
         }
-        blocksAttacks.disable(serverLevel, this, (float) this.disableBlockingForSeconds, blocking);
+        disableBlocking(serverLevel, livingEntity, blocksAttacks, blocking);
+    }
+
+    /**
+     * Turns the fake player's shield off for as long as its own rule says. Paper's copy of this
+     * method takes the attacker as well, so the call goes through whichever overload the server has.
+     */
+    private void disableBlocking(ServerLevel serverLevel, LivingEntity attacker, BlocksAttacks blocksAttacks, ItemStack blocking)
+    {
+        float seconds = (float) this.disableBlockingForSeconds;
+        try
+        {
+            if (DISABLE_BLOCKING_WITH_ATTACKER != null)
+            {
+                DISABLE_BLOCKING_WITH_ATTACKER.invoke(blocksAttacks, serverLevel, this, seconds, blocking, attacker);
+            }
+            else
+            {
+                DISABLE_BLOCKING.invoke(blocksAttacks, serverLevel, this, seconds, blocking);
+            }
+        }
+        catch (ReflectiveOperationException e)
+        {
+            throw new IllegalStateException("Could not put the shield on cooldown", e);
+        }
     }
 
     // A blocked hit used to knock the fake player forward when it held a raised shield, which is not

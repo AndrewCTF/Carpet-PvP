@@ -1,9 +1,10 @@
 package carpet.pvp;
 
-import carpet.CarpetSettings;
 import carpet.pvp.drill.Drills;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -16,6 +17,8 @@ import java.io.IOException;
  */
 public final class PvpSystems
 {
+    private static final Logger LOG = LoggerFactory.getLogger(PvpSystems.class);
+
     private PvpSystems()
     {
     }
@@ -51,12 +54,12 @@ public final class PvpSystems
         try
         {
             FactionStore.save(server, factions);
-            CarpetSettings.LOG.info("Saved {} bot faction(s) and {} finished fight trace(s) of this world",
+            LOG.info("Saved {} bot faction(s) and {} finished fight trace(s) of this world",
                     factions.factions().size(), traces);
         }
         catch (IOException e)
         {
-            CarpetSettings.LOG.warn("Could not save the bot factions of this world: {}", e.getMessage());
+            LOG.warn("Could not save the bot factions of this world: {}", e.getMessage());
         }
     }
 }

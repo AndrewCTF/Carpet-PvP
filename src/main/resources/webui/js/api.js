@@ -1,9 +1,9 @@
 /**
  * CarpetLogic — API client
  *
- * Every request carries the token from the link that /carpetlogic open prints in game.
- * Server events arrive over a streamed fetch rather than EventSource, so the token travels
- * in a header and never in a URL the server sees.
+ * Every request carries a session token: the one in the link /carpetlogic open prints in game, or the one
+ * the admin sign-in answers with. Server events arrive over a streamed fetch rather than EventSource, so the
+ * token travels in a header and never in a URL the server sees.
  */
 const API = (() => {
 
@@ -20,13 +20,19 @@ const API = (() => {
     function loadToken() {
         const match = /[#&]token=([A-Za-z0-9_-]+)/.exec(window.location.hash);
         if (match) {
-            try { sessionStorage.setItem(TOKEN_KEY, match[1]); } catch (e) { /* storage unavailable */ }
-            token = match[1];
+            setToken(match[1]);
             history.replaceState(null, '', window.location.pathname);
         } else {
             try { token = sessionStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
         }
         return token;
+    }
+
+    function setToken(value) {
+        token = value || null;
+        try {
+            if (token) sessionStorage.setItem(TOKEN_KEY, token); else sessionStorage.removeItem(TOKEN_KEY);
+        } catch (e) { /* storage unavailable */ }
     }
 
     function hasToken() {
@@ -36,11 +42,12 @@ const API = (() => {
     // ── Connection ───────────────────────────────────────────────
 
     function connect() {
-        loadToken();
+        if (!token) loadToken();
         if (!token) {
-            _emit('unauthorized', 'No access token. Run /carpetlogic open in game and use the link it prints.');
+            _emit('unauthorized', { message: 'This page has no session.' });
             return;
         }
+        disconnect();
         _openStream();
     }
 
@@ -73,7 +80,7 @@ const API = (() => {
                 signal: abort.signal
             });
             if (resp.status === 401 || resp.status === 403) {
-                _emit('unauthorized', await _errorText(resp));
+                _refused(resp.status, await _body(resp));
                 return;
             }
             if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
@@ -95,6 +102,7 @@ const API = (() => {
         } catch (err) {
             if (abort.signal.aborted) return;
         }
+        if (abort.signal.aborted) return;
         _setConnected(false);
         reconnectTimer = setTimeout(_openStream, 3000);
     }
@@ -133,28 +141,44 @@ const API = (() => {
 
     // ── REST ─────────────────────────────────────────────────────
 
-    async function _errorText(resp) {
+    // What the server answered, as an object: its JSON, or its text as the error.
+    async function _body(resp) {
         const text = await resp.text().catch(() => '');
-        try { return JSON.parse(text).error || text; } catch (e) { return text || resp.statusText; }
+        try {
+            const body = JSON.parse(text);
+            return body && typeof body === 'object' ? body : { error: text };
+        } catch (e) {
+            return { error: text || resp.statusText };
+        }
     }
 
-    async function _fetch(path, options = {}) {
-        if (!token) throw new Error('No access token. Run /carpetlogic open in game.');
-        const opts = {
-            method: options.method || 'GET',
-            headers: { 'Authorization': 'Bearer ' + token }
-        };
+    // A 401 means the token is no session any more; a 403 on the stream that its player may not use it now.
+    function _refused(status, body) {
+        if (status === 401) setToken(null);
+        disconnect();
+        _emit('unauthorized', { message: body.error, adminLogin: Boolean(body.adminLogin), denied: status === 403 });
+    }
+
+    /** Sends a request with the token and answers { ok, status, body } whatever the status. */
+    async function _send(path, options = {}) {
+        const opts = { method: options.method || 'GET', headers: {} };
+        if (token && options.anonymous !== true) opts.headers['Authorization'] = 'Bearer ' + token;
         if (options.body !== undefined) {
             opts.headers['Content-Type'] = 'application/json';
             opts.body = JSON.stringify(options.body);
         }
         const resp = await fetch(path, opts);
-        if (!resp.ok) {
-            const message = await _errorText(resp);
-            if (resp.status === 401) _emit('unauthorized', message);
-            throw new Error(message);
+        return { ok: resp.ok, status: resp.status, body: await _body(resp) };
+    }
+
+    async function _fetch(path, options = {}) {
+        if (!token) throw new Error('This page has no session');
+        const answer = await _send(path, options);
+        if (!answer.ok) {
+            if (answer.status === 401) _refused(401, answer.body);
+            throw new Error(answer.body.error || 'HTTP ' + answer.status);
         }
-        return resp.json();
+        return answer.body;
     }
 
     const getStatus = () => _fetch('/api/status');
@@ -174,10 +198,47 @@ const API = (() => {
     const runProgram = (botName, name, actions) => _fetch('/api/execute', { method: 'POST', body: { botName, name, actions } });
     const stopProgram = (botName) => _fetch('/api/stop', { method: 'POST', body: { botName } });
 
+    // ── Getting in and out ───────────────────────────────────────
+
+    /** Asks without a token, which the server refuses, and reads from the refusal whether it offers the admin sign-in. */
+    async function offersSignIn() {
+        const answer = await _send('/api/status', { anonymous: true });
+        return Boolean(answer.body.adminLogin);
+    }
+
+    /** Signs an admin in. Answers { ok, status, body }; when ok, the session is this page's from then on. */
+    async function signIn(name, password) {
+        const answer = await _send('/api/login', { method: 'POST', body: { name, password }, anonymous: true });
+        if (answer.ok && answer.body.token) {
+            // A session this page had before, from a link, is ended rather than left behind.
+            await signOut();
+            setToken(answer.body.token);
+        }
+        return answer;
+    }
+
+    const setPassword = (ticket, name, password) =>
+        _send('/api/password', { method: 'POST', body: { ticket, name, password }, anonymous: true });
+
+    /** Ends the session on the server and forgets it here. */
+    async function signOut() {
+        const had = token;
+        setToken(null);
+        disconnect();
+        if (!had) return;
+        try {
+            await fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + had } });
+        } catch (e) { /* the server is away; the token is forgotten here all the same */ }
+    }
+
+    /** Changes a rule as the admin this session belongs to. Answers { ok, status, body } with the rule as it now is. */
+    const setRule = (rule, value) => _send('/api/settings', { method: 'POST', body: { rule, value } });
+
     return {
-        connect, disconnect, isConnected, hasToken, on, off,
+        connect, disconnect, isConnected, hasToken, loadToken, on, off,
         getStatus, getSettings, getSchema, getPrograms, getPresets, saveProgram, deleteProgram,
-        getBots, getMatches, spawnBot, removeBot, setBotConfig, tpBot, runProgram, stopProgram
+        getBots, getMatches, spawnBot, removeBot, setBotConfig, tpBot, runProgram, stopProgram,
+        offersSignIn, signIn, setPassword, signOut, setRule
     };
 
 })();

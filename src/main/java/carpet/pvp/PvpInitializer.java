@@ -3,6 +3,7 @@ package carpet.pvp;
 import carpet.CarpetServer;
 import carpet.CarpetSettings;
 import carpet.fakes.PlayerSwordBlockInterface;
+import carpet.helpers.EntityPlayerActionPack;
 import carpet.logic.CarpetLogic;
 import carpet.network.ServerNetworkHandler;
 import carpet.pvp.autosetup.AutoSetupManager;
@@ -41,6 +42,9 @@ public final class PvpInitializer implements ModInitializer
                 AutoSetupManager.onPlayerJoined(server, handler.player));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
                 AutoSetupManager.onPlayerLeft(server, handler.player));
+        // The window a sword opens lives in Carpet's rule and its mixin, so the shared action pack
+        // reaches it through this instead of calling in.
+        EntityPlayerActionPack.swordBlockStarter = PvpInitializer::startSwordBlock;
     }
 
     /** Breaking a block that needs a tool with the wrong one in hand costs a heart, like hitting a player does. */
