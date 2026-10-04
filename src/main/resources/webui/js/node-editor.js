@@ -13,6 +13,8 @@ const NodeEditor = (() => {
 
     const ACCENT = "#4fe0cf";
     const BAD = "#ff6b5e";
+    const WARN = "#ffb42e";
+    const NOT_BUDGETED = "NOT BUDGETED";
     /** A program that has just been opened is not shown smaller than this: its nodes have to be readable. */
     const READABLE = 0.7;
     // The floor the nodes stand on: a faint line every block and a stronger one every four.
@@ -134,6 +136,23 @@ const NodeEditor = (() => {
     }
 
     function drawNodesOurWay() {
+        // A value too long for its widget is cut short there. Only what is drawn: the widget keeps the whole of it.
+        const drawWidgets = LGraphCanvas.prototype.drawNodeWidgets;
+        LGraphCanvas.prototype.drawNodeWidgets = function(node, posY, ctx, active) {
+            const texts = (node.widgets || []).filter(widget => widget.type === "text");
+            const whole = texts.map(widget => widget.value);
+            for (const widget of texts) {
+                const label = widget.label || widget.name;
+                // LiteGraph keeps 30 pixels each side, and the label, where there is one, on the left.
+                const room = node.size[0] - 60 - (label ? ctx.measureText(label).width + 12 : 0);
+                widget.value = Nodes.clip(widget.value, room, text => ctx.measureText(text).width);
+            }
+            try {
+                return drawWidgets.call(this, node, posY, ctx, active);
+            } finally {
+                texts.forEach((widget, i) => { widget.value = whole[i]; });
+            }
+        };
         const drawNode = LGraphCanvas.prototype.drawNode;
         LGraphCanvas.prototype.drawNode = function(node, ctx) {
             // A title is written in the ink that reads on its category's colour, selected or not.
@@ -144,6 +163,17 @@ const NodeEditor = (() => {
             ctx.strokeStyle = wrong ? BAD : "#0b0c0d";
             ctx.lineWidth = wrong ? 2 : 1;
             ctx.strokeRect(-0.5, -LiteGraph.NODE_TITLE_HEIGHT - 0.5, node.size[0] + 1, node.size[1] + LiteGraph.NODE_TITLE_HEIGHT + 1);
+            if (node.constructor.unbudgeted && !node.flags.collapsed) {
+                // The per-tick budget cannot interrupt this node, and the node says so in its title.
+                const height = LiteGraph.NODE_TITLE_HEIGHT;
+                ctx.font = "bold 10px " + getComputedStyle(document.body).fontFamily;
+                const width = ctx.measureText(NOT_BUDGETED).width + 10;
+                ctx.fillStyle = "#16171a";
+                ctx.fillRect(node.size[0] - width - 6, -height + 6, width, height - 12);
+                ctx.fillStyle = WARN;
+                ctx.textAlign = "center";
+                ctx.fillText(NOT_BUDGETED, node.size[0] - 6 - width / 2, -height / 2 + 3.5);
+            }
             if (wrong && !node.flags.collapsed) {
                 // What is wrong with the node, under it, as much of it as fits two node widths.
                 ctx.font = this.inner_text_font;

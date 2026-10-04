@@ -19,8 +19,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -493,4 +497,44 @@ class ActionSchemaTest
         }
     }
 
+    private static List<BotAction> scarpet(String code)
+    {
+        return GSON.fromJson(GSON.toJson(List.of(Map.of("type", "SCARPET", "params", Map.of("code", code)))),
+                new TypeToken<List<BotAction>>() {}.getType());
+    }
+
+    @Test
+    void aSnippetLongerThanItsParameterHoldsIsRefused()
+    {
+        String fits = "x".repeat(4096);
+        schema.validate(scarpet(fits));
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> schema.validate(scarpet(fits + "x")));
+        assertEquals("SCARPET.code must be text of at most 4096 characters", refused.getMessage());
+    }
+
+    @Test
+    void theActionsMarkedUnbudgetedAreTheOnesThatHoldScarpet() throws IOException
+    {
+        JsonObject actions;
+        try (Reader reader = new InputStreamReader(ActionSchema.class.getResourceAsStream("/carpetlogic/actions.json"), StandardCharsets.UTF_8))
+        {
+            actions = GSON.fromJson(reader, JsonObject.class).getAsJsonObject("actions");
+        }
+        Set<String> marked = new HashSet<>();
+        for (String type : actions.keySet())
+        {
+            JsonObject action = actions.getAsJsonObject(type);
+            boolean holdsScarpet = false;
+            for (JsonElement param : action.getAsJsonArray("params"))
+            {
+                holdsScarpet |= param.getAsJsonObject().has("code");
+            }
+            assertEquals(holdsScarpet, action.has("unbudgeted") && action.get("unbudgeted").getAsBoolean(), type);
+            if (holdsScarpet)
+            {
+                marked.add(type);
+            }
+        }
+        assertEquals(Set.of("SCARPET", "CONDITION_SCARPET"), marked);
+    }
 }

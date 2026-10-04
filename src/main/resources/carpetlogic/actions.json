@@ -11,6 +11,8 @@
     "params: name, type (int, number, bool, string, expr), default, and optionally min/max or the allowed options.",
     "An int or number parameter may also hold an expression as text, of which a variable, the referencePrefix",
     "followed by a name as in '$counter', is the simplest. A variable that was never set reads as 0.",
+    "A string parameter holds at most 1024 characters, or its maxLength. code: scarpet marks one that holds Scarpet.",
+    "unbudgeted: the action runs Scarpet, which the per-tick budget cannot interrupt; it is charged a fixed number of steps.",
     "An expr parameter always holds an expression; returns says what it has to give: bool, number, text, list or any.",
     "requires: the boolean carpet rule that must be on for the action to work.",
     "drivesBody: the action moves the bot or clicks for it. While a combat node owns the bot the interpreter skips",
@@ -290,6 +292,10 @@
     "EXECUTE_COMMAND": {"kind": "action", "node": "Control/ExecuteCommand", "params": [
       {"name": "command", "type": "string", "default": "say Hello"}
     ]},
+    "SCARPET": {"kind": "action", "node": "Scarpet/Run", "unbudgeted": true, "params": [
+      {"name": "code", "type": "string", "default": "print(player('all'), 'hello from ' + p)", "maxLength": 4096, "code": "scarpet"},
+      {"name": "result", "type": "string", "default": ""}
+    ]},
     "IF": {"kind": "control", "node": "Control/If", "slots": ["children", "elseChildren"], "params": [
       {"name": "condition", "type": "expr", "returns": "bool", "default": "health < 10"}
     ]},
@@ -318,6 +324,9 @@
     "SEQUENCE": {"kind": "control", "node": "Control/Sequence", "slots": ["children"], "params": []},
     "IF_THEN_ELSE": {"kind": "control", "node": "Control/If-Else", "slots": ["condition", "children", "elseChildren"], "params": []},
 
+    "CONDITION_SCARPET": {"kind": "condition", "node": "Conditions/Scarpet", "unbudgeted": true, "params": [
+      {"name": "code", "type": "string", "default": "query(p, 'health') < 10", "maxLength": 4096, "code": "scarpet"}
+    ]},
     "CONDITION_ALL": {"kind": "condition", "node": "Conditions/All", "slots": ["conditions"], "params": []},
     "CONDITION_ANY": {"kind": "condition", "node": "Conditions/Any", "slots": ["conditions"], "params": []},
     "CONDITION_NOT": {"kind": "condition", "node": "Conditions/Not", "slots": ["condition"], "params": []},

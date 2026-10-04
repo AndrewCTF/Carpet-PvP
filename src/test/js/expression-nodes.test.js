@@ -215,3 +215,65 @@ test("after the variable sign the program's own variables are offered", () => {
     assert.deepEqual(Inspector.suggestions("$", schema.expressions, ["count", "kills"]).map(entry => entry.insert), ["$count", "$kills"]);
     assert.deepEqual(Inspector.suggestions("$k", schema.expressions, ["count", "kills"]).map(entry => entry.insert), ["$kills"]);
 });
+
+// ── The Scarpet nodes ──
+
+test("a Scarpet node compiles to its snippet and the variable its result goes to", () => {
+    const { graph, add, wire, start } = newGraph();
+    const run = add("Scarpet/Run", { code: "set(0, 64, 0, 'gold_block');\nn = n + 1; n * 6", result: "answer" });
+    const branch = add("Control/If-Else");
+    const check = add("Conditions/Scarpet", { code: "block(0, 64, 0) == 'gold_block'" });
+    wire(start, 0, run);
+    wire(run, 0, branch);
+    wire(check, 0, branch, 1);
+    const actions = NodeCompiler.compileStrictly(graph);
+    assert.deepEqual(actions[0], { type: "SCARPET", params: { code: "set(0, 64, 0, 'gold_block');\nn = n + 1; n * 6", result: "answer" } });
+    assert.deepEqual(actions[1].condition, { type: "CONDITION_SCARPET", params: { code: "block(0, 64, 0) == 'gold_block'" } });
+    const again = new LGraph();
+    GraphBuilder.build(again, schema, actions);
+    assert.deepEqual(NodeCompiler.compile(again), actions);
+});
+
+test("a snippet longer than the schema allows is a mistake in its field, as it is for the server", () => {
+    const code = schema.actions.SCARPET.params[0];
+    assert.equal(NodeCompiler.problem(code, "x".repeat(4096)), null);
+    assert.equal(NodeCompiler.problem(code, "x".repeat(4097)), "must be text of at most 4096 characters");
+    assert.equal(NodeCompiler.problem(schema.actions.EXECUTE_COMMAND.params[0], "x".repeat(1025)), "must be text of at most 1024 characters");
+});
+
+test("the Scarpet nodes say what they are wherever they are described", () => {
+    for (const type of ["Scarpet/Run", "Conditions/Scarpet"]) {
+        const desc = Nodes.NODES[type].desc;
+        assert.match(desc, /permissions of the player who started the program/);
+        assert.match(desc, /does not end stops the server, as \/script run would/);
+        assert.match(desc, /Expressions and the other nodes are budgeted; this one is not/);
+        assert.equal(LiteGraph.registered_node_types[type].unbudgeted, true);
+    }
+    assert.equal(LiteGraph.registered_node_types["Control/If"].unbudgeted, false);
+    const [code, result] = Inspector.fields(schema.actions.SCARPET.params, {});
+    assert.equal(code.kind, "code");
+    assert.match(code.help, /permissions of the player who started the program/);
+    assert.match(code.help, /nothing stops a snippet that does not end/);
+    assert.match(code.help, /budgeted; this is not/);
+    assert.equal(result.kind, "text");
+});
+
+test("the variable a Scarpet node or a For Each gives is offered after the variable sign", () => {
+    const { graph, add } = newGraph();
+    add("Scarpet/Run", { result: "answer" });
+    add("Scarpet/Run", { result: "" });
+    add("Control/ForEach", { variable: "mob" });
+    add("Variables/SetTo", { name: "count" });
+    assert.deepEqual(Inspector.variablesOf(graph), ["answer", "count", "mob"]);
+});
+
+test("a value too long for its widget is cut short with an ellipsis, and a short one is left alone", () => {
+    const measure = text => text.length * 7;
+    assert.equal(Nodes.clip("health < 10", 200, measure), "health < 10");
+    assert.equal(Nodes.clip(40, 200, measure), "40");
+    assert.equal(Nodes.clip("health < 10 and has_target and distance < 4", 140, measure), "health < 10 and has\u2026");
+    // LiteGraph draws no more than thirty characters, however much room there is.
+    const cut = Nodes.clip("x".repeat(40), 10000, measure);
+    assert.equal(cut, "x".repeat(29) + "\u2026");
+    assert.ok(measure(Nodes.clip("x".repeat(40), 100, measure)) <= 100);
+});

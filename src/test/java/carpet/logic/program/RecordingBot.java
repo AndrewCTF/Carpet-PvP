@@ -52,6 +52,11 @@ final class RecordingBot implements InvocationHandler
         {
             return 0;
         }
+        if (List.class.isAssignableFrom(returns))
+        {
+            // What a snippet gave, and nothing left in any variable.
+            return List.of(0.0);
+        }
         return Set.class.isAssignableFrom(returns) ? Set.of() : (Object) 0.0;
     }
 

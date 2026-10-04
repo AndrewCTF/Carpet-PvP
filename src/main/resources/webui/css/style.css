@@ -261,7 +261,8 @@ textarea.field { height: auto; min-height: 64px; padding: 6px 8px; line-height: 
 .node-row.active { outline: 1px solid var(--diamond); outline-offset: -1px; }
 .node-row:active { cursor: grabbing; }
 .node-row-text { display: flex; flex-direction: column; min-width: 0; }
-.node-row-title { font-weight: 600; }
+.node-row-title { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.node-row-title .chip { height: 16px; padding: 0 5px; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
 .node-row-desc { font-size: 11.5px; line-height: 1.35; color: var(--ink-3); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .lib-empty { padding: 14px 12px; color: var(--ink-2); }
 .lib-foot { padding: 7px 10px; font-size: 11.5px; color: var(--ink-3); border-top: 1px solid var(--line); }

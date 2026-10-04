@@ -17,7 +17,8 @@ const NodeLibrary = (() => {
         for (const [prefix, category] of Object.entries(categories)) {
             for (const [type, info] of Object.entries(types)) {
                 if (!type.startsWith(prefix + "/")) continue;
-                entries.push({ type, category: prefix, label: category.label, color: category.color, title: info.title, desc: info.desc || "" });
+                entries.push({ type, category: prefix, label: category.label, color: category.color, title: info.title, desc: info.desc || "",
+                    unbudgeted: Boolean(info.unbudgeted) });
             }
         }
         return entries;
@@ -141,7 +142,9 @@ const NodeLibrary = (() => {
         const swatch = el("span", "swatch");
         swatch.style.background = entry.color;
         const text = el("span", "node-row-text");
-        text.append(el("span", "node-row-title", entry.title), el("span", "node-row-desc", showCategory ? entry.label + " · " + entry.desc : entry.desc));
+        const title = el("span", "node-row-title", entry.title);
+        if (entry.unbudgeted) title.append(el("span", "chip warn", "not budgeted"));
+        text.append(title, el("span", "node-row-desc", showCategory ? entry.label + " · " + entry.desc : entry.desc));
         item.append(swatch, text);
         item.addEventListener("click", () => handlers.add(entry.type));
         item.addEventListener("mousedown", () => handlers.drag(entry.type));

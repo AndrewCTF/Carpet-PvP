@@ -275,7 +275,7 @@ public final class Expression
 
     private static ExpressionException fail(String message, int position)
     {
-        return new ExpressionException(message + " at " + position, position);
+        return new ExpressionException(position < 0 ? message : message + " at " + position, position);
     }
 
     // ── Parsing ──────────────────────────────────────────────────
@@ -788,6 +788,16 @@ public final class Expression
             return items;
         }
         return null;
+    }
+
+    /**
+     * Checks a value that did not come out of an expression against the limits values have.
+     *
+     * @throws ExpressionException when it is a text or a list larger than an expression could have made
+     */
+    public static Object limited(Object value)
+    {
+        return sized(value, -1);
     }
 
     private static Object sized(Object value, int position)

@@ -35,7 +35,7 @@ public class CarpetPvpPlugin extends JavaPlugin
             "script_run", "fill_updates", "logic_program", "logic_forever_budget", "logic_bot_snapshot",
             "logic_combat_start_stop", "logic_fight_node", "logic_combat_option", "logic_on_kill_event",
             "logic_totem_pop_event", "logic_stop_program_stops_fight", "logic_admin_login",
-            "logic_save_draft_and_autosave", "logic_expression_if_while",
+            "logic_save_draft_and_autosave", "logic_expression_if_while", "logic_scarpet_node",
             "sword_block", "fake_sword_block", "explosion_rules", "xp_explosions", "scarpet_events", "scarpet_explosion",
             "update_suppression_block", "stackable_shulker_boxes", "structure_block_ignored", "persistent_parrots",
             "lag_free_spawning", "interaction_updates", "punish_wrong_tool_hits", "scarpet_item_use_events",

@@ -11,6 +11,8 @@ const NodeCompiler = (() => {
     // The checker of expressions: a script of the page, or a module where there is no page.
     const Checker = typeof Expression !== "undefined" ? Expression : require("./expression.js");
     const NUMERAL = /^-?(\d+(\.\d+)?|\.\d+)$/;
+    // How much text a parameter holds when the schema does not say: ActionSchema.MAX_STRING_LENGTH.
+    const MAX_STRING_LENGTH = 1024;
 
     let schema = null;
     let actionByNode = {};      // editor node type → action type
@@ -45,6 +47,10 @@ const NodeCompiler = (() => {
         if ((param.type === "int" || param.type === "number") && typeof value === "string" && text !== "" && !NUMERAL.test(text)) {
             const verdict = Checker.check(text, vocabulary, "number");
             return verdict.ok ? null : verdict.error;
+        }
+        const longest = param.maxLength || MAX_STRING_LENGTH;
+        if (param.type === "string" && !param.options && value !== undefined && value !== null && String(value).length > longest) {
+            return "must be text of at most " + longest + " characters";
         }
         return null;
     }

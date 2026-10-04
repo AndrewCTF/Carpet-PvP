@@ -100,5 +100,6 @@ final class ScenarioIndex
         SCENARIOS.put("logic_admin_login", AdminLoginScenarios::adminLogin);
         SCENARIOS.put("logic_save_draft_and_autosave", SaveScenarios::saveDraftAndAutosave);
         SCENARIOS.put("logic_expression_if_while", ExpressionScenarios::expressionIfWhile);
+        SCENARIOS.put("logic_scarpet_node", ScarpetNodeScenarios::scarpetNode);
     }
 }

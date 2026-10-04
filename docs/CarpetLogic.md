@@ -27,7 +27,8 @@ The page is one screen:
   bring the whole program into view.
 - **A node's settings** open over the canvas's top right corner when one node is selected: every
   parameter as a field, with what it takes and, for an [expression](#expressions), the names it can
-  use and what is wrong with it. The small fields on the node itself still work for a quick change.
+  use and what is wrong with it. The small fields on the node itself still work for a quick change;
+  a value too long for one is cut short there with an ellipsis and whole in the settings.
 - **The run bar** under the canvas runs the program on the bot chosen there and stops it, and says
   what that bot's program is doing: `Running · Patrol and Fight · PATROL`, or the error that ended it.
 - **The bots panel** on the right (`B`) spawns a bot and has a card for each one: health in hearts,
@@ -325,6 +326,10 @@ itself would not be allowed to do.
 - A program started from `/carpetlogic programs run` or from the console has no owner, so
   `EXECUTE_COMMAND` always fails there with
   "EXECUTE_COMMAND only runs in programs a player started from the web editor".
+
+The Scarpet nodes are the other exception, and the wider one: a snippet runs with the owner's
+permissions too, and only for an owner who may use `/script run`. See
+[The Scarpet node](#the-scarpet-node) for who that is and for what a snippet can do to the server.
 
 There is a second, quieter permission path. When an action's schema entry declares `requires`, the
 executor checks that carpet rule before running the action. If the rule is off it tries to turn it
@@ -637,6 +642,14 @@ wired after any of the three.
 | `Variables/Add` | `ADD_VARIABLE` | action |  | `name` string = `counter`; `amount` number = `1` |
 | `Variables/SetTo` | `SET` | action |  | `name` string = `count`; `value` expr (any) = `$count + 1` |
 
+### Scarpet
+
+| Node | Type | Kind | Rule it needs | Parameters |
+|---|---|---|---|---|
+| `Scarpet/Run` | `SCARPET` | action |  | `code` string = `print(player('all'), 'hello from ' + p)`, at most 4096 characters; `result` string = ``, the variable that takes what the snippet gives, or none |
+
+Not budgeted, and only for a player who may use `/script run`. See [The Scarpet node](#the-scarpet-node).
+
 ### Events
 
 | Node | Type | Kind | Rule it needs | Parameters |
@@ -651,6 +664,7 @@ wired after any of the three.
 | `Conditions/Any` | `CONDITION_ANY` | condition (`conditions`) |  | none. True when at least one is |
 | `Conditions/Not` | `CONDITION_NOT` | condition (`condition`) |  | none. True when the condition wired into it is not |
 | `Conditions/Expression` | `CONDITION_EXPRESSION` | condition |  | `expression` expr (bool) = `health < 10 and has_target` |
+| `Conditions/Scarpet` | `CONDITION_SCARPET` | condition |  | `code` string = `query(p, 'health') < 10`, at most 4096 characters. Not budgeted; see [The Scarpet node](#the-scarpet-node) |
 | `Conditions/Health` | `CONDITION_HEALTH` | condition |  | `operator` string = `<` (`<`, `<=`, `>`, `>=`, `==`, `!=`); `value` number = `10`, min `0`, max `1024` |
 | `Conditions/IsFighting` | `CONDITION_IS_FIGHTING` | condition |  | none |
 | `Conditions/HasTarget` | `CONDITION_HAS_TARGET` | condition |  | none |
@@ -833,6 +847,68 @@ holds text where a number is needed, stops the program with the step and the par
 most 256 items, counting the lists inside it and everything in them, and a text 1024 characters. Working one out is paid for from the same 1000 steps a tick
 that the nodes are, one step a part plus the function's steps, so `While entities('zombie', 8) == 0`
 runs some forty times a tick and is then put off to the next, like any loop.
+
+## The Scarpet node
+
+Two nodes run [Scarpet](scarpet/Documentation.md), for whatever the other nodes and the expressions
+cannot do: `Scarpet` (`SCARPET`) runs a snippet and can keep what it gives in a variable, and
+`Scarpet Check` (`CONDITION_SCARPET`) is a condition that is true when its snippet gives anything but
+`false`, `0`, `null`, no text or an empty list.
+
+```
+set(x, y - 1, z, 'gold_block'); kills = kills + 1; query(p, 'health')
+```
+
+**It is the escape hatch, and it is not budgeted.** These nodes run arbitrary Scarpet with the
+permissions of the player who started the program. A snippet that does not end stops the server
+exactly as `/script run loop(1000000000, 0)` does: nothing in CarpetLogic interrupts it. Expressions
+and every other node are budgeted, by the 1000 steps a tick of [the per-tick budget](#the-per-tick-budget)
+and the limits of an expression; these two are not. The library marks both **not budgeted**, the node
+on the canvas carries the same mark in its title, and the field that holds the snippet says it again.
+
+![A Scarpet node and its settings](images/carpetlogic-scarpet.png)
+
+**Who may run it.** The node runs only where `/script run` would, for the player who started the
+program, and that is asked each time the node runs, not when the program is saved:
+
+- the rule `commandScript` has to allow that player `/script` (it does by default), and
+  `commandScriptACE` has to allow them `/script run` (`ops` by default). Otherwise the program stops
+  with "SCARPET needs Steve to be allowed /script run, which the rules commandScript and
+  commandScriptACE decide";
+- the player has to be online: "SCARPET needs the player who started this program to be online";
+- a program with no owner, started from the console or with `/carpetlogic programs run`, is refused
+  as `EXECUTE_COMMAND` is: "SCARPET only runs in programs a player started from the web editor".
+
+A player who is deopped while their program runs is refused at the next Scarpet node it reaches.
+
+**What the snippet sees.** It runs as `/script run` runs one, in the global Scarpet host:
+
+- `p` is the bot, the way `p` is the player for `/script run`, and `x`, `y`, `z` are the block the bot
+  stands in. The player who started the program lends only their permissions.
+- The program's variables are there under their names, without the `$`: `$kills` is `kills`. What the
+  snippet leaves in them comes back when it ends. A variable the program does not have yet does not
+  come back: set it first, or take it as the snippet's result.
+- Variables named `p`, `x`, `y` or `z`, or starting with `_` or `global_`, are not handed over: those
+  names are the snippet's own.
+- `print('…')` alone prints to nobody. Give it a player: `print(player('all'), 'hello')`.
+
+**What comes back.** The value of the last statement goes to the variable `result` names, if it names
+one. A number stays a number, `true` and `false` stay themselves, text stays text and a list a list;
+`null` becomes `0`; anything a program has no kind for, an entity or a block, becomes its text, so
+`block(x, y, z)` comes back as `'gold_block'`. What comes back is held to a program's limits, 1024
+characters of text and 256 items of a list, and the program stops with "SCARPET gave back more than a
+program can hold" past them. A snippet that fails stops the program with Scarpet's own message after
+"SCARPET: ".
+
+**What it costs.** Since the budget cannot see inside a snippet, each run is charged a fixed 50 of
+the tick's 1000 steps, however little or much it does: a loop of nothing but Scarpet nodes runs
+twenty of them a tick and is then put off to the next. A snippet holds at most 4096 characters. The
+64 variables of a program and their limits are the same with or without Scarpet.
+
+The self-test scenario `logic_scarpet_node` runs one program three times on a real server: without an
+owner and for a player who is no operator it is refused with the messages above and changes nothing,
+and for an operator its snippet sets a block, changes a variable and gives the number the program
+then branches on.
 
 ## Waiting
 
@@ -1028,6 +1104,10 @@ Program 'W-Tap' on Bot1 ran 1000 steps in one tick and was paused until the next
 
 The fix is always the same: give the loop a `Control/Delay`, or a `ticks` on one of its steps. The
 self-test scenario `logic_forever_budget` covers exactly this case.
+
+The budget counts steps of the program, and an expression pays for its parts from the same 1000. A
+[Scarpet node](#the-scarpet-node) is the one thing it cannot count: it is charged 50 steps a run and
+what the snippet does inside is not limited at all.
 
 The combat nodes have scenarios of their own, all of them on a real bot rather than a stub:
 `logic_combat_start_stop`, `logic_fight_node`, `logic_combat_option`, `logic_on_kill_event`,

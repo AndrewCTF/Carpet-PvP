@@ -95,6 +95,14 @@ public final class CarpetSelfTest
             WebServer web = CarpetLogic.INSTANCE.getWebServer();
             return web == null ? null : web.url();
         };
+        SelfTest.programStarterAs = (botName, ownerName) -> {
+            CarpetLogic logic = CarpetLogic.INSTANCE;
+            BotProgram program = new BotProgram("_selftest", "selftest", "");
+            program.setActions(GSON.fromJson(SelfTest.pendingProgram(), new TypeToken<List<BotAction>>() {}.getType()));
+            logic.getSchema().validate(program.getActions());
+            logic.getProgramExecutor().startProgram(botName, program,
+                    CarpetServer.minecraft_server.getPlayerList().getPlayerByName(ownerName).getUUID());
+        };
         SelfTest.programVariable = (botName, name) -> {
             String value = CarpetLogic.INSTANCE.getProgramExecutor().variable(botName, name);
             return value == null ? "unset" : value;

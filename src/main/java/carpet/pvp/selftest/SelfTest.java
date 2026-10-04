@@ -133,6 +133,11 @@ public final class SelfTest
     public static BiConsumer<MinecraftServer, String> programStarter;
     /** The status of the program running on a bot, or "gone". Null where there is no CarpetLogic. */
     public static Function<String, String> programStatus;
+    /**
+     * Starts the program named by {@link #pendingProgram()} on a bot on behalf of an online player, given both
+     * names, the way the web editor starts one for whoever is signed in. Null where there is no CarpetLogic.
+     */
+    public static BiConsumer<String, String> programStarterAs;
     /** What a variable of the program on a bot holds, as text, or "unset". Null where there is no CarpetLogic. */
     public static BiFunction<String, String, String> programVariable;
     /** Stops the program running on a bot. Does nothing where there is no CarpetLogic. */
@@ -184,6 +189,12 @@ public final class SelfTest
         return pendingProgram;
     }
 
+    /** Sets the program the next start runs. */
+    static void pendingProgram(String program)
+    {
+        pendingProgram = program;
+    }
+
     /** Hands a program to the host's program runner, as the combat-node scenarios do. */
     static void startProgram(MinecraftServer server, String botName, String program)
     {
@@ -207,6 +218,7 @@ public final class SelfTest
             Map.entry("logic_admin_login", "it needs CarpetLogic's web editor and the carpet rules it changes"),
             Map.entry("logic_save_draft_and_autosave", "it needs CarpetLogic's web editor and its programs folder"),
             Map.entry("logic_expression_if_while", "it needs CarpetLogic programs"),
+            Map.entry("logic_scarpet_node", "it needs CarpetLogic programs and Scarpet"),
             Map.entry("sword_block", "it needs the carpet swordBlockHitting rule"),
             Map.entry("fake_sword_block", "it needs the carpet swordBlockHitting rule"),
             Map.entry("explosion_rules", "it needs the carpet explosionNoBlockDamage rule"),

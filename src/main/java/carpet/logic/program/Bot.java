@@ -2,6 +2,8 @@ package carpet.logic.program;
 
 import carpet.pvp.BotEvents;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -94,6 +96,16 @@ public interface Bot
      * @param owner the player the program runs on behalf of, or null when there is none
      */
     void executeCommand(String command, UUID owner);
+    /**
+     * Runs a Scarpet snippet the way {@code /script run} does, as the player the program belongs to and only
+     * where that player may use that command, with the bot as the snippet's player {@code p}.
+     *
+     * @param variables the program's variables, which the snippet reads and may change under their own names
+     * @param owner     the player the program runs on behalf of, or null when there is none
+     * @return what the snippet evaluated to, followed by what it left in each of the variables, in their order:
+     *         every one a Double, a Boolean, a String or a List of those
+     */
+    List<Object> runScript(String code, Map<String, Object> variables, UUID owner);
     void stopAll();
 
     String name();
