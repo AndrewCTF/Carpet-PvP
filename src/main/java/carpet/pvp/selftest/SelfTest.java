@@ -1026,7 +1026,9 @@ public final class SelfTest
             case "nav_smooth":
                 {
                 // A diagonal goal across open ground: the bot has to walk it in a straight line rather than
-                // block by block, so what it covers has to match the distance between the two ends.
+                // block by block, so what it covers has to match the distance between the two ends. The ground
+                // the goal stands on is kept loaded: a bot asked to walk to a block whose chunk has not arrived
+                // yet cannot plan a route, and nav goto gives up rather than waiting for one.
                 int x0 = (int) origin.x;
                 int z0 = (int) origin.z;
                 Vec3 start = new Vec3(x0 + 0.5D, SURFACE_Y, z0 + 0.5D);

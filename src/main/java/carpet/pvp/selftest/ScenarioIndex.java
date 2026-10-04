@@ -73,5 +73,6 @@ final class ScenarioIndex
         SCENARIOS.put("mace_no_fall_damage_on_miss", MaceScenarios::noFallDamageOnMiss);
         SCENARIOS.put("mace_attribute_swap_probe", MaceScenarios::attributeSwapProbe);
         SCENARIOS.put("mace_duel", MaceScenarios::duel);
+        SCENARIOS.put("sword_hits_passive_target", PassiveTargetScenarios::hitsPassiveTarget);
     }
 }

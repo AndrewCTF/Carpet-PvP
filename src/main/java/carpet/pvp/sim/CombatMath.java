@@ -37,6 +37,15 @@ public final class CombatMath
         return clamp((ticksSinceSwing + 0.5f) / fullChargeTicks(attackSpeed), 0.0f, 1.0f);
     }
 
+    /**
+     * The tick count {@link #chargeScale} reads this charge back as, which is where the game's own swing timer
+     * stood when it was read. A charge already at its ceiling says no more than the ticks that reach it.
+     */
+    public static int ticksOfCharge(float scale, double attackSpeed)
+    {
+        return Math.max(0, (int) Math.round(scale * fullChargeTicks(attackSpeed) - 0.5));
+    }
+
     /** Mirrors Player.baseDamageScaleFactor. */
     public static float chargeDamageFactor(float scale)
     {

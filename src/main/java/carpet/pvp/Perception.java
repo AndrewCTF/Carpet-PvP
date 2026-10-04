@@ -310,12 +310,20 @@ public final class Perception
     }
 
     /**
-     * A swing resets the attack strength scale, so a big drop between two ticks means one happened;
-     * {@code counter} is the previous tick's count. Returns the ticks since the last swing.
+     * Ticks since the fighter last swung, tracked from the drops of its attack charge: {@code counter} is
+     * the previous tick's count. Nothing has been seen before the first tick, so that one asks the game where
+     * its own swing timer stood. A swing is the only thing that makes the charge go down, and the count it
+     * starts again from is one and not zero because the game zeroes the timer inside the attack and has
+     * already counted one tick back up by the time the drop is visible. Counting from there is what puts a
+     * click on the same charge the game is going to charge it with.
      */
     private static int countSwing(Snapshot previous, Snapshot current, int counter)
     {
-        return previous.seen && current.attackCharge + 0.5F < previous.attackCharge ? 0 : counter + 1;
+        if (!previous.seen)
+        {
+            return CombatMath.ticksOfCharge(current.attackCharge, current.attackSpeed);
+        }
+        return current.attackCharge < previous.attackCharge ? 1 : counter + 1;
     }
 
     private static void fill(Snapshot out, LivingEntity entity)
