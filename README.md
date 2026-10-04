@@ -39,7 +39,7 @@ Needs [Fabric Loader](https://fabricmc.net/use/installer/) and
 3. Run `/auto-setup sword average`.
 
 What the player sees: `/auto-setup` builds a flat fenced arena twenty blocks east of them, saves
-everything they are carrying, gives them a diamond sword, armour, a shield, gapples and beef, and
+everything they are carrying, gives them a diamond sword and armour and nothing else, and
 puts a bot holding the same kit six blocks away facing them. Three seconds later the bot fights. A
 round ends when one of you is down, the score is kept, and a menu offers a rematch, an easier or a
 harder fight, a different mode, or stopping. `/auto-setup stop` takes the bot away, puts every block

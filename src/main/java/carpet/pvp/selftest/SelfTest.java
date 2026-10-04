@@ -109,7 +109,7 @@ public final class SelfTest
     record KitExpectation(String kit, String mainHand, String chestplate, String enchantment, int level, String stack, int count) {}
 
     private static final List<KitExpectation> KIT_EXPECTATIONS = List.of(
-            new KitExpectation("sword", "diamond_sword", "diamond_chestplate", "minecraft:protection", 4, "golden_apple", 4),
+            new KitExpectation("sword", "diamond_sword", "diamond_chestplate", "minecraft:protection", 4, "diamond_sword", 1),
             new KitExpectation("axe", "diamond_sword", "diamond_chestplate", "minecraft:protection", 4, "golden_apple", 4),
             new KitExpectation("smp", "netherite_sword", "netherite_chestplate", "minecraft:protection", 4, "experience_bottle", 16),
             new KitExpectation("mace", "mace", "netherite_chestplate", "minecraft:protection", 4, "wind_charge", 16),
@@ -1714,6 +1714,14 @@ public final class SelfTest
             if (holds(stack, expected.stack())) count += stack.getCount();
         }
         if (count != expected.count()) return fmt("has %d %s, expected %d", count, expected.stack(), expected.count());
+
+        // The sword mode is a sword against a sword: its kit puts nothing else in a hand or a slot.
+        if (expected.kit().equals("sword"))
+        {
+            long carried = bot.getInventory().getNonEquipmentItems().stream().filter(stack -> !stack.isEmpty()).count();
+            if (carried != 1 || !bot.getOffhandItem().isEmpty())
+                return fmt("carries %d stacks and %s in the off hand, expected the sword alone", carried, describe(bot.getOffhandItem()));
+        }
         return null;
     }
 

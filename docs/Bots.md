@@ -98,7 +98,8 @@ Only the actions its techniques allow are in the roll, so a bot with `critical` 
 planned to jump and `wtap` decides whether the roll may put a sprint in. It attacks by swinging at
 the target's hitbox, which means it must first be looking at the target and inside the server's
 attack range, so it closes before it swings. Shield play raises the shield while the target's own
-swing is inside the react window. Outside `plannerRange` it stops planning and just walks, so a
+swing is inside the react window; the `sword` kit carries no shield, so it only shows with a kit
+that has one, such as `axe`. Outside `plannerRange` it stops planning and just walks, so a
 distant approach is not spent on search.
 
 ### `crystal`

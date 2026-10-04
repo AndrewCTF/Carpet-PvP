@@ -13,7 +13,7 @@ Six kits ship with the mod, one for each bot style plus an extra. A server can m
 | `mace` | `/bot spawn <name> mace`, `/auto-setup mace`, a `pearlcatch` drill |
 | `crystal` | `/bot spawn <name> crystal` and `/bot spawn <name> anchor`, `/auto-setup crystal`, a `crystaltiming` drill |
 | `ranged` | `/bot spawn <name> ranged`, `/auto-setup ranged`, `/bot match ... ranged` |
-| `axe` | nothing by default. It is the sword kit with a diamond axe added, for practising shield breaks by hand |
+| `axe` | nothing by default. A sword, a diamond axe, a shield, golden apples and steak, for practising shield play and shield breaks by hand |
 
 ## The kit command
 
@@ -51,13 +51,14 @@ Permissions:
 | Slot | Item | Count | Enchantments |
 |---|---|---|---|
 | 0 (main hand) | `minecraft:diamond_sword` | 1 | Sharpness 2 |
-| 1 | `minecraft:golden_apple` | 4 | |
-| 2 | `minecraft:cooked_beef` | 16 | |
 | head | `minecraft:diamond_helmet` | 1 | Protection 4 |
 | chest | `minecraft:diamond_chestplate` | 1 | Protection 4 |
 | legs | `minecraft:diamond_leggings` | 1 | Protection 4 |
 | feet | `minecraft:diamond_boots` | 1 | Protection 4 |
-| offhand | `minecraft:shield` | 1 | |
+
+A sword and armour, and nothing else: no shield, no food. A sword fight is decided by spacing,
+timing and aim, so the kit leaves out everything that would turn it into a different mode. Shield
+play and shield breaking are practised with the `axe` kit.
 
 ### `axe`
 
