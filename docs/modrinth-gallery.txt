@@ -1,0 +1,12 @@
+# file under docs/images | title on Modrinth | featured (one picture only)
+duel-mace.png|Mace bot against a sword bot|true
+duel-sword.png|Sword duel|false
+duel-crystal.png|Crystal duel|false
+duel-smp.png|SMP duel: a splash potion mid-fight|false
+auto-setup-menu.png|/auto-setup: pick a mode and a difficulty|false
+auto-setup-fight.png|/auto-setup: the fight|false
+bot-gui.png|The bot menu|false
+carpetlogic-program.png|CarpetLogic: a bot program|false
+carpetlogic-editor.png|CarpetLogic: the editor|false
+carpetlogic-settings-admin.png|CarpetLogic: changing rules as an admin|false
+sword-block-blocking.png|Sword blocking|false
