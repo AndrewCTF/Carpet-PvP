@@ -131,11 +131,20 @@ See [docs/Bots.md](docs/Bots.md#why-a-bot-behaves-like-a-player) and
 
 ![The CarpetLogic editor](docs/images/carpetlogic-editor.png)
 
-The same jar serves a browser editor on port 9876 that programs a bot as a graph of nodes: move,
-look, use, fight, equip a kit, run a command, branch on a condition, loop, wait for an event. A
-program can take a fight over from the combat AI and give it back when it stops. Ten presets ship
-with it. Programs are stored in the world folder. A server can turn on an admin sign-in that lets its
-operators change rules from the editor's Settings panel.
+Program a bot in your browser, with a graph of nodes instead of a script: move, look, fight, equip a
+kit, branch on a condition or an expression, loop, wait for an event, run a command or a Scarpet
+snippet.
+
+1. In game, run `/carpetlogic open` (operators by default) and click **open in browser** in chat.
+2. In the editor, spawn a bot from the **Bots** panel: it appears where you stand.
+3. Press a preset such as *W-Tap* on the empty canvas, or click nodes in the library to chain them
+   after `Start`.
+4. Choose the bot under the canvas and press **Run**.
+
+Programs are saved, and autosaved, to the world folder and can be run later with
+`/carpetlogic programs run <program> <bot>`. On a server that is not your own computer the editor has
+to be opened up by its admin first; a server can also turn on an admin sign-in for changing rules from
+the editor.
 
 See [docs/CarpetLogic.md](docs/CarpetLogic.md).
 

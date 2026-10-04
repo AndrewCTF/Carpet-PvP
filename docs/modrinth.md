@@ -16,8 +16,7 @@ fight.
 - **Practice tools**: drills that score you, team and free-for-all matches, spectating a bot, fight traces,
   built-in kits and a kit editor.
 - **Chest menus** (`/bot gui`) that work with a vanilla client.
-- **CarpetLogic**: a browser editor for programming a bot with a node graph, with expressions, autosave and a
-  node that runs a Scarpet snippet. An admin sign-in for changing rules can be switched on.
+- **CarpetLogic**: program a bot in your browser with a graph of nodes instead of a script. See below.
 - **Carpet itself**: fake players, Scarpet and the rules you already know.
 
 ![/auto-setup](https://raw.githubusercontent.com/AndrewCTF/Carpet-PvP/main/docs/images/auto-setup-fight.png)
@@ -30,6 +29,24 @@ fight.
 2. Join and run `/auto-setup sword average`, or open the menu with `/bot gui`.
 
 ![The bot menu](https://raw.githubusercontent.com/AndrewCTF/Carpet-PvP/main/docs/images/bot-gui.png)
+
+## Program a bot in your browser
+
+CarpetLogic is a visual editor: you chain nodes (move, look, fight, wait, branch, loop) and the bot does
+what the graph says.
+
+1. In game, run `/carpetlogic open` and click **open in browser** in chat. It is for operators by
+   default; `/carpet commandCarpetLogic true` opens it to everyone.
+2. In the editor, spawn a bot from the **Bots** panel. It appears where you are standing.
+3. Press a preset such as *W-Tap* or *Crit Chain* on the empty canvas, or click nodes in the library on
+   the left to chain them after `Start`.
+4. Choose the bot under the canvas and press **Run**.
+
+Programs save themselves to the world folder. On a server that is not your own computer the admin has
+to open the editor up first: see the
+[CarpetLogic page](https://github.com/AndrewCTF/Carpet-PvP/blob/main/docs/CarpetLogic.md#getting-started).
+
+![The CarpetLogic editor](https://raw.githubusercontent.com/AndrewCTF/Carpet-PvP/main/docs/images/carpetlogic-editor.png)
 
 ## Versions
 
@@ -52,5 +69,3 @@ Java 25. Minecraft 26.1.2 stays on release 17.
 - [Documentation](https://github.com/AndrewCTF/Carpet-PvP/tree/main/docs)
 - [Source and issues](https://github.com/AndrewCTF/Carpet-PvP)
 - [Discord](https://discord.gg/PAbydjFxKs)
-
-![The CarpetLogic editor](https://raw.githubusercontent.com/AndrewCTF/Carpet-PvP/main/docs/images/carpetlogic-program.png)
