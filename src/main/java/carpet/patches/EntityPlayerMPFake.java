@@ -647,12 +647,11 @@ public class EntityPlayerMPFake extends ServerPlayer
             this.connection.resetPosition();
             ((net.minecraft.server.level.ServerLevel)this.level()).getChunkSource().move(this);
         }
-        // A real player's known movement is what its client last reported, which is where the game reads a
-        // player's speed from whenever it needs one the server did not move itself: a spear reads the closing
-        // speed of the two fighters out of it. A fake player has no client to report anything, so the field
-        // would stay at zero for as long as it is online and every one of those speeds would read as none at
-        // all. Its own motion is what a client would have reported, so that is what it is set to.
-        this.setKnownMovement(this.getDeltaMovement());
+        // A real player's known movement is the distance its client last reported it had moved, which is where
+        // the game reads a player's speed from: a spear reads the closing speed of two fighters out of it. A
+        // fake player has no client, so it reports the distance the server moved it by this tick. Not its
+        // velocity: that already has the tick's friction taken off and reads a sprint as a little over half.
+        Vec3 before = position();
         try
         {
             super.tick();
@@ -663,6 +662,7 @@ public class EntityPlayerMPFake extends ServerPlayer
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
         }
+        setKnownMovement(position().subtract(before));
 
 
     }

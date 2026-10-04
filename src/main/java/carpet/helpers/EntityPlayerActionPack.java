@@ -35,8 +35,10 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.SwingAnimation;
+import net.minecraft.world.item.component.UseEffects;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -385,11 +387,30 @@ public class EntityPlayerActionPack
     }
     public EntityPlayerActionPack setSprinting(boolean doSprint)
     {
-        sprinting = doSprint;
-        player.setSprinting(doSprint);
+        sprinting = doSprint && canSprintWhileUsing();
+        player.setSprinting(sprinting);
 //        if (sneaking && sprinting)
 //            setSneaking(false);
         return this;
+    }
+
+    /**
+     * What the client does with the movement keys of a player who is holding something up. A draw, a crossbow
+     * load or a shield scales the input down to {@code USE_EFFECTS.speedMultiplier}, which is a fifth for
+     * everything that has no component of its own, and a spear's is one, so charging a spear is the one
+     * charge a player keeps running at full speed through. The same component says whether the sprint key
+     * does anything at all while the item is up.
+     */
+    private UseEffects useEffects()
+    {
+        return player.isUsingItem()
+                ? player.getUseItem().getOrDefault(DataComponents.USE_EFFECTS, UseEffects.DEFAULT)
+                : UseEffects.DEFAULT;
+    }
+
+    private boolean canSprintWhileUsing()
+    {
+        return !player.isUsingItem() || useEffects().canSprint();
     }
 
     public EntityPlayerActionPack setForward(float value)
@@ -772,7 +793,7 @@ public class EntityPlayerActionPack
         }
 
         float vel = sneaking?0.3F:1.0F;
-        vel *= player.isUsingItem()?0.20F:1.0F;
+        if (player.isUsingItem()) vel *= useEffects().speedMultiplier();
         // The != 0.0F checks are needed given else real players can't control minecarts, however it works with fakes and else they don't stop immediately
         if (glideEnabled)
         {

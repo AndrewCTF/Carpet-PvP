@@ -22,6 +22,12 @@ public final class SpearMath
     public static final double HITBOX_MARGIN = 0.125;
     /** {@code KineticWeapon.contactCooldownTicks}: the same fighter cannot be stabbed again this soon. */
     public static final int CONTACT_COOLDOWN = 10;
+    /**
+     * {@code KineticWeapon.getMotion} scales {@code getKnownSpeed}, a velocity of a block a tick, into the
+     * block a second the conditions are written in, so every speed this class is asked about is twenty times
+     * the one an entity's own velocity holds.
+     */
+    public static final double TICKS_A_SECOND = 20.0;
 
     private SpearMath()
     {
@@ -49,8 +55,13 @@ public final class SpearMath
         double dx = Math.max(Math.max(minX - eyeX, eyeX - maxX), 0.0);
         double dy = Math.max(Math.max(minY - eyeY, eyeY - maxY), 0.0);
         double dz = Math.max(Math.max(minZ - eyeZ, eyeZ - maxZ), 0.0);
-        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        return distance >= minReach() && distance <= maxReach();
+        return inReach(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+
+    /** The same window against a distance that has already been measured from the eyes to a box. */
+    public static boolean inReach(double eyeToBox)
+    {
+        return eyeToBox >= minReach() && eyeToBox <= maxReach();
     }
 
     /**

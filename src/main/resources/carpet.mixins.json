@@ -162,7 +162,6 @@
         "ServerPlayerGameMode_cactusMixin",
         "ServerPlayerGameMode_scarpetEventsMixin",
         "ServerPlayer_actionPackMixin",
-        "ServerPlayer_fakeLastMovementMixin",
         "ServerPlayer_parrotMixin",
         "ServerPlayer_scarpetEventMixin",
         "ServerStatus_motdMixin",

@@ -27,10 +27,12 @@ public final class Bow
     public static final int FLIGHT_LIMIT = 60;
     /** What one solve costs against the per tick budget: two arcs of sixty flights. */
     public static final int SOLVE_COST = FLIGHT_LIMIT * 2;
-    /** Degrees off the aim point within which the bot lets go, about the width of a target at close range. */
+    /** Degrees off the aim point the bot lets go within, for a target far enough away to be narrower than this. */
     public static final double RELEASE_TOLERANCE = 0.8;
     /** Ticks past the draw the solver asked for that the bot waits anyway, so a moving aim cannot stall it. */
     public static final int PATIENCE = 30;
+    /** Degrees off the aim point the view settles on, which is also the distance a shot is released within. */
+    public static final double AIM_TOLERANCE = 1.0D;
 
     private final EntityPlayerMPFake bot;
     private final BotBody body;
@@ -179,10 +181,18 @@ public final class Bow
         return bot.isUsingItem() ? bot.getTicksUsingItem() : 0;
     }
 
-    /** The aim point the view goes onto for a solved shot, which is where the solver says the arrow goes. */
+    /**
+     * The aim point the view goes onto for a solved shot, which is where the solver says the arrow goes.
+     *
+     * <p>The radius is how far off the point the controller is willing to stop, and it is the angular width of
+     * the target up to {@link #AIM_TOLERANCE}: at the range a bow is shot from that width is narrower than the
+     * tolerance anyway, and at the range a tnt minecart is shot from it is far wider than it, which would let
+     * the view stop half a block to the side of a box less than a block wide. Capped, the arrow leaves within
+     * a hundredth of a block of where the solver put it at either range.</p>
+     */
     public static BotBody.Aim pointOf(ProjectileAim.Aim aim, double distance)
     {
-        float radius = (float) Math.toDegrees(Math.atan2(0.45, Math.max(distance, 0.5)));
+        float radius = (float) Math.min(Math.toDegrees(Math.atan2(0.45, Math.max(distance, 0.5))), AIM_TOLERANCE);
         return new BotBody.Aim((float) aim.yaw, (float) aim.pitch, radius);
     }
 
@@ -223,7 +233,13 @@ public final class Bow
         return target;
     }
 
-    /** True while the view is close enough to the aim point that an arrow released now would go through it. */
+    /**
+     * True while the view is close enough to the aim point that an arrow released now would go through what it
+     * is aimed at. The radius of the aim point is the angular size of that target, and an arrow let go anywhere
+     * inside it goes through, so that is the distance the view has to be within: the controller turns onto the
+     * point and stops correcting once it is inside the same radius, which at the range a tnt minecart is shot
+     * from is a good deal wider than the fixed tolerance and the only distance a bot can ever reach.
+     */
     private boolean onPoint(BotBody.Aim point, int waited)
     {
         if (point == null)
@@ -233,6 +249,6 @@ public final class Bow
         double dy = point.yaw() - body.look().yaw();
         dy -= 360.0 * Math.rint(dy / 360.0);
         double dp = point.pitch() - body.look().pitch();
-        return Math.hypot(dy, dp) <= RELEASE_TOLERANCE || waited >= PATIENCE;
+        return Math.hypot(dy, dp) <= Math.max(RELEASE_TOLERANCE, point.radius()) || waited >= PATIENCE;
     }
 }

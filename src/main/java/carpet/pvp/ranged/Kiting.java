@@ -43,8 +43,18 @@ public final class Kiting
         }
         if (gap > far)
         {
-            return DuelSim.action(1, 0, false, gap > far + 8.0D, false);
+            // Closing on a target is a run, not a stroll: the range it wants back is worth the sprint.
+            return DuelSim.action(1, 0, false, true, false);
         }
+        return hold(kiting);
+    }
+
+    /**
+     * The movement for standing where it is: a sidestep, so that a bot that has stopped on purpose does not
+     * stand still enough to be hit, and nothing at all for a preset that may not strafe.
+     */
+    public int hold(boolean kiting)
+    {
         return kiting ? DuelSim.action(0, strafe, false, false, false) : DuelSim.NOOP;
     }
 
