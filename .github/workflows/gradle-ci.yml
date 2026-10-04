@@ -1,8 +1,9 @@
 name: Gradle CI
 
 on:
+  # A branch with a pull request open is tested once, by the pull request.
   push:
-    branches: [ "**" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "**" ]
 
