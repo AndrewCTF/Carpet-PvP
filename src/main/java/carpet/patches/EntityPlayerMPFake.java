@@ -848,6 +848,18 @@ public class EntityPlayerMPFake extends ServerPlayer
         return BotSettings.allowListingFakePlayers;
     }
 
+    /**
+     * Nothing but the server moves a fake player, so the server is the authority on its movement, as it is for
+     * the game's own test players. A player is otherwise left to its client, and the game then skips what the
+     * client would have reported for it: the fall it counts in {@code Entity.move} first of all, and with it
+     * fall damage, critical hits and a mace's smash. A vehicle follows its controlling passenger in this.
+     */
+    @Override
+    public boolean isClientAuthoritative()
+    {
+        return false;
+    }
+
     @Override
     protected void checkFallDamage(double y, boolean onGround, BlockState state, BlockPos pos) {
         if (!BotSettings.fakePlayerFallDamage) {
