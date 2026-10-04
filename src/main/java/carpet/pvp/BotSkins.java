@@ -55,7 +55,8 @@ public final class BotSkins
 
     /**
      * Puts the skin of {@code playername} on a bot, by resolving that account off the server thread and
-     * placing the bot again with the profile once it has come back.
+     * placing the bot again with the profile once it has come back. The resolution is the only part that
+     * needs a network; {@link #wear(MinecraftServer, ServerPlayer, GameProfile)} is the part after it.
      *
      * @return null when the request went ahead, otherwise the reason it did not
      */
@@ -91,8 +92,34 @@ public final class BotSkins
                                 + " is that account and is on this server");
                 return;
             }
-            replace(server, fake, profile.get());
+            wear(server, fake, profile.get());
         }, server);
+        return null;
+    }
+
+    /**
+     * Puts {@code account}'s profile on a bot that is already online, with no lookup of its own: the
+     * bot goes off and comes back under its own name with the other account's id, and everything it was
+     * set up with is put back. This is what {@link #wear(MinecraftServer, ServerPlayer, String)} does once
+     * the profile has come back, and it is public because a self-test drives it with a made-up profile.
+     *
+     * @return null when the bot was replaced, otherwise the reason it was not
+     */
+    public static String wear(MinecraftServer server, ServerPlayer bot, GameProfile account)
+    {
+        if (!(bot instanceof EntityPlayerMPFake fake))
+        {
+            return bot.getName().getString() + " is not a bot of this server";
+        }
+        if (server.getPlayerList().getPlayer(bot.getUUID()) != bot)
+        {
+            return bot.getName().getString() + " is no longer on this server";
+        }
+        if (bot.getUUID().equals(account.id()))
+        {
+            return bot.getName().getString() + " already is " + account.name();
+        }
+        replace(server, fake, account);
         return null;
     }
 

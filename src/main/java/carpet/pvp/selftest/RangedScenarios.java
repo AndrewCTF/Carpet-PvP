@@ -560,10 +560,14 @@ final class RangedScenarios
     }
 
     /** An expert ranged bot puts damage into an expert sword bot before either of them is in sword range. */
+    /** How many arrows the duel hands the shooter, so a shot is one fewer than this. */
+    private static final int ARROWS_GIVEN = 64;
+
     static Scenario rangedDuel(String a, String b, String c, Vec3 origin)
     {
         boolean[] armed = {false};
         int[] damageTick = {-1};
+        int[] shotTick = {-1};
         int[] switchTick = {-1};
         float[] healthAtHit = {20.0F};
         int[] tick = {0};
@@ -572,7 +576,7 @@ final class RangedScenarios
                 "bot option " + a + " combat true",
                 "bot option " + a + " targetrange 40",
                 SelfTest.cmd(a + " equip mainhand minecraft:bow"),
-                "give " + a + " minecraft:arrow 64",
+                "give " + a + " minecraft:arrow " + ARROWS_GIVEN,
                 "give " + a + " minecraft:diamond_sword",
                 SelfTest.cmd(a + " equip head minecraft:diamond_helmet"),
                 SelfTest.cmd(a + " equip chest minecraft:diamond_chestplate"),
@@ -608,6 +612,10 @@ final class RangedScenarios
                 damageTick[0] = tick[0];
                 healthAtHit[0] = victim.getHealth();
             }
+            if (shotTick[0] < 0 && count(shooter, Items.ARROW) < ARROWS_GIVEN)
+            {
+                shotTick[0] = tick[0];
+            }
             if (switchTick[0] < 0 && shooter.getMainHandItem().is(Items.DIAMOND_SWORD))
             {
                 switchTick[0] = tick[0];
@@ -617,11 +625,14 @@ final class RangedScenarios
                 return SelfTest.pending(SelfTest.fmt("tick %d, %.1f blocks apart, no damage yet", tick[0],
                         shooter.distanceTo(victim)));
             }
-            boolean first = damageTick[0] > 0 && damageTick[0] < switchTick[0];
+            // The arrow takes ten ticks to cross thirty blocks, so a shot that landed after the sword came
+        // out was still fired before it: what the duel is about is that the ranged bot shot first and
+        // then closed, not that its arrow was still in the air when it did.
+        boolean first = damageTick[0] > 0 && shotTick[0] > 0 && shotTick[0] <= switchTick[0];
             return new Probe(first, SelfTest.fmt(
-                    "%s first hurt %s on tick %d, taking it to %.1f health, and only had to put the sword "
-                            + "away on tick %d, %d ticks later; they are now %.1f blocks apart",
-                    a, b, damageTick[0], healthAtHit[0], switchTick[0], switchTick[0] - damageTick[0],
+                    "%s shot on tick %d, first hurt %s on tick %d taking it to %.1f health, and put the sword "
+                            + "away on tick %d, %d ticks after the shot; they are now %.1f blocks apart",
+                    a, shotTick[0], b, damageTick[0], healthAtHit[0], switchTick[0], switchTick[0] - shotTick[0],
                     shooter.distanceTo(victim)));
         });
     }

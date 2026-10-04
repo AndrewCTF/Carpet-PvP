@@ -33,7 +33,9 @@ import io.papermc.paper.command.brigadier.PaperCommandSourceStack;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.FinePositionResolver;
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver;
+import io.papermc.paper.command.brigadier.argument.resolvers.RotationResolver;
 import io.papermc.paper.math.FinePosition;
+import io.papermc.paper.math.Rotation;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.IdentifierArgument;
@@ -81,8 +83,29 @@ public final class PaperBotCommands
 
     public static void register(io.papermc.paper.command.brigadier.Commands commands)
     {
-        commands.register(root().build(), PERMISSION);
+        // /bot is registered without Bukkit's own permission filter, so a sender who may not run it gets
+        // the sentence the shared bodies print on Fabric rather than Brigadier's "unknown command". What
+        // decides it is the plugin's permission, checked by {@link #mayCommandBots} below, which the
+        // shared bodies already ask; /auto-setup keeps Bukkit's filter, because nothing wraps it.
+        commands.register(root().build(), (String) null);
         commands.register(autoSetupTree().build(), AUTO_SETUP_PERMISSION);
+        BotCommands.mayCommandBots = PaperBotCommands::mayCommandBots;
+    }
+
+    /**
+     * Whether the sender may run the {@code /bot} commands: the console may, so may a bot of this
+     * server, and a real player may when it holds {@code carpetpvp.bot}, which {@code paper-plugin.yml}
+     * gives to operators by default.
+     */
+    static boolean mayCommandBots(net.minecraft.commands.CommandSourceStack source)
+    {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return true;
+        // A bot of this server may always drive bots: Fabric's commandBot rule ships as "true", so a
+        // fake player can spawn and fight there, and `/bot match` and the drills are run as one.
+        if (player instanceof EntityPlayerMPFake) return true;
+        return player.getBukkitEntity() instanceof org.bukkit.entity.Player bukkit
+                && bukkit.hasPermission(PERMISSION);
     }
 
 
@@ -340,6 +363,7 @@ public final class PaperBotCommands
                 .then(action("dropStack", ActionType.DROP_STACK))
                 .then(action("swapHands", ActionType.SWAP_HANDS))
                 .then(attackTree())
+                .then(glideTree())
                 .then(nav())
                 .then(ai())
                 .then(faction());
@@ -412,7 +436,9 @@ public final class PaperBotCommands
                 .then(simple("back", pack -> pack.turn(180, 0)))
                 .then(literal("around")
                         .then(argument("degrees", DoubleArgumentType.doubleArg(-360.0D, 360.0D))
-                                .executes(PaperBotCommands::turnAround)));
+                                .executes(PaperBotCommands::turnAround)))
+                .then(argument("rotation", ArgumentTypes.rotation())
+                        .executes(PaperBotCommands::turnRotation));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> moveTree()
@@ -725,10 +751,174 @@ public final class PaperBotCommands
         return manipulating(ap -> ap.turn(degrees, 0)).run(context);
     }
 
+    /** {@code turn <yaw> <pitch>}, the spelling Fabric's {@code /player} takes. */
+    private static int turnRotation(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
+    {
+        RotationResolver resolver = resolve(context, "rotation", RotationResolver.class);
+        if (resolver == null) throw new IllegalArgumentException("rotation must be a yaw and a pitch");
+        Rotation rotation = resolver.resolve(context.getSource());
+        return manipulating(ap -> ap.turn(rotation.yaw(), rotation.pitch())).run(context);
+    }
+
     private static int hotbar(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
     {
         int slot = IntegerArgumentType.getInteger(context, "slot");
         return manipulating(ap -> ap.setSlot(slot)).run(context);
+    }
+
+    /**
+     * {@code glide}, the elytra subtree of Fabric's {@code /player}. Every leaf sets the same field on the
+     * bot's action pack that Fabric's {@code PlayerCommand} sets, so the two cannot drift apart.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> glideTree()
+    {
+        return literal("glide")
+                .then(simple("start", pack -> pack.setGlideEnabled(true)))
+                .then(simple("stop", pack -> pack.setGlideEnabled(false)))
+                .then(literal("freeze")
+                        .executes(gliding(manipulating(ap -> ap.setGlideFrozen(!ap.isGlideFrozen()))))
+                        .then(argument("value", BoolArgumentType.bool())
+                                .executes(gliding(manipulating((c, ap) -> ap.setGlideFrozen(BoolArgumentType.getBool(c, "value")))))))
+                .then(literal("arrival")
+                        .then(simple("stop", pack -> arrival(pack, EntityPlayerActionPack.GlideArrivalAction.STOP)))
+                        .then(simple("freeze", pack -> arrival(pack, EntityPlayerActionPack.GlideArrivalAction.FREEZE)))
+                        .then(simple("descend", pack -> arrival(pack, EntityPlayerActionPack.GlideArrivalAction.DESCEND)))
+                        .then(simple("land", pack -> arrival(pack, EntityPlayerActionPack.GlideArrivalAction.LAND)))
+                        .then(simple("circle", pack -> arrival(pack, EntityPlayerActionPack.GlideArrivalAction.CIRCLE))))
+                .then(literal("launch")
+                        .then(literal("assist")
+                                .then(argument("value", BoolArgumentType.bool())
+                                        .executes(gliding(manipulating((c, ap) -> ap.setGlideLaunchAssistEnabled(BoolArgumentType.getBool(c, "value")))))))
+                        .then(literal("pitch")
+                                .then(argument("deg", DoubleArgumentType.doubleArg(-45.0D, 45.0D))
+                                        .executes(gliding(manipulating((c, ap) -> ap.setGlideLaunchPitch(
+                                                (float) DoubleArgumentType.getDouble(c, "deg")))))))
+                        .then(literal("speed")
+                                .then(argument("blocksPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(gliding(manipulating((c, ap) -> ap.setGlideLaunchSpeed(
+                                                DoubleArgumentType.getDouble(c, "blocksPerTick")))))))
+                        .then(literal("forwardTicks")
+                                .then(argument("ticks", IntegerArgumentType.integer(0, 20))
+                                        .executes(gliding(manipulating((c, ap) -> ap.setGlideLaunchForwardTicks(
+                                                IntegerArgumentType.getInteger(c, "ticks"))))))))
+                .then(literal("freezeAtTarget")
+                        .then(argument("value", BoolArgumentType.bool())
+                                .executes(gliding(manipulating((c, ap) -> ap.setGlideFreezeAtTarget(BoolArgumentType.getBool(c, "value")))))))
+                .then(literal("speed")
+                        .then(argument("blocksPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                .executes(gliding(manipulating((c, ap) -> ap.setGlideSpeed(
+                                        DoubleArgumentType.getDouble(c, "blocksPerTick")))))))
+                .then(literal("rates")
+                        .then(argument("yawDegPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                .then(argument("pitchDegPerTick", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(gliding(manipulating((c, ap) -> ap.setGlideRates(
+                                                (float) DoubleArgumentType.getDouble(c, "yawDegPerTick"),
+                                                (float) DoubleArgumentType.getDouble(c, "pitchDegPerTick"))))))))
+                .then(literal("usePitch")
+                        .then(argument("value", BoolArgumentType.bool())
+                                .executes(gliding(manipulating((c, ap) -> ap.setGlideUsePitchForForward(BoolArgumentType.getBool(c, "value")))))))
+                .then(literal("input")
+                        .then(argument("forward", DoubleArgumentType.doubleArg(-1.0D, 1.0D))
+                                .then(argument("strafe", DoubleArgumentType.doubleArg(-1.0D, 1.0D))
+                                        .then(argument("up", DoubleArgumentType.doubleArg(-1.0D, 1.0D))
+                                                .executes(gliding(gliding(PaperBotCommands::glideInput)))))))
+                .then(literal("heading")
+                        .then(argument("yaw", DoubleArgumentType.doubleArg(-360.0D, 360.0D))
+                                .then(argument("pitch", DoubleArgumentType.doubleArg(-90.0D, 90.0D))
+                                        .executes(gliding(gliding(PaperBotCommands::glideHeading))))))
+                .then(literal("goto")
+                        .then(literal("smart")
+                                .then(argument("pos", ArgumentTypes.finePosition())
+                                        .executes(gliding(gliding(PaperBotCommands::glideGotoSmart)))
+                                        .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                                .executes(gliding(gliding(PaperBotCommands::glideGotoSmart))))))
+                        .then(argument("pos", ArgumentTypes.finePosition())
+                                .executes(gliding(gliding(PaperBotCommands::glideGoto)))
+                                .then(argument("arrivalRadius", DoubleArgumentType.doubleArg(0.0D))
+                                        .executes(gliding(gliding(PaperBotCommands::glideGoto))))))
+                .then(literal("status").executes(gliding(gliding(PaperBotCommands::glideStatus))));
+    }
+
+    /** A leaf of {@code glide}, which the elytra setting refuses outright while it is off. */
+    private static Command<CommandSourceStack> gliding(Command<CommandSourceStack> leaf)
+    {
+        return context -> canGlide(context) ? leaf.run(context) : 0;
+    }
+
+    private static void arrival(EntityPlayerActionPack pack, EntityPlayerActionPack.GlideArrivalAction action)
+    {
+        pack.setGlideArrivalAction(action);
+    }
+
+    private static int glideInput(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
+    {
+        return manipulating(ap -> {
+            ap.setGlideEnabled(true);
+            ap.setGlideInput((float) DoubleArgumentType.getDouble(context, "forward"),
+                    (float) DoubleArgumentType.getDouble(context, "strafe"),
+                    (float) DoubleArgumentType.getDouble(context, "up"));
+        }).run(context);
+    }
+
+    private static int glideHeading(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
+    {
+        return manipulating(ap -> {
+            ap.setGlideEnabled(true);
+            ap.setGlideHeading((float) DoubleArgumentType.getDouble(context, "yaw"),
+                    (float) DoubleArgumentType.getDouble(context, "pitch"));
+        }).run(context);
+    }
+
+    private static int glideGoto(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
+    {
+        Vec3 pos = position(context, "pos");
+        double radius = arrivalRadius(context);
+        return manipulating(ap -> {
+            ap.setGlideEnabled(true);
+            ap.setGlideGoto(pos, radius);
+        }).run(context);
+    }
+
+    /** {@code glide goto smart}: an elytra path across the world, planned the way Fabric plans it. */
+    private static int glideGotoSmart(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
+    {
+        Vec3 goal = position(context, "pos");
+        double radius = arrivalRadius(context);
+        ServerPlayer player = pack(context).getPlayer();
+        if (!(player.level() instanceof ServerLevel level))
+        {
+            say(context, player.getName().getString() + " is not in a world", ChatFormatting.RED);
+            return 0;
+        }
+        carpet.pvp.nav.ElytraAStarPathfinder.Settings settings =
+                carpet.pvp.nav.ElytraAStarPathfinder.Settings.defaults();
+        List<net.minecraft.core.BlockPos> raw = new carpet.pvp.nav.ElytraAStarPathfinder().findPath(level,
+                net.minecraft.core.BlockPos.containing(player.position()), net.minecraft.core.BlockPos.containing(goal), settings);
+        if (raw == null || raw.isEmpty())
+        {
+            say(context, "No smart path found (range/terrain/chunks). Try a higher goal Y or move closer.", ChatFormatting.RED);
+            return 0;
+        }
+        List<Vec3> waypoints = new ArrayList<>();
+        for (net.minecraft.core.BlockPos pos : carpet.pvp.nav.ElytraAStarPathfinder.compressWaypoints(raw, settings.waypointStride()))
+        {
+            waypoints.add(new Vec3(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D));
+        }
+        return manipulating(ap -> {
+            ap.setGlideEnabled(true);
+            ap.setGlideArrivalAction(EntityPlayerActionPack.GlideArrivalAction.LAND);
+            ap.setGlideGotoWaypoints(waypoints, goal, radius);
+            say(context, "smart glide path set with " + waypoints.size() + " waypoints for " + ap.getPlayer().getName(),
+                    ChatFormatting.GREEN);
+        }).run(context);
+    }
+
+    private static int glideStatus(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
+    {
+        return manipulating(ap -> say(context, "glide: enabled=" + ap.isGlideEnabled()
+                + ", frozen=" + ap.isGlideFrozen()
+                + ", speed=" + String.format("%.3f", ap.getGlideSpeed())
+                + ", arrival=" + ap.getGlideArrivalAction().name().toLowerCase(), ChatFormatting.GREEN)).run(context);
     }
 
     // --- navigation ---
@@ -774,14 +964,29 @@ public final class PaperBotCommands
                                 .executes(c -> navGoto(c, BotNavMode.WATER)))));
     }
 
+    /**
+     * {@code nav patrol}, with as many waypoints as Fabric takes. Every form ends in the same three
+     * literals, so a fourth waypoint is only a case of the same tail rather than a command of its own.
+     */
     private static LiteralArgumentBuilder<CommandSourceStack> navPatrol()
     {
         return literal("patrol")
                 .then(argument("pos1", ArgumentTypes.finePosition())
                         .then(argument("pos2", ArgumentTypes.finePosition())
-                                .executes(c -> navPatrol(c, false))
+                                .executes(c -> navPatrol(c, true))
                                 .then(literal("loop").executes(c -> navPatrol(c, true)))
-                                .then(literal("once").executes(c -> navPatrol(c, false)))));
+                                .then(literal("once").executes(c -> navPatrol(c, false)))
+                                .then(patrolWaypoint("pos3").then(patrolWaypoint("pos4")))));
+    }
+
+    /** One more waypoint of {@code nav patrol}, with the same {@code loop} and {@code once} tail; the
+     *  next waypoint hangs off this one, so the chain is a list rather than a set of siblings. */
+    private static RequiredArgumentBuilder<CommandSourceStack, FinePositionResolver> patrolWaypoint(String name)
+    {
+        return argument(name, ArgumentTypes.finePosition())
+                .executes(c -> navPatrol(c, true))
+                .then(literal("loop").executes(c -> navPatrol(c, true)))
+                .then(literal("once").executes(c -> navPatrol(c, false)));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> navChase()
@@ -838,6 +1043,15 @@ public final class PaperBotCommands
         }
     }
 
+    /** Elytra gliding is a setting of its own, the way Fabric's fakePlayerElytraGlide rule is. */
+    private static boolean canGlide(CommandContext<CommandSourceStack> context)
+    {
+        if (carpet.pvp.BotSettings.fakePlayerElytraGlide) return true;
+        say(context, "Elytra gliding controls are disabled. Turn navigation.elytraGlide on in config.yml first.",
+                ChatFormatting.RED);
+        return false;
+    }
+
     /** Navigation is a setting of its own, and only a bot can be navigated. */
     private static boolean canNavigate(CommandContext<CommandSourceStack> context)
     {
@@ -874,7 +1088,7 @@ public final class PaperBotCommands
     {
         if (!canNavigate(context)) return 0;
         List<Vec3> waypoints = new ArrayList<>();
-        for (String name : List.of("pos1", "pos2", "pos3"))
+        for (String name : List.of("pos1", "pos2", "pos3", "pos4"))
         {
             if (resolve(context, name, FinePositionResolver.class) == null) break;
             waypoints.add(position(context, name));

@@ -82,5 +82,12 @@ final class ScenarioIndex
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
         SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
         SCENARIOS.put("bot_stop_stats_trace", BotCommandScenarios::fightingCommands);
+        SCENARIOS.put("nav_straight_line", NavMotionScenarios::straightLine);
+        SCENARIOS.put("bot_patrol_waypoints", BotCommandParityScenarios::patrolWaypoints);
+        SCENARIOS.put("bot_patrol_modes", BotCommandParityScenarios::patrolModes);
+        SCENARIOS.put("bot_turn_rotation", BotCommandParityScenarios::turnRotation);
+        SCENARIOS.put("bot_glide_commands", BotCommandParityScenarios::glide);
+        SCENARIOS.put("bot_permission", BotCommandParityScenarios::permission);
+        SCENARIOS.put("bot_skin_profile", SkinScenarios::profile);
     }
 }
