@@ -104,7 +104,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-There are **124** of them: 52 built into `SelfTest.java` and 72 more registered in
+There are **137** of them: 52 built into `SelfTest.java` and 85 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
