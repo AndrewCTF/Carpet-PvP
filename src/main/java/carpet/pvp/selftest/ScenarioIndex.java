@@ -53,6 +53,8 @@ final class ScenarioIndex
         SCENARIOS.put("crossbow_cycle", RangedScenarios::crossbowCycle);
         SCENARIOS.put("trident_throw", RangedScenarios::tridentThrow);
         SCENARIOS.put("spear_reach", RangedScenarios::spearReach);
+        SCENARIOS.put("spear_thrust_damage", SpearThrustScenarios::thrustDamage);
+        SCENARIOS.put("ranged_closes_ground", RangedCloseScenarios::closesGround);
         SCENARIOS.put("tnt_cart_safe", RangedScenarios::tntCartSafe);
         SCENARIOS.put("ranged_keeps_distance", RangedScenarios::rangedKeepsDistance);
         SCENARIOS.put("ranged_duel", RangedScenarios::rangedDuel);

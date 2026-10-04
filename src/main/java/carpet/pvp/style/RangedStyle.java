@@ -75,6 +75,8 @@ public final class RangedStyle implements BotStyle
     private double live;
     private int meleeTicks;
     private int strafeTicks;
+    /** True while the bot is committed to a run in with a charged spear, which is what a thrust is behind. */
+    private boolean spearRun;
 
     public RangedStyle(EntityPlayerMPFake bot, BotBody body, BotPvpConfig cfg, Random random)
     {
@@ -106,6 +108,12 @@ public final class RangedStyle implements BotStyle
         cart.tick();
         gap = horizontal(me, seen);
         live = bot.distanceTo(target);
+        if (cart.spent(loadout))
+        {
+            // A cart with nothing to set it off with is a live minecart next to the target and nothing else, so
+            // the bot stops putting its back to it and goes back to fighting with what it can shoot.
+            cart.forget();
+        }
 
         if (gap <= SWORD_RANGE && loadout.sword >= 0)
         {
@@ -149,6 +157,7 @@ public final class RangedStyle implements BotStyle
         cart.forget();
         meleeTicks = 0;
         strafeTicks = 0;
+        spearRun = false;
     }
 
     // --- the techniques
@@ -259,67 +268,81 @@ public final class RangedStyle implements BotStyle
     }
 
     /**
-     * A spear: charge it and run at the target, but only while the model says the closing speed is worth the
-     * run. Inside the spear's own window the bot holds the charge and waits for the target to come to it.
+     * A spear: charge it and run at the target, which is how a player lands one. The charge does not slow a
+     * player down ({@code USE_EFFECTS} lets a spear be used at full speed and sprinted with), so the closing
+     * speed the thrust is behind is the run itself.
+     *
+     * <p>That makes the run the whole technique, and it has to start outside the spear's own reach: a thrust
+     * taken from inside it has no speed behind it, so a bot that is already standing there backs out of its own
+     * window and comes at the target again. Once the run has started it is not given up half way, because a
+     * bot that turns round at the edge of the reach never builds up the speed the thrust is behind.</p>
      */
     private void thrustSpear()
     {
         ItemStack stack = loadout.stack(loadout.spear);
         holdSlot(loadout.spear);
-        if (spear.held() > Spear.chargeWindow(stack))
+        if (spear.spent())
         {
             // The charge has run out and no thrust of it can land any more, so it is let go and begun again.
             spear.charge(false);
             drive(null, DuelSim.NOOP, false);
             return;
         }
-        if (live < SpearMath.minReach())
+        spear.charge(true);
+        double reach = spear.reachOf(target);
+        if (reach < SpearMath.minReach())
         {
-            // Too close to thrust, which is the near limit a spear has, so give the ground back.
-            spear.charge(true);
+            // Inside the near limit no thrust reaches at all, so the ground goes back and the next run starts.
+            spearRun = false;
             drive(null, DuelSim.action(-1, 0, false, false, false), false);
             return;
         }
-        boolean inside = live <= SpearMath.maxReach();
-        if (inside && !spear.worthIt(target, stack))
+        // A thrust lands while the target is inside the reach of the spear and the two are closing on each
+        // other faster than the weapon's gate, and the run keeps going while it has not landed one yet.
+        boolean landing = reach <= SpearMath.maxReach() && spear.fast(target, stack);
+        spearRun = spearRun ? !landing : reach > SpearMath.maxReach();
+        if (spearRun || landing)
         {
-            spear.charge(true);
-            drive(null, DuelSim.action(0, 0, false, false, false), false);
+            drive(null, DuelSim.action(1, 0, false, true, false), false);
             return;
         }
-        spear.charge(true);
-        drive(null, DuelSim.action(1, 0, false, true, false), false);
+        drive(null, DuelSim.action(-1, 0, false, false, false), false);
     }
 
     /**
-     * Lays a tnt minecart next to the target when the plan says the blast is worth the bot's time. A cart has to
-     * be laid within reach, so the bot walks in while there is nowhere to put one.
+     * Lays a tnt minecart next to the target when the plan says the blast is worth the bot's time.
+     *
+     * <p>It lays the trap from where it stands rather than walking in to arm one: the plan looks a few blocks
+     * around the bot, so a cell next to the target is nearly always within reach of it, and a bot that closes to
+     * lay a cart walks into the sword range of the very fighter it was trying to keep away from.</p>
      */
     private void layCart()
     {
-        if (cart.place(me, seen, difficulty(), loadout))
-        {
-            drive(null, DuelSim.NOOP, false);
-            return;
-        }
-        drive(null, DuelSim.action(1, 0, false, false, false), false);
+        drive(null, DuelSim.NOOP, false);
+        cart.place(loadout);
     }
 
     /**
-     * Sets a cart that is already down off, and keeps walking away the whole time, which is what a player
-     * does with one: the shot only goes in once the blast can no longer reach the bot.
+     * A cart that is already down: the bot walks backwards out of its own blast first, because a cart goes down
+     * within a few blocks of it, and only shoots the flaming arrow in once the plan says the blast cannot reach
+     * where it is standing. It keeps the ground it has gained for the whole shot.
      */
     private void setCart()
     {
-        int action = distance(true);
         ProjectileSim.Target mark = cart.cart();
         double range = Math.hypot(mark.x - bot.getX(), mark.z - bot.getZ());
         if (!cart.readyToLight(loadout, difficulty()))
         {
+            // Either the bot is still standing in the blast of the cart it laid, or it has nothing to light it
+            // with. Walking backwards is out of the blast; the other case is settled in engage.
             body.releaseItem();
-            drive(null, action, false);
+            drive(null, DuelSim.action(-1, 0, false, false, false), false);
             return;
         }
+        // Standing still for the whole shot, and not sidestepping while it is drawn: a cart is a box less than
+        // a block wide a few blocks away, so a bot that walks sideways while it aims keeps sliding the point
+        // its view has to reach sideways faster than the view can turn, and every arrow it lets go of goes past.
+        int action = DuelSim.NOOP;
         holdSlot(loadout.flameBow);
         if (body.currentSlot() != loadout.flameBow && body.pendingSlot() != loadout.flameBow)
         {
@@ -328,7 +351,10 @@ public final class RangedStyle implements BotStyle
             drive(null, action, false);
             return;
         }
-        ProjectileAim.Aim aim = bow.aimAt(mark, -1);
+        // A full draw and not the shortest one that reaches: the cart is a small box a few blocks away, and a
+        // barely drawn arrow is the one the aim is least sure about, because a tick of draw either side of it
+        // is a fifth of the arrow's speed. A player holds a cart shot at full draw for the same reason.
+        ProjectileAim.Aim aim = bow.aimAt(mark, ProjectileSim.BOW_FULL_DRAW);
         if (!aim.solved)
         {
             body.releaseItem();
@@ -337,7 +363,14 @@ public final class RangedStyle implements BotStyle
         }
         BotBody.Aim point = Bow.pointOf(aim, range);
         drive(point, action, false);
-        bow.hold(point, aim.drawTicks);
+        // Drawn and let go only once the view is actually on the cart. The patience a shot at a moving target
+        // gets is not wanted here: the cart is not going anywhere, so waiting for the aim costs a draw and
+        // firing without it spends an arrow on the floor beside the cart.
+        body.holdItem();
+        if (bow.aimedAt(point))
+        {
+            bow.hold(point, aim.drawTicks);
+        }
     }
 
     // --- the movement
@@ -390,10 +423,16 @@ public final class RangedStyle implements BotStyle
         return cfg.flag("ranged.spear") && loadout.spear >= 0 && atLeast(BotPvpConfig.Difficulty.AVERAGE);
     }
 
+    /**
+     * A cart is only offered when there is somewhere to lay one that reaches the target from where the bot
+     * stands: the plan looks a few blocks around it, so a target out at bow range is out of reach of any cell
+     * and the technique hands the tick back to the bow rather than walking the bot into a fight to arm one.
+     */
     private boolean wantsCart()
     {
         return cfg.flag("ranged.tntcart") && atLeast(BotPvpConfig.Difficulty.SKILLED)
-                && loadout.cart >= 0 && loadout.rails >= 0 && loadout.ignites && loadout.arrows > 0;
+                && loadout.cart >= 0 && loadout.rails >= 0 && loadout.ignites && loadout.arrows > 0
+                && cart.plan(me, seen, difficulty(), loadout);
     }
 
     private boolean atLeast(BotPvpConfig.Difficulty wanted)

@@ -14,14 +14,20 @@ import carpet.pvp.sim.ProjectileSim;
 import carpet.pvp.sim.SpearMath;
 import carpet.pvp.sim.TntCartPlan;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.vehicle.minecart.MinecartTNT;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -48,6 +54,8 @@ final class RangedScenarios
     private static final double RATE_TOLERANCE = 0.4;
     /** How far out a target is still inside the spear's reach and outside a sword's. */
     private static final double SPEAR_RANGE = 4.2;
+    /** How close the target of the spear scenario walks in to before it stops and waits for the bot there. */
+    private static final double APPROACH = 4.5D;
 
     private RangedScenarios()
     {
@@ -305,15 +313,22 @@ final class RangedScenarios
         course.add("bot option " + a + " difficulty expert");
         course.add("bot option " + a + " targetrange 24");
         course.add("bot option " + a + " ranged.keep 4.5");
+        course.add("bot option " + a + " ranged.tntcart false");
         course.add("bot option " + a + " combat true");
         course.add("player " + b + " sprint");
-        // Turned round and walking at the bot, so the two close to the spear's window.
+        // Turned round, so the target walks at the bot rather than away from it.
         course.add("player " + b + " turn back");
-        course.add("player " + b + " move forward for 900");
         return new Scenario(1200, List.of(new Bot(a, origin), new Bot(b, target)), course, server ->
         {
             ServerPlayer shooter = SelfTest.player(server, a);
             ServerPlayer victim = SelfTest.player(server, b);
+            // The target is turned back onto the bot every tick and walked in until it is at the edge of a
+            // sword's reach, then held there: walking in a straight line from a fixed point carries it straight
+            // through the bot and on, which is how the two used to end up dozens of blocks apart with neither of
+            // them in reach, and walking in for good ends with the two of them locked together instead.
+            SelfTest.run(server, "player " + b + " look at " + SelfTest.coords(shooter.position()));
+            double apart = Math.hypot(victim.getX() - shooter.getX(), victim.getZ() - shooter.getZ());
+            SelfTest.run(server, "player " + b + (apart > APPROACH ? " move forward for 20" : " move"));
             if (!armed[0])
             {
                 if (SelfTest.warmingUp(server, a, b))
@@ -405,6 +420,10 @@ final class RangedScenarios
                 "bot option " + a + " difficulty expert",
                 "bot option " + a + " targetrange 24",
                 "bot option " + a + " ranged.keep 8",
+                // A blast does nothing at all on a peaceful server, so the plan scores every cell at no damage
+                // and the bot never lays a cart at all. The rule has to be off before the bot starts fighting,
+                // which is what putting it in the course rather than in the check does.
+                "difficulty normal",
                 "bot option " + a + " combat true"));
         return new Scenario(1200, List.of(new Bot(a, shooter), new Bot(b, target)), course, server ->
         {
@@ -416,22 +435,29 @@ final class RangedScenarios
                 {
                     return SelfTest.pending("waiting for " + a + " and " + b + " to finish loading");
                 }
-                // A blast does nothing at all on a peaceful server, whatever the bot thinks of itself.
-                SelfTest.run(server, "difficulty normal");
                 hard[0] = true;
                 return SelfTest.pending("the server is on normal so a blast can hurt");
             }
+            // The nearest cart to the bot, which is the one it laid. Taking whichever cart a query returned
+            // last instead measures whichever the entity list ended on, which is not a cart at all.
             MinecartTNT cart = null;
+            double nearest = Double.MAX_VALUE;
             for (MinecartTNT mine : server.overworld().getEntitiesOfClass(MinecartTNT.class,
                             new AABB(BlockPos.containing(origin.x, SelfTest.SURFACE_Y,
                                     origin.z + 10.0D)).inflate(24.0D)))
             {
-                cart = mine;
+                double away = mine.distanceTo(bot);
+                if (away < nearest)
+                {
+                    nearest = away;
+                    cart = mine;
+                }
             }
             if (cart == null)
             {
                 return SelfTest.pending(SelfTest.fmt("%s is looking for somewhere to lay a cart, %d rails and "
-                                + "%d carts in hand", a, count(bot, Items.RAIL), count(bot, Items.TNT_MINECART)));
+                                + "%d carts in hand, on difficulty %d", a, count(bot, Items.RAIL),
+                        count(bot, Items.TNT_MINECART), bot.level().getDifficulty().getId()));
             }
             double gap = Math.hypot(cart.getX() - bot.getX(), cart.getZ() - bot.getZ());
             standOff[0] = Math.max(standOff[0], gap);
@@ -439,16 +465,36 @@ final class RangedScenarios
             {
                 damage[0] = blastOn(victim, cart);
             }
-            boolean safe = gap >= SAFE_TNT_STANDOFF;
+            // The stand-off the scenario asks for is the one the plan itself calls survivable, asked again from
+            // where the bot is standing: a hard number would only state what the model said on the day.
+            boolean safe = survivableFrom(bot, cart);
             SelfTest.run(server, "difficulty peaceful");
             boolean ok = damage[0] > 0.0D && safe && bot.getHealth() >= 20.0F;
             return new Probe(ok, SelfTest.fmt(
                     "%s laid a rail and a tnt minecart %s next to %s, which the model says the blast is worth "
-                            + "%.1f health on, and then walked %.1f blocks away, where a blast of that power "
-                            + "no longer reaches it; it is on %.1f health and the cart is still standing",
-                    a, SelfTest.fmt("%.1f blocks", Math.hypot(cart.getX() - victim.getX(), cart.getZ() - victim.getZ())),
-                    b, damage[0], standOff[0], bot.getHealth()));
+                            + "%.1f health on, and then walked %.1f blocks away, from where the model says a "
+                            + "blast of that power is survivable: %s; it is on %.1f health and the cart is "
+                            + "still standing",
+                    a, SelfTest.fmt("%.1f blocks", Math.hypot(cart.getX() - victim.getX(),
+                            cart.getZ() - victim.getZ())), b, damage[0], standOff[0], safe ? "it is safe" :
+                    "it is not", bot.getHealth()));
         });
+    }
+
+    /** True when the plan says a blast of the power a cart rolls cannot take the bot's health where it stands. */
+    private static boolean survivableFrom(ServerPlayer bot, MinecartTNT cart)
+    {
+        CrystalSearch.Side self = new CrystalSearch.Side();
+        self.x = bot.getX();
+        self.y = bot.getY();
+        self.z = bot.getZ();
+        self.health = bot.getHealth() + bot.getAbsorptionAmount();
+        self.armor = bot.getArmorValue();
+        self.toughness = (float) bot.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+        self.epf = carpet.pvp.ranged.TntCart.protectionAgainstBlasts(bot);
+        return new TntCartPlan(new LevelExplosionView(
+                bot.level() instanceof ServerLevel level ? level : null))
+                .survivable(self, cart.getX(), cart.getY(), cart.getZ(), CombatMath.NORMAL);
     }
 
     /** Distance beyond which a blast of the power the plan scores cannot reach a fighter in diamond armour. */
@@ -492,6 +538,9 @@ final class RangedScenarios
                 "bot option " + a + " combat true",
                 "bot option " + a + " targetrange 32"));
         course.remove(course.size() - 1);
+        // The scenario is about the keep distance, so the one technique that deliberately spends it is switched
+        // off the way the crossbow already is above.
+        course.add("bot option " + a + " ranged.tntcart false");
         course.addAll(List.of("player " + a + " equip mainhand minecraft:diamond_sword",
                 "player " + a + " equip head minecraft:diamond_helmet",
                 "player " + a + " equip chest minecraft:diamond_chestplate",
@@ -626,7 +675,11 @@ final class RangedScenarios
         });
     }
 
-    /** The kit the ranged style is spawned with has everything it needs to fight from a distance. */
+    /**
+     * The kit the ranged style is spawned with has everything it needs to fight from a distance, and the whole
+     * of what it does at range: a bow to shoot with, a bow with Flame on it because a flaming arrow is the only
+     * thing a player can set a tnt minecart off with, a rail and a tnt minecart to lay one with.
+     */
     static Scenario rangedKit(String a, String b, String c, Vec3 origin)
     {
         boolean[] armed = {false};
@@ -643,14 +696,18 @@ final class RangedScenarios
                 return SelfTest.pending("gave " + a + " the ranged kit");
             }
             int arrows = count(bot, Items.ARROW);
+            int rails = count(bot, Items.RAIL);
+            int carts = count(bot, Items.TNT_MINECART);
             boolean bow = hasItem(bot, Items.BOW);
             boolean crossbow = hasItem(bot, Items.CROSSBOW);
             boolean sword = hasSword(bot);
             boolean armour = bot.getArmorValue() > 0.0F;
-            boolean ok = bow && crossbow && sword && armour && arrows >= 32;
+            boolean flame = hasFlameBow(bot);
+            boolean ok = bow && crossbow && sword && armour && flame && arrows >= 32 && rails >= 8 && carts >= 1;
             return new Probe(ok, SelfTest.fmt(
-                    "the ranged kit gave %s a bow: %s, a crossbow: %s, %d arrows, a sword: %s, %d armour",
-                    a, bow, crossbow, arrows, sword, bot.getArmorValue()));
+                    "the ranged kit gave %s a bow: %s, a bow with Flame on it: %s, a crossbow: %s, %d arrows, "
+                            + "%d rails, %d tnt minecarts, a sword: %s and %d armour",
+                    a, bow, flame, crossbow, arrows, rails, carts, sword, bot.getArmorValue()));
         });
     }
 
@@ -752,6 +809,36 @@ final class RangedScenarios
             }
         }
         return false;
+    }
+
+    /** True while the bot carries a bow with Flame on it, which is the only way to set a tnt minecart off. */
+    private static boolean hasFlameBow(ServerPlayer bot)
+    {
+        for (ItemStack stack : hotbar(bot))
+        {
+            if (stack.is(Items.BOW) && EnchantmentHelper.getItemEnchantmentLevel(FLAME(bot), stack) > 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<ItemStack> hotbar(ServerPlayer bot)
+    {
+        Inventory inventory = bot.getInventory();
+        List<ItemStack> stacks = new ArrayList<>(9);
+        for (int slot = 0; slot < 9; slot++)
+        {
+            stacks.add(inventory.getItem(slot));
+        }
+        return stacks;
+    }
+
+    private static Holder<Enchantment> FLAME(ServerPlayer bot)
+    {
+        return bot.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                .get(Identifier.parse("minecraft:flame")).orElseThrow();
     }
 
     /** True while the bot carries anything a sword style would fight with. */
