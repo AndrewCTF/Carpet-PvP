@@ -120,7 +120,7 @@ public final class SelfTest
     private static final double SPACING = 256.0D;
     private static final Gson GSON = new Gson();
     /** How long the server thread gets to stop, and then how long its worker threads get to finish. */
-    private static final long EXIT_WAIT_MILLIS = 120_000L;
+    private static final long EXIT_WAIT_MILLIS = 240_000L;
     private static volatile MinecraftServer stoppingServer;
     private static final float SWORD_BLOCK_HIT = 4.0F;
     /** How many bolts the lightning scenario sums up, enough that missing every skeleton horse roll is not a thing. */

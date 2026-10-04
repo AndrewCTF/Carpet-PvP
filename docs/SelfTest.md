@@ -487,8 +487,8 @@ A self-test that hangs is worse than one that fails, so the run has to prove the
 4. It starts a **non-daemon** thread named `selftest-watchdog`. It has to be non-daemon: the JVM
    ends the moment the server thread stops, taking the result and the thread check with it.
 
-The watchdog holds the JVM open, waits up to 120 seconds for the server thread to join, then gives
-the server's own worker threads up to another 120 seconds to finish. Then it reports:
+The watchdog holds the JVM open, waits up to 240 seconds for the server thread to join, then gives
+the server's own worker threads up to another 240 seconds to finish. Then it reports:
 
 - every non-daemon thread still alive, with its stack trace,
 - when the server thread itself did not stop: the players still listed, and per dimension the

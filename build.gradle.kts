@@ -91,7 +91,9 @@ tasks.named<JavaExec>("runSelfTest") {
     val dir = rootProject.file("run/selftest-$mcVersion")
     val report = dir.resolve("selftest-report.json")
     val log = dir.resolve("logs/latest.log")
-    timeout = Duration.ofMinutes(10)
+    // A full run takes about four minutes on a free machine. Limited to four cores the three servers
+    // needed another 100 seconds each to stop, writing the chunks the scenarios had touched.
+    timeout = Duration.ofMinutes(15)
     doFirst {
         dir.resolve("world").deleteRecursively()
         report.delete()
