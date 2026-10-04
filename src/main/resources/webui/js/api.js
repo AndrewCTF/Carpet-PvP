@@ -167,6 +167,8 @@ const API = (() => {
             opts.headers['Content-Type'] = 'application/json';
             opts.body = JSON.stringify(options.body);
         }
+        // A request that has to outlive the page it was sent from.
+        if (options.keepalive) opts.keepalive = true;
         const resp = await fetch(path, opts);
         return { ok: resp.ok, status: resp.status, body: await _body(resp) };
     }
@@ -186,7 +188,13 @@ const API = (() => {
     const getSchema = () => _fetch('/api/schema');
     const getPrograms = () => _fetch('/api/programs');
     const getPresets = () => _fetch('/api/presets');
-    const saveProgram = (program) => _fetch('/api/programs', { method: 'POST', body: program });
+    /** Saves a program and answers { ok, status, body } whatever the status: a refusal has a reason the page acts on. */
+    async function saveProgram(program, options = {}) {
+        const answer = await _send('/api/programs', { method: 'POST', body: program, keepalive: options.keepalive });
+        if (answer.status === 401) _refused(401, answer.body);
+        return answer;
+    }
+    const moveProgram = (id, folder) => _fetch('/api/programs/move', { method: 'POST', body: { id, folder } });
     const deleteProgram = (id) => _fetch('/api/programs/' + encodeURIComponent(id), { method: 'DELETE' });
     const getBots = () => _fetch('/api/bots');
     const getMatches = () => _fetch('/api/matches');
@@ -236,7 +244,7 @@ const API = (() => {
 
     return {
         connect, disconnect, isConnected, hasToken, loadToken, on, off,
-        getStatus, getSettings, getSchema, getPrograms, getPresets, saveProgram, deleteProgram,
+        getStatus, getSettings, getSchema, getPrograms, getPresets, saveProgram, moveProgram, deleteProgram,
         getBots, getMatches, spawnBot, removeBot, setBotConfig, tpBot, runProgram, stopProgram,
         offersSignIn, signIn, setPassword, signOut, setRule
     };

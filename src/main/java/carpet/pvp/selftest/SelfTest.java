@@ -133,6 +133,8 @@ public final class SelfTest
     public static BiConsumer<MinecraftServer, String> programStarter;
     /** The status of the program running on a bot, or "gone". Null where there is no CarpetLogic. */
     public static Function<String, String> programStatus;
+    /** What a variable of the program on a bot holds, as text, or "unset". Null where there is no CarpetLogic. */
+    public static BiFunction<String, String, String> programVariable;
     /** Stops the program running on a bot. Does nothing where there is no CarpetLogic. */
     public static Consumer<String> programStopper = name -> {};
     /** The error of the program running on a bot, or null where there is none or no CarpetLogic. */
@@ -163,6 +165,8 @@ public final class SelfTest
      * Fabric, where a command source can be stood in for; the scenario that needs it is unsupported elsewhere.
      */
     public static BiFunction<MinecraftServer, String, String> consoleSays;
+    /** Reads the CarpetLogic programs folder again, as a server start does. Does nothing where there is none. */
+    public static Runnable reloadPrograms = () -> {};
     /** How many mob spawn attempts the spawn reporter has counted so far, or 0 where it has none. */
     public static Supplier<Long> spawnAttempts;
     /**
@@ -201,6 +205,8 @@ public final class SelfTest
             Map.entry("logic_forever_budget", "it needs CarpetLogic programs"),
             Map.entry("logic_bot_snapshot", "it needs CarpetLogic's web API"),
             Map.entry("logic_admin_login", "it needs CarpetLogic's web editor and the carpet rules it changes"),
+            Map.entry("logic_save_draft_and_autosave", "it needs CarpetLogic's web editor and its programs folder"),
+            Map.entry("logic_expression_if_while", "it needs CarpetLogic programs"),
             Map.entry("sword_block", "it needs the carpet swordBlockHitting rule"),
             Map.entry("explosion_rules", "it needs the carpet explosionNoBlockDamage rule"),
             Map.entry("xp_explosions", "it needs the carpet xpFromExplosions rule"),

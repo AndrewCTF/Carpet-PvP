@@ -4,11 +4,14 @@
     "The interpreter reads parameters only through this file (carpet.logic.program.ActionSchema), and the web",
     "editor builds its node widgets from it and compiles graphs against it (webui/js/node-compiler.js).",
     "kind: action (a step), control (holds other actions in the listed slots) or condition (tested by IF_THEN_ELSE",
-    "and by WAIT_UNTIL).",
+    "and by WAIT_UNTIL). A condition may hold conditions of its own: one in 'condition', or a list in 'conditions'.",
+    "BREAK and CONTINUE belong inside a loop (LOOP, FOREVER, WHILE, FOR_EACH) and are refused anywhere else. They",
+    "and STOP_PROGRAM are control actions without a slot: nothing in their own sequence runs after them.",
     "node: the editor node this action is compiled from.",
-    "params: name, type (int, number, bool, string), default, and optionally min/max or the allowed options.",
-    "An int or number parameter may also hold a variable: the referencePrefix followed by a name, for example",
-    "'$counter'. A variable that was never set reads as 0.",
+    "params: name, type (int, number, bool, string, expr), default, and optionally min/max or the allowed options.",
+    "An int or number parameter may also hold an expression as text, of which a variable, the referencePrefix",
+    "followed by a name as in '$counter', is the simplest. A variable that was never set reads as 0.",
+    "An expr parameter always holds an expression; returns says what it has to give: bool, number, text, list or any.",
     "requires: the boolean carpet rule that must be on for the action to work.",
     "drivesBody: the action moves the bot or clicks for it. While a combat node owns the bot the interpreter skips",
     "these, so that the combat brain is the only thing driving the action pack.",
@@ -17,12 +20,72 @@
     "A 'ticks' parameter is how long the step lasts before the next one starts.",
     "ON_EVENT registers a reaction and then carries on with the sequence: its children run when the event happens,",
     "taking over from the main sequence, which resumes where it was once they are done. Every event fires on its",
-    "rising edge only, and an event that fires while its own handler is still running is ignored."
+    "rising edge only, and an event that fires while its own handler is still running is ignored.",
+    "expressions: the vocabulary of the expression language (carpet.logic.program.Expression, webui/js/expression.js): the named",
+    "values and the functions an expression may use. cost is the steps a call is charged (1 when absent); a variadic function's params are the required leading ones."
   ],
   "variables": {
     "referencePrefix": "$",
     "namePattern": "^[A-Za-z_][A-Za-z0-9_]*$",
     "maxVariables": 64
+  },
+  "expressions": {
+    "values": [
+      {"name": "health", "type": "number", "description": "The bot's health points; 20 is a full bar."},
+      {"name": "max_health", "type": "number", "description": "The most health points the bot can have."},
+      {"name": "food", "type": "number", "description": "The bot's food level; 20 is full."},
+      {"name": "armor", "type": "number", "description": "How many armor points the bot is wearing."},
+      {"name": "x", "type": "number", "description": "The bot's east-west position."},
+      {"name": "y", "type": "number", "description": "The bot's height."},
+      {"name": "z", "type": "number", "description": "The bot's north-south position."},
+      {"name": "yaw", "type": "number", "description": "The way the bot faces, left to right, in degrees."},
+      {"name": "pitch", "type": "number", "description": "How far the bot looks up or down, in degrees."},
+      {"name": "held_count", "type": "number", "description": "How many items are in the bot's main hand."},
+      {"name": "hotbar_slot", "type": "number", "description": "The hotbar slot the bot has selected, 1 to 9."},
+      {"name": "target_distance", "type": "number", "description": "How far away the bot's target is; infinity when it has none."},
+      {"name": "target_health", "type": "number", "description": "The target's health points; infinity when there is no target."},
+      {"name": "tick", "type": "number", "description": "How many ticks have passed since the program started."},
+      {"name": "random", "type": "number", "description": "A new random number from 0 up to, but not including, 1 each time it is read."},
+      {"name": "held_item", "type": "text", "description": "The id of the item in the main hand, like diamond_sword; air when empty."},
+      {"name": "offhand_item", "type": "text", "description": "The id of the item in the off hand; air when empty."},
+      {"name": "target_held_item", "type": "text", "description": "The id of the item the target holds; air when there is no target."},
+      {"name": "target_name", "type": "text", "description": "The target's name; empty when there is no target."},
+      {"name": "bot_name", "type": "text", "description": "The bot's own name."},
+      {"name": "on_ground", "type": "bool", "description": "True while the bot stands on the ground."},
+      {"name": "in_water", "type": "bool", "description": "True while the bot is in water."},
+      {"name": "gliding", "type": "bool", "description": "True while the bot is flying with an elytra."},
+      {"name": "blocking", "type": "bool", "description": "True while the bot is raising a shield."},
+      {"name": "using_item", "type": "bool", "description": "True while the bot is eating, drawing a bow or using another item."},
+      {"name": "sprinting", "type": "bool", "description": "True while the bot is sprinting."},
+      {"name": "sneaking", "type": "bool", "description": "True while the bot is sneaking."},
+      {"name": "alive", "type": "bool", "description": "True while the bot is alive."},
+      {"name": "has_target", "type": "bool", "description": "True when the bot has someone to fight."},
+      {"name": "fighting", "type": "bool", "description": "True while the combat AI is on and the bot has a target it is engaging."},
+      {"name": "target_blocking", "type": "bool", "description": "True while the target is raising a shield."}
+    ],
+    "functions": [
+      {"name": "min", "params": [{"name": "a", "type": "number"}, {"name": "b", "type": "number"}], "variadic": true, "returns": "number", "description": "The smallest of two or more numbers."},
+      {"name": "max", "params": [{"name": "a", "type": "number"}, {"name": "b", "type": "number"}], "variadic": true, "returns": "number", "description": "The largest of two or more numbers."},
+      {"name": "abs", "params": [{"name": "n", "type": "number"}], "returns": "number", "description": "A number without its minus sign."},
+      {"name": "floor", "params": [{"name": "n", "type": "number"}], "returns": "number", "description": "A number rounded down to a whole number."},
+      {"name": "ceil", "params": [{"name": "n", "type": "number"}], "returns": "number", "description": "A number rounded up to a whole number."},
+      {"name": "round", "params": [{"name": "n", "type": "number"}], "returns": "number", "description": "A number rounded to the nearest whole number; halves go up."},
+      {"name": "sqrt", "params": [{"name": "n", "type": "number"}], "returns": "number", "description": "The square root of a number that is not negative."},
+      {"name": "clamp", "params": [{"name": "n", "type": "number"}, {"name": "low", "type": "number"}, {"name": "high", "type": "number"}], "returns": "number", "description": "A number held between a lowest and a highest value."},
+      {"name": "if", "params": [{"name": "condition", "type": "bool"}, {"name": "then", "type": "any"}, {"name": "otherwise", "type": "any"}], "returns": "any", "description": "The second value when the condition is true, otherwise the third; only the one that is used is worked out."},
+      {"name": "len", "params": [{"name": "value", "type": "any"}], "returns": "number", "description": "How many characters a text has, or how many items a list has."},
+      {"name": "contains", "params": [{"name": "value", "type": "any"}, {"name": "item", "type": "any"}], "returns": "bool", "description": "True when a text holds a piece of text, or a list holds an item."},
+      {"name": "get", "params": [{"name": "list", "type": "list"}, {"name": "index", "type": "number"}], "returns": "any", "description": "The item at a place in a list; the first item is at 0."},
+      {"name": "list", "params": [], "variadic": true, "returns": "list", "description": "Makes a list out of any number of values."},
+      {"name": "range", "params": [{"name": "n", "type": "number"}], "returns": "list", "description": "The whole numbers from 0 up to one less than n, as a list."},
+      {"name": "text", "params": [{"name": "value", "type": "any"}], "returns": "text", "description": "Any value written out as text."},
+      {"name": "number", "params": [{"name": "value", "type": "any"}], "returns": "number", "description": "A number, or text that holds a number, as a number."},
+      {"name": "distance", "params": [{"name": "x", "type": "number"}, {"name": "y", "type": "number"}, {"name": "z", "type": "number"}], "returns": "number", "cost": 1, "description": "How far the bot is from a spot in the world."},
+      {"name": "player_distance", "params": [{"name": "name", "type": "text"}], "returns": "number", "cost": 2, "description": "How far the bot is from the named player."},
+      {"name": "count", "params": [{"name": "item", "type": "text"}], "returns": "number", "cost": 2, "description": "How many of an item the bot carries."},
+      {"name": "block", "params": [{"name": "x", "type": "number"}, {"name": "y", "type": "number"}, {"name": "z", "type": "number"}], "returns": "text", "cost": 5, "description": "The id of the block at a spot in the world."},
+      {"name": "entities", "params": [{"name": "type", "type": "text"}, {"name": "radius", "type": "number"}], "returns": "number", "cost": 20, "description": "How many entities of a type are within a radius of the bot."}
+    ]
   },
   "actions": {
     "MOVE": {"kind": "action", "drivesBody": true, "node": "Movement/Move", "params": [
@@ -227,6 +290,27 @@
     "EXECUTE_COMMAND": {"kind": "action", "node": "Control/ExecuteCommand", "params": [
       {"name": "command", "type": "string", "default": "say Hello"}
     ]},
+    "IF": {"kind": "control", "node": "Control/If", "slots": ["children", "elseChildren"], "params": [
+      {"name": "condition", "type": "expr", "returns": "bool", "default": "health < 10"}
+    ]},
+    "WHILE": {"kind": "control", "node": "Control/While", "slots": ["children"], "params": [
+      {"name": "condition", "type": "expr", "returns": "bool", "default": "$count < 3"}
+    ]},
+    "WAIT_FOR": {"kind": "action", "node": "Control/WaitFor", "params": [
+      {"name": "condition", "type": "expr", "returns": "bool", "default": "has_target"},
+      {"name": "timeout", "type": "int", "default": 200, "min": 1, "max": 60000}
+    ]},
+    "SET": {"kind": "action", "node": "Variables/SetTo", "params": [
+      {"name": "name", "type": "string", "default": "count"},
+      {"name": "value", "type": "expr", "returns": "any", "default": "$count + 1"}
+    ]},
+    "FOR_EACH": {"kind": "control", "node": "Control/ForEach", "slots": ["children"], "params": [
+      {"name": "variable", "type": "string", "default": "item"},
+      {"name": "list", "type": "expr", "returns": "list", "default": "range(3)"}
+    ]},
+    "BREAK": {"kind": "control", "node": "Control/Break", "params": []},
+    "CONTINUE": {"kind": "control", "node": "Control/Continue", "params": []},
+    "STOP_PROGRAM": {"kind": "control", "node": "Control/StopProgram", "params": []},
     "LOOP": {"kind": "control", "node": "Control/Repeat", "slots": ["children"], "params": [
       {"name": "count", "type": "int", "default": 3, "min": 0, "max": 10000}
     ]},
@@ -234,6 +318,12 @@
     "SEQUENCE": {"kind": "control", "node": "Control/Sequence", "slots": ["children"], "params": []},
     "IF_THEN_ELSE": {"kind": "control", "node": "Control/If-Else", "slots": ["condition", "children", "elseChildren"], "params": []},
 
+    "CONDITION_ALL": {"kind": "condition", "node": "Conditions/All", "slots": ["conditions"], "params": []},
+    "CONDITION_ANY": {"kind": "condition", "node": "Conditions/Any", "slots": ["conditions"], "params": []},
+    "CONDITION_NOT": {"kind": "condition", "node": "Conditions/Not", "slots": ["condition"], "params": []},
+    "CONDITION_EXPRESSION": {"kind": "condition", "node": "Conditions/Expression", "params": [
+      {"name": "expression", "type": "expr", "returns": "bool", "default": "health < 10 and has_target"}
+    ]},
     "CONDITION_HEALTH": {"kind": "condition", "node": "Conditions/Health", "params": [
       {"name": "operator", "type": "string", "default": "<", "options": ["<", "<=", ">", ">=", "==", "!="]},
       {"name": "value", "type": "number", "default": 10, "min": 0, "max": 1024}

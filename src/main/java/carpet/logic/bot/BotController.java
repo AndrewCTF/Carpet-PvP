@@ -22,8 +22,10 @@ import carpet.utils.ArmorSetDefinition;
 import carpet.utils.CommandHelper;
 import carpet.utils.EquipmentSlotMapping;
 import carpet.utils.Messenger;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -32,6 +34,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.entity.EntityTypeTest;
@@ -48,6 +51,8 @@ import java.util.UUID;
  */
 public class BotController implements Bot
 {
+    /** How far around the bot an expression may count entities. */
+    private static final double MAX_ENTITY_RADIUS = 64.0D;
     private static final List<EquipmentSlot> EQUIPMENT_SLOTS = List.of(
             EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND, EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
 
@@ -539,9 +544,166 @@ public class BotController implements Bot
     }
 
     @Override
+    public String name()
+    {
+        return player.getGameProfile().name();
+    }
+
+    @Override
     public double health()
     {
         return player.getHealth();
+    }
+
+    @Override
+    public double maxHealth()
+    {
+        return player.getMaxHealth();
+    }
+
+    @Override
+    public double x()
+    {
+        return player.getX();
+    }
+
+    @Override
+    public double y()
+    {
+        return player.getY();
+    }
+
+    @Override
+    public double z()
+    {
+        return player.getZ();
+    }
+
+    @Override
+    public double yaw()
+    {
+        return player.getYRot();
+    }
+
+    @Override
+    public double pitch()
+    {
+        return player.getXRot();
+    }
+
+    @Override
+    public String heldItem()
+    {
+        return itemId(player.getMainHandItem());
+    }
+
+    @Override
+    public String offhandItem()
+    {
+        return itemId(player.getOffhandItem());
+    }
+
+    @Override
+    public int heldCount()
+    {
+        return player.getMainHandItem().getCount();
+    }
+
+    @Override
+    public int hotbarSlot()
+    {
+        return player.getInventory().getSelectedSlot() + 1;
+    }
+
+    @Override
+    public boolean isOnGround()
+    {
+        return player.onGround();
+    }
+
+    @Override
+    public boolean isBlocking()
+    {
+        return player.isBlocking();
+    }
+
+    @Override
+    public boolean isUsingItem()
+    {
+        return player.isUsingItem();
+    }
+
+    @Override
+    public int countItem(String item)
+    {
+        int count = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++)
+        {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (itemId(stack).equals(item.toLowerCase(Locale.ROOT)))
+            {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    @Override
+    public String blockAt(double x, double y, double z)
+    {
+        BlockPos pos = BlockPos.containing(x, y, z);
+        // Asking about a block must not load the chunk it is in.
+        if (!player.level().isLoaded(pos))
+        {
+            return "unloaded";
+        }
+        return BuiltInRegistries.BLOCK.getKey(player.level().getBlockState(pos).getBlock()).getPath();
+    }
+
+    @Override
+    public int countEntities(String type, double radius)
+    {
+        String wanted = type.toLowerCase(Locale.ROOT);
+        double reach = Math.max(0.0D, Math.min(MAX_ENTITY_RADIUS, radius));
+        return player.level().getEntities(player, player.getBoundingBox().inflate(reach), entity ->
+                entity.isAlive() && entity.distanceTo(player) <= reach && switch (wanted)
+                {
+                    case "any" -> entity instanceof LivingEntity;
+                    case "hostile" -> entity instanceof Enemy;
+                    default -> BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath().equals(wanted);
+                }).size();
+    }
+
+    // An item's id the way a player writes it: without the namespace the game's own items share.
+    private static String itemId(ItemStack stack)
+    {
+        if (stack.isEmpty())
+        {
+            return "air";
+        }
+        String id = stack.getItem().toString();
+        return id.startsWith("minecraft:") ? id.substring("minecraft:".length()) : id;
+    }
+
+    @Override
+    public String targetName()
+    {
+        LivingEntity target = target();
+        return target == null ? "" : target.getName().getString();
+    }
+
+    @Override
+    public String targetHeldItem()
+    {
+        LivingEntity target = target();
+        return target == null ? "air" : itemId(target.getMainHandItem());
+    }
+
+    @Override
+    public boolean isTargetBlocking()
+    {
+        LivingEntity target = target();
+        return target != null && target.isBlocking();
     }
 
     @Override

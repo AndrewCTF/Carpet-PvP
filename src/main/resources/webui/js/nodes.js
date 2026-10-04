@@ -44,9 +44,20 @@ const Nodes = (() => {
         "Control/Sequence":        { title: "Sequence", desc: "Run the outputs in order, 1 to 4.",
                                      outputs: [["1", "flow"], ["2", "flow"], ["3", "flow"], ["4", "flow"]] },
         "Control/ExecuteCommand":  { title: "Execute Command", desc: "Run a command as you, with your permissions." },
+        "Control/If":              { title: "If", desc: "Run one branch or the other, depending on an expression such as health < 10 and has_target, then continue.",
+                                     outputs: [["then", "flow"], ["else", "flow"], ["done", "flow"]] },
+        "Control/While":           { title: "While", desc: "Run the body again and again for as long as an expression holds, then continue.",
+                                     outputs: [["body", "flow"], ["done", "flow"]] },
+        "Control/WaitFor":         { title: "Wait For", desc: "Hold here until an expression is true, or the timeout runs out." },
+        "Control/ForEach":         { title: "For Each", desc: "Run the body once for every item of a list, with the item in a variable. range(5) counts from 0 to 4.",
+                                     outputs: [["body", "flow"], ["done", "flow"]] },
+        "Control/Break":           { title: "Break", desc: "Leave the loop this is in, and carry on after it.", outputs: [] },
+        "Control/Continue":        { title: "Continue", desc: "Skip the rest of this round of the loop and start the next.", outputs: [] },
+        "Control/StopProgram":     { title: "Stop Program", desc: "End the program here.", outputs: [] },
 
         "Variables/Set":           { title: "Set Variable", desc: "Give a variable a number. Any number field takes one instead of a number." },
         "Variables/Add":           { title: "Add To Variable", desc: "Add a number to a variable, or take it away.", },
+        "Variables/SetTo":         { title: "Set To", desc: "Give a variable what an expression works out: a number, text or a list." },
 
         "Movement/Move":           { title: "Move", desc: "Walk in a direction for a number of ticks." },
         "Movement/Strafe":         { title: "Strafe", desc: "Step sideways for a number of ticks." },
@@ -105,6 +116,12 @@ const Nodes = (() => {
         "Events/OnEvent":          { title: "On Event", desc: "Register a reaction, then carry on. Its body takes over from the sequence when the event happens, and the sequence resumes where it was. An event that happens again while the body is still running is ignored.",
                                      outputs: [["body", "flow"], ["next", "flow"]] },
 
+        "Conditions/All":          { title: "All Of", desc: "True when every condition wired into it is.",
+                                     inputs: [["a", "condition"], ["b", "condition"], ["c", "condition"], ["d", "condition"]] },
+        "Conditions/Any":          { title: "Any Of", desc: "True when at least one condition wired into it is.",
+                                     inputs: [["a", "condition"], ["b", "condition"], ["c", "condition"], ["d", "condition"]] },
+        "Conditions/Not":          { title: "Not", desc: "True when the condition wired into it is not.", inputs: [["condition", "condition"]] },
+        "Conditions/Expression":   { title: "Expression", desc: "True when an expression is: any mix of values, comparisons, and, or and not." },
         "Conditions/Health":       { title: "Health Check", desc: "Compare the bot's health (0-20)." },
         "Conditions/IsFighting":     { title: "Is Fighting", desc: "True while the combat AI is on and the bot has a target." },
         "Conditions/HasTarget":     { title: "Has Target", desc: "True while the combat AI has a target, fighting one or not." },
@@ -165,7 +182,10 @@ const Nodes = (() => {
         // A parameter the schema marks optionsFrom names the list the server sends for it under the same name.
         const served = fromServer || p.optionsFrom;
         // The widget is bound to the property by name, so loading a graph or setting the property updates it.
-        if (p.type === "bool") {
+        if (p.type === "expr") {
+            // An expression needs the whole width of the node, so its widget goes without a label.
+            node.addWidget("text", "", p.default, p.name);
+        } else if (p.type === "bool") {
             node.addWidget("toggle", label, p.default, p.name);
         } else if (p.options) {
             node.addWidget("combo", label, p.default, p.name, { values: p.options });
@@ -174,7 +194,7 @@ const Nodes = (() => {
             // know yet reaches the server to be complained about there.
             node.addWidget("combo", label, p.default, p.name, { values: settings[served] });
         } else {
-            // A number is text too, so that a variable reference can be typed where a number goes.
+            // A number is text too, so that a variable or an expression can be typed where a number goes.
             node.addWidget("text", label, p.default, p.name);
         }
     }
@@ -202,6 +222,8 @@ const Nodes = (() => {
         Node.title = ui.title;
         Node.desc = ui.desc;
         Node.title_text_color = style.ink;
+        // A node that holds an expression is wide enough to show a short one.
+        if (params.some(p => p.type === "expr")) Node.min_width = 290;
         // A program saved by an earlier editor carries the look it was saved with: it gets today's.
         Node.prototype.onConfigure = function() { dress(this, style); };
         LiteGraph.registerNodeType(type, Node);
@@ -222,7 +244,7 @@ const Nodes = (() => {
         }
     }
 
-    return { register, NODES, MACROS, CATEGORIES };
+    return { register, NODES, MACROS, CATEGORIES, FROM_SERVER };
 })();
 
 if (typeof module !== "undefined") module.exports = Nodes;

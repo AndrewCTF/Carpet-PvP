@@ -141,10 +141,17 @@ class Page {
         await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
     }
 
-    async shot(file) {
+    /** Takes a picture of the page, or of the part of it an element takes up when a selector is given. */
+    async shot(file, selector) {
         // Two frames, so that what the last step changed has been painted.
         await this.eval("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
-        const { data } = await this.send("Page.captureScreenshot", { format: "png" });
+        let clip;
+        if (selector) {
+            const box = await this.eval("(() => { const r = document.querySelector(" + JSON.stringify(selector)
+                + ").getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()");
+            clip = { ...box, scale: 1 };
+        }
+        const { data } = await this.send("Page.captureScreenshot", { format: "png", clip });
         writeFileSync(file, Buffer.from(data, "base64"));
         console.log("SHOT " + file);
     }

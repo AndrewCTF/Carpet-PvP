@@ -2,11 +2,13 @@ package carpet.logic.program;
 
 import com.google.gson.JsonElement;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * A saved bot program: the compiled action tree that runs, plus the editor graph it was compiled from.
+ * A program whose graph does not compile yet is a draft: it has the graph and the reason, and no actions.
  */
 public class BotProgram
 {
@@ -19,6 +21,11 @@ public class BotProgram
     private long createdAt;
     private long updatedAt;
     private boolean isPreset;
+    // Why the graph does not compile, for a draft; null for a program that runs.
+    private String error;
+    // Where the program is kept. Its file says so by where it is, so neither is written into it.
+    private transient String folder;
+    private transient Path file;
 
     public BotProgram()
     {
@@ -111,5 +118,36 @@ public class BotProgram
     public int getActionCount()
     {
         return actions != null ? actions.size() : 0;
+    }
+
+    public String getError()
+    {
+        return error;
+    }
+
+    public void setError(String error)
+    {
+        this.error = error == null || error.isBlank() ? null : error;
+    }
+
+    /** The subfolder of the programs folder the program is in, or empty for the folder itself. */
+    public String getFolder()
+    {
+        return folder == null ? "" : folder;
+    }
+
+    public void setFolder(String folder)
+    {
+        this.folder = folder;
+    }
+
+    public Path getFile()
+    {
+        return file;
+    }
+
+    public void setFile(Path file)
+    {
+        this.file = file;
     }
 }

@@ -23,7 +23,8 @@
             <input id="program-name" type="text" value="Untitled" maxlength="64" spellcheck="false" autocomplete="off" title="Program name" aria-label="Program name">
             <button class="btn" id="btn-new" title="New program (Ctrl+N)">New</button>
             <button class="btn" id="btn-load" title="Open a saved program or a preset (Ctrl+O)">Open</button>
-            <button class="btn" id="btn-save" title="Save the program on the server (Ctrl+S)">Save</button>
+            <button class="btn" id="btn-save" title="Save the program on the server now (Ctrl+S)">Save</button>
+            <button class="btn lamp" id="btn-autosave" role="switch" aria-checked="true">Autosave</button>
             <span id="program-state" class="chip quiet" role="status" aria-live="polite">Not saved</span>
         </div>
         <div class="bar-group" role="group" aria-label="Edit">
@@ -50,6 +51,11 @@
     </header>
 
     <div id="notice-bar" class="notice-bar hidden" role="status" aria-live="polite"></div>
+    <div id="recovery-bar" class="notice-bar kept hidden" role="status">
+        <span id="recovery-text"></span>
+        <button class="btn small" id="recovery-restore">Restore it</button>
+        <button class="btn small" id="recovery-discard">Discard it</button>
+    </div>
 
     <!-- ═══ Workspace ═══ -->
     <div id="workspace">
@@ -108,6 +114,19 @@
                         <button class="btn hidden" id="canvas-retry">Try again</button>
                     </div>
                 </section>
+
+                <!-- The selected node's settings -->
+                <aside id="inspector" class="inspector hidden" aria-label="Node settings">
+                    <div class="inspector-head">
+                        <span id="inspector-swatch" class="swatch" aria-hidden="true"></span>
+                        <h2 id="inspector-title"></h2>
+                        <button class="btn icon" id="inspector-close" aria-label="Hide the node's settings">&times;</button>
+                    </div>
+                    <p id="inspector-desc" class="inspector-desc"></p>
+                    <p id="inspector-problem" class="inspector-problem hidden" role="status"></p>
+                    <div id="inspector-fields" class="inspector-fields"></div>
+                    <div id="inspector-suggest" class="suggest hidden" role="listbox" aria-label="Names an expression can use"></div>
+                </aside>
 
                 <div id="zoom-area" role="group" aria-label="View">
                     <button class="btn icon" id="zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
@@ -185,6 +204,8 @@
                 <h2 id="load-title" class="modal-heading">Open a program</h2>
                 <button class="btn icon modal-close" aria-label="Close">&times;</button>
             </div>
+            <p class="modal-note">Programs are kept in <code id="load-folder"></code> on the server, one file each.
+                <button class="btn small" id="load-refresh" title="Read the folder again, for files put there by hand">Refresh</button></p>
             <div class="modal-tools">
                 <div class="modal-tabs" role="tablist">
                     <button class="modal-tab active" data-tab="programs" role="tab">Saved <span id="count-programs" class="count"></span></button>
@@ -198,6 +219,25 @@
                 </div>
                 <div id="panel-presets" class="modal-tab-panel">
                     <div id="preset-program-list" class="modal-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Two copies of one program ═══ -->
+    <div id="conflict-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+        <div class="modal-card narrow">
+            <div class="modal-top">
+                <h2 id="conflict-title" class="modal-heading">Saved somewhere else</h2>
+                <button class="btn icon modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <p id="conflict-text" class="conflict-text"></p>
+                <p class="hint">Another tab or another person saved this program after you opened it. Nothing has been overwritten. Choose which copy stays.</p>
+                <div class="conflict-choices">
+                    <button class="btn" id="conflict-mine">Keep mine, replace theirs</button>
+                    <button class="btn" id="conflict-theirs">Open theirs, drop mine</button>
+                    <button class="btn" id="conflict-copy">Keep both: save mine as a copy</button>
                 </div>
             </div>
         </div>
@@ -308,11 +348,14 @@
 
     <!-- ═══ Scripts ═══ -->
     <script src="js/nodes.js"></script>
+    <script src="js/expression.js"></script>
     <script src="js/node-compiler.js"></script>
     <script src="js/graph-builder.js"></script>
     <script src="js/node-library.js"></script>
     <script src="js/node-editor.js"></script>
+    <script src="js/inspector.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/autosave.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/bot-panel.js"></script>
     <script src="js/program-panel.js"></script>

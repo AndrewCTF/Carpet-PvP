@@ -12,7 +12,8 @@ const GraphBuilder = (() => {
     const GAP = 50;         // vertical space between a row and the bodies laid out under it
 
     // Output a node's chain continues from: the mirror of the compiler's table.
-    const CONTINUES_FROM = { LOOP: 1, IF_THEN_ELSE: 2, FOREVER: null, ON_EVENT: 1 };
+    const CONTINUES_FROM = { LOOP: 1, IF_THEN_ELSE: 2, IF: 2, WHILE: 1, FOR_EACH: 1, FOREVER: null, ON_EVENT: 1,
+        BREAK: null, CONTINUE: null, STOP_PROGRAM: null };
 
     /** Fills the graph with a Start node followed by nodes for the actions. */
     function build(graph, schema, actions) {
@@ -44,12 +45,8 @@ const GraphBuilder = (() => {
         bottom += GAP;
         for (const [action, node] of row) {
             if (action.condition) {
-                const condition = LiteGraph.createNode(schema.actions[action.condition.type].node);
-                for (const [name, value] of Object.entries(action.condition.params || {})) condition.setProperty(name, value);
-                condition.pos = [node.pos[0] - COLUMN + 20, bottom];
-                graph.add(condition);
-                condition.connect(0, node, 1);
-                bottom += condition.size[1] + GAP;
+                // The condition goes into the node's last input, as nodes.js declares the sockets.
+                bottom = condition(graph, schema, action.condition, node, node.inputs.length - 1, node.pos[0] - COLUMN + 20, bottom);
             }
             if (action.children && action.children.length > 0) {
                 bottom = chain(graph, schema, action.children, node, 0, node.pos[0] + COLUMN, bottom);
@@ -58,6 +55,22 @@ const GraphBuilder = (() => {
                 bottom = chain(graph, schema, action.elseChildren, node, 1, node.pos[0] + COLUMN, bottom);
             }
         }
+        return bottom;
+    }
+
+    // Places a condition under the node it is wired into, and the conditions it is made of to its left.
+    // Returns the y below everything it placed.
+    function condition(graph, schema, action, into, input, x, y) {
+        const node = LiteGraph.createNode(schema.actions[action.type].node);
+        for (const [name, value] of Object.entries(action.params || {})) node.setProperty(name, value);
+        node.pos = [x, y];
+        graph.add(node);
+        node.connect(0, into, input);
+        let bottom = y + node.size[1] + GAP;
+        const parts = action.condition ? [action.condition] : action.conditions || [];
+        parts.forEach((part, index) => {
+            bottom = condition(graph, schema, part, node, index, x - COLUMN, index === 0 ? y : bottom);
+        });
         return bottom;
     }
 

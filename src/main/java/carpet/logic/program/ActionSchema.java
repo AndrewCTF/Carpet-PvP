@@ -17,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -35,11 +37,17 @@ public final class ActionSchema
     private static final int MAX_DEPTH = 64;
     private static final int MAX_ACTIONS = 10_000;
     private static final int MAX_STRING_LENGTH = 1024;
+    /** The actions whose children run more than once, which is what BREAK and CONTINUE act on. */
+    public static final Set<String> LOOPS = Set.of("LOOP", "FOREVER", "WHILE", "FOR_EACH");
 
     public enum ParamType
     {
-        INT, NUMBER, BOOL, STRING
+        INT, NUMBER, BOOL, STRING, EXPR
     }
+
+    // A number written as text is not an expression: it is a number that should have been written as one.
+    private static final Pattern NUMERAL = Pattern.compile("-?(\\d+(\\.\\d+)?|\\.\\d+)");
+    private static final int MAX_PARSED = 4096;
 
     /**
      * How a number parameter names a variable, and how many variables one program may hold. Written down in the
@@ -71,28 +79,18 @@ public final class ActionSchema
 
     /**
      * @param options the only values a string parameter may take, or empty when it is free text
+     * @param returns what an expr parameter's expression has to give, or null for the other types
      */
-    public record Param(String name, ParamType type, Object defaultValue, double min, double max, List<String> options)
+    public record Param(String name, ParamType type, Object defaultValue, double min, double max, List<String> options, Expression.Type returns)
     {
-        boolean accepts(Object value, Variables variables)
-        {
-            return switch (type)
-            {
-                case INT, NUMBER -> value instanceof Number number && Double.isFinite(number.doubleValue())
-                        || variables.isReference(value) && variables.isName(((String) value).substring(variables.prefix().length()));
-                case BOOL -> value instanceof Boolean;
-                case STRING -> value instanceof String string && string.length() <= MAX_STRING_LENGTH
-                        && (options.isEmpty() || options.contains(string));
-            };
-        }
-
         String expectation()
         {
             return switch (type)
             {
-                case INT, NUMBER -> "a number or a variable";
+                case INT, NUMBER -> "a number or an expression";
                 case BOOL -> "true or false";
                 case STRING -> options.isEmpty() ? "text" : "one of " + options;
+                case EXPR -> "an expression";
             };
         }
     }
@@ -108,21 +106,20 @@ public final class ActionSchema
 
     /**
      * The parameters of one action. Asking for a parameter the schema does not declare for that action type,
-     * or with the wrong type, is a programming error and throws.
+     * or with the wrong type, is a programming error and throws. A parameter that holds an expression is
+     * evaluated when it is asked for; one that cannot be evaluated throws {@link BotActionException}.
      */
-    public static final class Params
+    public final class Params
     {
         private final Definition definition;
         private final Map<String, Object> values;
-        private final Variables variables;
-        private final Map<String, Double> store;
+        private final Expression.Context context;
 
-        private Params(Definition definition, Map<String, Object> values, Variables variables, Map<String, Double> store)
+        private Params(Definition definition, Map<String, Object> values, Expression.Context context)
         {
             this.definition = definition;
             this.values = values;
-            this.variables = variables;
-            this.store = store;
+            this.context = context;
         }
 
         public int integer(String name)
@@ -145,24 +142,59 @@ public final class ActionSchema
         {
             Param param = declared(name, ParamType.STRING);
             Object value = values.get(name);
-            return param.accepts(value, variables) ? (String) value : (String) param.defaultValue();
+            return problem(param, value) == null ? (String) value : (String) param.defaultValue();
+        }
+
+        /** What an expr parameter's expression gives: a Double, a Boolean, a String or a List. */
+        public Object value(String name)
+        {
+            Param param = declared(name, ParamType.EXPR);
+            Object value = values.get(name);
+            String source = problem(param, value) == null ? (String) value : (String) param.defaultValue();
+            return evaluate(param, source, param.returns());
+        }
+
+        /** Whether an expr parameter that gives true or false holds. */
+        public boolean truth(String name)
+        {
+            return (Boolean) value(name);
         }
 
         private double clamped(Param param)
         {
             Object value = values.get(param.name());
             double number;
-            if (variables.isReference(value))
+            if (value instanceof String source && problem(param, value) == null)
             {
-                // A variable that was never set reads as 0.
-                Double held = store.get(((String) value).substring(variables.prefix().length()));
-                number = held == null ? 0.0 : held;
+                number = (Double) evaluate(param, source, Expression.Type.NUMBER);
             }
             else
             {
-                number = param.accepts(value, variables) ? ((Number) value).doubleValue() : ((Number) param.defaultValue()).doubleValue();
+                number = problem(param, value) == null ? ((Number) value).doubleValue() : ((Number) param.defaultValue()).doubleValue();
             }
             return Math.max(param.min(), Math.min(param.max(), number));
+        }
+
+        private Object evaluate(Param param, String source, Expression.Type expected)
+        {
+            try
+            {
+                Object result = expression(source, expected).evaluate(context);
+                Expression.Type type = Expression.typeOf(result);
+                if (expected != Expression.Type.ANY && type != expected)
+                {
+                    throw new ExpressionException("Expected " + expected.words() + " but got " + type.words(), -1);
+                }
+                if (result instanceof Double number && number.isNaN())
+                {
+                    throw new ExpressionException("The result is not a number", -1);
+                }
+                return result;
+            }
+            catch (ExpressionException e)
+            {
+                throw new BotActionException(definition.type() + "." + param.name() + ": " + e.getMessage());
+            }
         }
 
         private Param declared(String name, ParamType type)
@@ -176,8 +208,38 @@ public final class ActionSchema
         }
     }
 
+    /** What an expression can read where no program is running: the variables it is handed, and nothing of a bot. */
+    private record Outside(Map<String, ?> store) implements Expression.Context
+    {
+        @Override
+        public Object variable(String name)
+        {
+            return store.get(name);
+        }
+
+        @Override
+        public Object value(String name)
+        {
+            throw new ExpressionException("'" + name + "' can only be read while a program runs", -1);
+        }
+
+        @Override
+        public Object call(String function, List<Object> args)
+        {
+            throw new ExpressionException("'" + function + "' can only be used while a program runs", -1);
+        }
+
+        @Override
+        public void charge(int steps)
+        {
+        }
+    }
+
     private final JsonObject json;
     private final Variables variables;
+    private final Expression.Vocabulary vocabulary;
+    // Expressions are parsed once, when a program is checked, and found again every time it runs them.
+    private final Map<String, Expression> parsed = new ConcurrentHashMap<>();
     private final Map<String, Definition> definitions = new LinkedHashMap<>();
 
     public static ActionSchema load()
@@ -207,6 +269,7 @@ public final class ActionSchema
         JsonObject variables = json.getAsJsonObject("variables");
         this.variables = new Variables(variables.get("referencePrefix").getAsString(),
                 Pattern.compile(variables.get("namePattern").getAsString()), variables.get("maxVariables").getAsInt());
+        this.vocabulary = Expression.Vocabulary.read(json.getAsJsonObject("expressions"), this.variables.prefix().charAt(0));
         for (Map.Entry<String, JsonElement> entry : json.getAsJsonObject("actions").entrySet())
         {
             String type = entry.getKey();
@@ -242,7 +305,7 @@ public final class ActionSchema
         {
             case INT, NUMBER -> defaultJson.getAsDouble();
             case BOOL -> defaultJson.getAsBoolean();
-            case STRING -> defaultJson.getAsString();
+            case STRING, EXPR -> defaultJson.getAsString();
         };
         List<String> options = new ArrayList<>();
         if (json.has("options"))
@@ -264,15 +327,79 @@ public final class ActionSchema
             options.forEach(resolved::add);
             json.add("options", resolved);
         }
+        Expression.Type returns = type != ParamType.EXPR ? null
+                : Expression.Type.valueOf((json.has("returns") ? json.get("returns").getAsString() : "any").toUpperCase(Locale.ROOT));
         Param param = new Param(name, type, defaultValue,
                 json.has("min") ? json.get("min").getAsDouble() : -Double.MAX_VALUE,
                 json.has("max") ? json.get("max").getAsDouble() : Double.MAX_VALUE,
-                List.copyOf(options));
-        if (!param.accepts(defaultValue, variables))
+                List.copyOf(options), returns);
+        if (problem(param, defaultValue) != null)
         {
             throw new IllegalStateException(action + "." + name + ": the default is not " + param.expectation());
         }
         return param;
+    }
+
+    /**
+     * @return what is wrong with a value for the parameter, as it follows the parameter's name in a message,
+     *         or null when the parameter takes it
+     */
+    private String problem(Param param, Object value)
+    {
+        return switch (param.type())
+        {
+            case INT, NUMBER ->
+            {
+                if (value instanceof Number number && Double.isFinite(number.doubleValue()))
+                {
+                    yield null;
+                }
+                yield value instanceof String source && !NUMERAL.matcher(source.strip()).matches()
+                        ? expressionProblem(source, Expression.Type.NUMBER) : " must be " + param.expectation();
+            }
+            case BOOL -> value instanceof Boolean ? null : " must be " + param.expectation();
+            case STRING -> value instanceof String string && string.length() <= MAX_STRING_LENGTH
+                    && (param.options().isEmpty() || param.options().contains(string)) ? null : " must be " + param.expectation();
+            case EXPR -> value instanceof String source ? expressionProblem(source, param.returns()) : " must be " + param.expectation();
+        };
+    }
+
+    private String expressionProblem(String source, Expression.Type expected)
+    {
+        try
+        {
+            expression(source, expected);
+            return null;
+        }
+        catch (ExpressionException e)
+        {
+            return ": " + e.getMessage();
+        }
+    }
+
+    /**
+     * @throws ExpressionException when the source is not an expression, or cannot give what is expected
+     */
+    private Expression expression(String source, Expression.Type expected)
+    {
+        String key = expected.name() + " " + source;
+        Expression expression = parsed.get(key);
+        if (expression == null)
+        {
+            expression = Expression.parse(source, vocabulary, expected);
+            if (parsed.size() >= MAX_PARSED)
+            {
+                parsed.clear();
+            }
+            parsed.put(key, expression);
+        }
+        return expression;
+    }
+
+    /** The names and functions an expression may use. */
+    public Expression.Vocabulary vocabulary()
+    {
+        return vocabulary;
     }
 
     /**
@@ -312,11 +439,19 @@ public final class ActionSchema
     }
 
     /**
-     * @param store the variables the running program holds, for number parameters that name one
+     * @param store the variables an expression may read; nothing about a bot can be read through this one
      */
-    public Params params(BotAction action, Map<String, Double> store)
+    public Params params(BotAction action, Map<String, ?> store)
     {
-        return new Params(definition(action), action.getParams(), variables, store);
+        return params(action, new Outside(store));
+    }
+
+    /**
+     * @param context what the expressions among the parameters read: the running program's variables and its bot
+     */
+    public Params params(BotAction action, Expression.Context context)
+    {
+        return new Params(definition(action), action.getParams(), context);
     }
 
     /**
@@ -327,22 +462,34 @@ public final class ActionSchema
      */
     public void validate(List<BotAction> actions)
     {
-        validateSteps(actions == null ? List.of() : actions, 0, new int[1]);
+        validateSteps(actions == null ? List.of() : actions, 0, new int[1], false);
     }
 
-    private void validateSteps(List<BotAction> actions, int depth, int[] count)
+    private void validateSteps(List<BotAction> actions, int depth, int[] count, boolean inLoop)
     {
         for (BotAction action : actions)
         {
-            Definition definition = validateAction(action, depth, count);
+            Definition definition = validateAction(action, depth, count, inLoop);
             if (definition.kind().equals(CONDITION))
             {
                 throw new IllegalArgumentException(definition.type() + " is a condition, not a step");
             }
+            if (!inLoop && (definition.type().equals("BREAK") || definition.type().equals("CONTINUE")))
+            {
+                throw new IllegalArgumentException(definition.type() + " is not inside a loop");
+            }
         }
     }
 
-    private Definition validateAction(BotAction action, int depth, int[] count)
+    private void validateCondition(BotAction condition, int depth, int[] count)
+    {
+        if (!validateAction(condition, depth, count, false).kind().equals(CONDITION))
+        {
+            throw new IllegalArgumentException(condition.getType() + " is not a condition");
+        }
+    }
+
+    private Definition validateAction(BotAction action, int depth, int[] count, boolean inLoop)
     {
         if (depth > MAX_DEPTH)
         {
@@ -361,9 +508,10 @@ public final class ActionSchema
             {
                 throw new IllegalArgumentException(type + " has no parameter '" + entry.getKey() + "'");
             }
-            if (!param.accepts(entry.getValue(), variables))
+            String problem = problem(param, entry.getValue());
+            if (problem != null)
             {
-                throw new IllegalArgumentException(type + "." + param.name() + " must be " + param.expectation());
+                throw new IllegalArgumentException(type + "." + param.name() + problem);
             }
         }
         if (!action.getChildren().isEmpty() && !definition.slots().contains("children"))
@@ -380,17 +528,24 @@ public final class ActionSchema
             {
                 throw new IllegalArgumentException(type + " needs a condition");
             }
-            if (!validateAction(action.getCondition(), depth + 1, count).kind().equals(CONDITION))
-            {
-                throw new IllegalArgumentException(action.getCondition().getType() + " is not a condition");
-            }
+            validateCondition(action.getCondition(), depth + 1, count);
         }
         else if (action.getCondition() != null)
         {
             throw new IllegalArgumentException(type + " cannot have a condition");
         }
-        validateSteps(action.getChildren(), depth + 1, count);
-        validateSteps(action.getElseChildren(), depth + 1, count);
+        if (!action.getConditions().isEmpty() && !definition.slots().contains("conditions"))
+        {
+            throw new IllegalArgumentException(type + " cannot have conditions");
+        }
+        for (BotAction condition : action.getConditions())
+        {
+            validateCondition(condition, depth + 1, count);
+        }
+        // A loop's body may break out of it; what an event sets off is a sequence of its own and may not.
+        boolean loops = LOOPS.contains(type) || inLoop && !type.equals("ON_EVENT");
+        validateSteps(action.getChildren(), depth + 1, count, loops);
+        validateSteps(action.getElseChildren(), depth + 1, count, loops);
         return definition;
     }
 }

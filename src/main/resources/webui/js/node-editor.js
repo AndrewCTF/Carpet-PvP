@@ -8,8 +8,11 @@ const NodeEditor = (() => {
     let canvas = null;
     let schema = null;
     const listeners = [];       // called whenever the graph has changed
+    const selectors = [];       // called with the one node that is selected, or null
+    let problems = new Map();   // node id → what keeps it from running
 
     const ACCENT = "#4fe0cf";
+    const BAD = "#ff6b5e";
     /** A program that has just been opened is not shown smaller than this: its nodes have to be readable. */
     const READABLE = 0.7;
     // The floor the nodes stand on: a faint line every block and a stronger one every four.
@@ -32,7 +35,7 @@ const NodeEditor = (() => {
         // Give every node room for its widgets
         graph.onNodeAdded = function(node) {
             const size = node.computeSize();
-            node.size[0] = Math.max(size[0], 190);
+            node.size[0] = Math.max(size[0], node.constructor.min_width || 190);
             node.size[1] = Math.max(size[1] + 10, 60);
         };
 
@@ -54,6 +57,26 @@ const NodeEditor = (() => {
             document.addEventListener(type, () => setTimeout(snapshot, 0), true);
         }
         canvas.onDrawForeground = showScale;
+        canvas.onSelectionChange = (selected) => {
+            const nodes = Object.values(selected || {});
+            const one = nodes.length === 1 ? nodes[0] : null;
+            selectors.forEach(listener => listener(one));
+        };
+    }
+
+    /** Calls the listener with the node whenever exactly one is selected, and with null when that stops. */
+    function onSelect(listener) {
+        selectors.push(listener);
+    }
+
+    function redraw() {
+        if (canvas) canvas.setDirty(true, true);
+    }
+
+    /** Marks the nodes that keep the program from running, each with the reason, and clears the others. */
+    function setProblems(found) {
+        problems = found;
+        redraw();
     }
 
     function isReady() {
@@ -117,9 +140,19 @@ const NodeEditor = (() => {
             LiteGraph.NODE_SELECTED_TITLE_COLOR = node.constructor.title_text_color || "#ffffff";
             drawNode.call(this, node, ctx);
             ctx.save();
-            ctx.strokeStyle = "#0b0c0d";
-            ctx.lineWidth = 1;
+            const wrong = problems.get(node.id);
+            ctx.strokeStyle = wrong ? BAD : "#0b0c0d";
+            ctx.lineWidth = wrong ? 2 : 1;
             ctx.strokeRect(-0.5, -LiteGraph.NODE_TITLE_HEIGHT - 0.5, node.size[0] + 1, node.size[1] + LiteGraph.NODE_TITLE_HEIGHT + 1);
+            if (wrong && !node.flags.collapsed) {
+                // What is wrong with the node, under it, as much of it as fits two node widths.
+                ctx.font = this.inner_text_font;
+                ctx.fillStyle = BAD;
+                ctx.textAlign = "left";
+                let text = wrong;
+                while (text.length > 8 && ctx.measureText(text).width > node.size[0] * 2) text = text.slice(0, -2);
+                ctx.fillText(text === wrong ? text : text + "\u2026", 0, node.size[1] + 15);
+            }
             ctx.restore();
         };
     }
@@ -346,5 +379,5 @@ const NodeEditor = (() => {
     function getGraphJSON() { return graph ? graph.serialize() : null; }
 
     return { init, isReady, getGraph, getGraphJSON, clearGraph, loadGraphJSON, loadActions, undo, redo, resetHistory, snapshot,
-        fit, onChange, isEmpty };
+        fit, onChange, onSelect, redraw, setProblems, isEmpty };
 })();

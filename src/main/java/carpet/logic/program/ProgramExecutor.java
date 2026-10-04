@@ -8,6 +8,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +27,8 @@ import java.util.function.Predicate;
  * A program is a tree of actions, walked with a stack of frames: one frame per list of actions being run,
  * the innermost on top. A program runs until it reaches an action that takes time, and picks up there on a
  * later tick. It never runs more than {@link #MAX_STEPS_PER_TICK} steps in one tick, so a loop with nothing
- * to wait for cannot hold up the server.
+ * to wait for cannot hold up the server. Evaluating an expression is charged to the same budget: a step for
+ * every part of it, and more for the functions that look at the world.
  */
 public class ProgramExecutor
 {
@@ -60,6 +62,13 @@ public class ProgramExecutor
         int index;
         // The reaction this list belongs to, or null for the program's own sequence.
         Handler handler;
+        // The WHILE this list is the body of: it runs again for as long as that one's condition holds.
+        BotAction loop;
+        // For the body of a FOR_EACH: what is still to come, and the variable each item is put in.
+        Iterator<Object> items;
+        String itemName;
+        // Whether BREAK and CONTINUE mean this list: it is the body of a loop.
+        boolean breakable;
 
         Frame(List<BotAction> actions, int runs)
         {
@@ -94,8 +103,13 @@ public class ProgramExecutor
         final BotProgram program;
         final UUID owner;
         final Deque<Frame> stack = new ArrayDeque<>();
-        final Map<String, Double> variables = new LinkedHashMap<>();
+        final Map<String, Object> variables = new LinkedHashMap<>();
         final List<Handler> handlers = new ArrayList<>();
+        // What this tick may still spend, and how many ticks the program has run for.
+        int stepsLeft;
+        long ticks;
+        Bot bot;
+        final Reader reader = new Reader(this);
         Status status = Status.RUNNING;
         Wait wait;
         String currentAction;
@@ -112,6 +126,89 @@ public class ProgramExecutor
         {
             this.program = program;
             this.owner = owner;
+        }
+    }
+
+    /**
+     * What an expression of a running program reads: the program's variables, its bot, and the world around it.
+     * Every part of an expression that is evaluated is paid for out of the tick's steps.
+     */
+    private static final class Reader implements Expression.Context
+    {
+        private final ProgramState state;
+
+        Reader(ProgramState state)
+        {
+            this.state = state;
+        }
+
+        @Override
+        public Object variable(String name)
+        {
+            return state.variables.get(name);
+        }
+
+        @Override
+        public Object value(String name)
+        {
+            Bot bot = state.bot;
+            return switch (name)
+            {
+                case "health" -> bot.health();
+                case "max_health" -> bot.maxHealth();
+                case "food" -> bot.food();
+                case "armor" -> bot.armor();
+                case "x" -> bot.x();
+                case "y" -> bot.y();
+                case "z" -> bot.z();
+                case "yaw" -> bot.yaw();
+                case "pitch" -> bot.pitch();
+                case "held_count" -> (double) bot.heldCount();
+                case "hotbar_slot" -> (double) bot.hotbarSlot();
+                case "target_distance" -> bot.targetDistance();
+                case "target_health" -> bot.targetHealth();
+                // Counted from the tick the program started on, which is tick 0.
+                case "tick" -> (double) (state.ticks - 1);
+                case "random" -> Math.random();
+                case "held_item" -> bot.heldItem();
+                case "offhand_item" -> bot.offhandItem();
+                case "target_held_item" -> bot.targetHeldItem();
+                case "target_name" -> bot.targetName();
+                case "bot_name" -> bot.name();
+                case "on_ground" -> bot.isOnGround();
+                case "in_water" -> bot.isInWater();
+                case "gliding" -> bot.isGliding();
+                case "blocking" -> bot.isBlocking();
+                case "using_item" -> bot.isUsingItem();
+                case "sprinting" -> bot.isSprinting();
+                case "sneaking" -> bot.isSneaking();
+                case "alive" -> bot.isAlive();
+                case "has_target" -> bot.hasTarget();
+                case "fighting" -> bot.isFighting();
+                case "target_blocking" -> bot.isTargetBlocking();
+                default -> throw new ExpressionException("Nothing reads '" + name + "'", -1);
+            };
+        }
+
+        @Override
+        public Object call(String function, List<Object> args)
+        {
+            Bot bot = state.bot;
+            return switch (function)
+            {
+                case "distance" -> bot.distanceTo((Double) args.get(0), (Double) args.get(1), (Double) args.get(2));
+                case "player_distance" -> bot.distanceToPlayer((String) args.get(0));
+                case "count" -> (double) bot.countItem((String) args.get(0));
+                case "block" -> bot.blockAt((Double) args.get(0), (Double) args.get(1), (Double) args.get(2));
+                case "entities" -> (double) bot.countEntities((String) args.get(0), (Double) args.get(1));
+                default -> throw new ExpressionException("Nothing answers '" + function + "'", -1);
+            };
+        }
+
+        @Override
+        public void charge(int steps)
+        {
+            state.stepsLeft -= steps;
         }
     }
 
@@ -146,6 +243,10 @@ public class ProgramExecutor
         if (bot == null)
         {
             return "There is no bot named '" + botName + "'";
+        }
+        if (program.getError() != null)
+        {
+            return "'" + program.getName() + "' does not run yet: " + program.getError();
         }
         stopProgram(botName);
         if (getRunningCount() >= maxPrograms.getAsInt())
@@ -254,6 +355,9 @@ public class ProgramExecutor
 
     private void tickProgram(ProgramState state, Bot bot, String botName)
     {
+        state.bot = bot;
+        state.stepsLeft = MAX_STEPS_PER_TICK;
+        state.ticks++;
         Set<BotEvents.Event> events = bot.combatEvents();
         fireEvents(state, bot, botName, events);
         if (state.wait != null)
@@ -275,10 +379,9 @@ public class ProgramExecutor
             }
         }
 
-        int stepsLeft = MAX_STEPS_PER_TICK;
         while (state.wait == null)
         {
-            if (stepsLeft-- == 0)
+            if (state.stepsLeft-- <= 0)
             {
                 if (!state.warnedAboutBudget)
                 {
@@ -299,7 +402,24 @@ public class ProgramExecutor
             Frame frame = state.stack.peek();
             if (frame.index >= frame.actions.size())
             {
-                if (frame.runsLeft == FOREVER || --frame.runsLeft > 0)
+                boolean again;
+                if (frame.loop != null)
+                {
+                    again = schema.params(frame.loop, state.reader).truth("condition");
+                }
+                else if (frame.items != null)
+                {
+                    again = frame.items.hasNext();
+                    if (again)
+                    {
+                        setVariable(state, frame.itemName, frame.items.next());
+                    }
+                }
+                else
+                {
+                    again = frame.runsLeft == FOREVER || --frame.runsLeft > 0;
+                }
+                if (again)
                 {
                     frame.index = 0;
                 }
@@ -356,7 +476,7 @@ public class ProgramExecutor
      */
     private boolean holds(Handler handler, ProgramState state, Bot bot, Set<BotEvents.Event> events)
     {
-        Params p = schema.params(handler.action, state.variables);
+        Params p = schema.params(handler.action, state.reader);
         String target = p.string("target");
         double value = p.number("value");
         return switch (handler.event)
@@ -393,7 +513,7 @@ public class ProgramExecutor
         {
             bot.requireRule(requiredRule, state.owner);
         }
-        Params p = schema.params(action, state.variables);
+        Params p = schema.params(action, state.reader);
         switch (action.getType())
         {
             case "MOVE" ->
@@ -608,12 +728,67 @@ public class ProgramExecutor
                     state.wait = wait;
                 }
             }
+            case "WAIT_FOR" ->
+            {
+                Wait wait = new Wait();
+                wait.ticksLeft = p.integer("timeout");
+                wait.done = b -> schema.params(action, state.reader).truth("condition");
+                if (!wait.done.test(bot))
+                {
+                    state.wait = wait;
+                }
+            }
+            case "SET" -> setVariable(state, p.string("name"), p.value("value"));
+            case "FOR_EACH" ->
+            {
+                @SuppressWarnings("unchecked")
+                Iterator<Object> items = ((List<Object>) p.value("list")).iterator();
+                String name = p.string("variable");
+                if (items.hasNext() && !action.getChildren().isEmpty())
+                {
+                    setVariable(state, name, items.next());
+                    Frame body = new Frame(action.getChildren(), 1);
+                    body.items = items;
+                    body.itemName = name;
+                    body.breakable = true;
+                    state.stack.push(body);
+                }
+            }
+            case "BREAK" -> leaveLoop(state, false);
+            case "CONTINUE" -> leaveLoop(state, true);
+            case "STOP_PROGRAM" ->
+            {
+                // Everything the program had open is closed: it ends as one that ran to its end does.
+                state.stack.clear();
+                state.handlers.clear();
+            }
+            case "IF" -> pushFrame(state, p.truth("condition") ? action.getChildren() : action.getElseChildren(), 1);
+            case "WHILE" ->
+            {
+                if (action.getChildren().isEmpty())
+                {
+                    // Nothing to repeat: the program stays here for as long as the condition holds.
+                    Wait wait = new Wait();
+                    wait.done = b -> !schema.params(action, state.reader).truth("condition");
+                    if (!wait.done.test(bot))
+                    {
+                        state.wait = wait;
+                    }
+                }
+                else if (p.truth("condition"))
+                {
+                    Frame body = new Frame(action.getChildren(), 1);
+                    body.loop = action;
+                    body.breakable = true;
+                    state.stack.push(body);
+                }
+            }
             case "SET_VARIABLE" -> setVariable(state, p.string("name"), p.number("value"));
             case "ADD_VARIABLE" -> setVariable(state, p.string("name"), variable(state, p.string("name")) + p.number("amount"));
             case "ON_EVENT" -> addHandler(action, state, bot);
             case "EXECUTE_COMMAND" -> bot.executeCommand(p.string("command"), state.owner);
             case "SEQUENCE" -> pushFrame(state, action.getChildren(), 1);
-            case "LOOP" -> pushFrame(state, action.getChildren(), p.integer("count"));
+            case "LOOP" -> pushLoop(state, action.getChildren(), p.integer("count"));
             case "FOREVER" ->
             {
                 if (action.getChildren().isEmpty())
@@ -621,7 +796,7 @@ public class ProgramExecutor
                     // Nothing to repeat: the program just never moves on.
                     state.wait = new Wait();
                 }
-                pushFrame(state, action.getChildren(), FOREVER);
+                pushLoop(state, action.getChildren(), FOREVER);
             }
             case "IF_THEN_ELSE" -> pushFrame(state, test(action.getCondition(), bot, state) ? action.getChildren() : action.getElseChildren(), 1);
 
@@ -676,14 +851,52 @@ public class ProgramExecutor
         }
     }
 
-    /** What a number parameter naming a variable reads as: 0 for a variable the program never set. */
-    private static double variable(ProgramState state, String name)
+    private static void pushLoop(ProgramState state, List<BotAction> actions, int runs)
     {
-        Double value = state.variables.get(name);
-        return value == null ? 0.0 : value;
+        pushFrame(state, actions, runs);
+        if (!actions.isEmpty() && runs != 0)
+        {
+            state.stack.peek().breakable = true;
+        }
     }
 
-    private void setVariable(ProgramState state, String name, double value)
+    /**
+     * BREAK and CONTINUE: everything that was begun inside the innermost loop is given up. To break, the loop
+     * goes with it; to continue, its body is taken as done, so that the loop decides about another round.
+     */
+    private static void leaveLoop(ProgramState state, boolean nextRound)
+    {
+        while (!state.stack.isEmpty() && !state.stack.peek().breakable)
+        {
+            state.stack.pop();
+        }
+        if (state.stack.isEmpty())
+        {
+            return;
+        }
+        if (nextRound)
+        {
+            Frame loop = state.stack.peek();
+            loop.index = loop.actions.size();
+        }
+        else
+        {
+            state.stack.pop();
+        }
+    }
+
+    /** What a variable reads as where a number is needed: 0 for one the program never set. */
+    private static double variable(ProgramState state, String name)
+    {
+        Object value = state.variables.get(name);
+        if (value != null && !(value instanceof Double))
+        {
+            throw new BotActionException("The variable '" + name + "' holds " + Expression.typeOf(value).words() + ", not a number");
+        }
+        return value == null ? 0.0 : (Double) value;
+    }
+
+    private void setVariable(ProgramState state, String name, Object value)
     {
         if (!schema.variables().isName(name))
         {
@@ -707,7 +920,7 @@ public class ProgramExecutor
             return;
         }
         Handler handler = new Handler(event);
-        handler.event = schema.params(event, state.variables).string("event");
+        handler.event = schema.params(event, state.reader).string("event");
         if (state.handlers.isEmpty())
         {
             state.lastHealth = bot.health();
@@ -718,9 +931,13 @@ public class ProgramExecutor
 
     private boolean test(BotAction condition, Bot bot, ProgramState state)
     {
-        Params p = schema.params(condition, state.variables);
+        Params p = schema.params(condition, state.reader);
         return switch (condition.getType())
         {
+            case "CONDITION_EXPRESSION" -> p.truth("expression");
+            case "CONDITION_ALL" -> condition.getConditions().stream().allMatch(each -> test(each, bot, state));
+            case "CONDITION_ANY" -> condition.getConditions().stream().anyMatch(each -> test(each, bot, state));
+            case "CONDITION_NOT" -> !test(condition.getCondition(), bot, state);
             case "CONDITION_HEALTH" -> compare(bot.health(), p.string("operator"), p.number("value"));
             case "CONDITION_FOOD" -> compare(bot.food(), p.string("operator"), p.number("value"));
             case "CONDITION_ARMOR" -> compare(bot.armor(), p.string("operator"), p.number("value"));
@@ -751,6 +968,17 @@ public class ProgramExecutor
             case "==" -> Math.abs(actual - value) < 0.01;
             default -> Math.abs(actual - value) >= 0.01;
         };
+    }
+
+    /**
+     * @return what a variable of the program on a bot holds, written out as text, or null when the program
+     *         never set it or the bot runs none
+     */
+    public String variable(String botName, String name)
+    {
+        ProgramState state = programs.get(botName);
+        Object value = state == null ? null : state.variables.get(name);
+        return value == null ? null : Expression.format(value);
     }
 
     public int getRunningCount()

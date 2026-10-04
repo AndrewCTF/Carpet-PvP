@@ -103,6 +103,10 @@ kbd {
 .btn.stop { background: var(--bad-fill); color: #ffe3e0; }
 .btn.stop:hover { background: #99271f; }
 .btn.stop:disabled { background: var(--panel); color: var(--ink-3); }
+/* A switch that looks like what it is in the game: a lamp that is lit while it is on. */
+.btn.lamp::before { content: ""; width: 8px; height: 8px; background: #3a3d42; border: 1px solid var(--edge); }
+.btn.lamp[aria-checked="true"]::before { background: var(--go); box-shadow: 0 0 0 1px rgba(111, 210, 75, .35); }
+.btn.lamp[aria-checked="false"] { color: var(--ink-2); }
 
 .field {
     height: 28px; padding: 0 8px;
@@ -204,6 +208,9 @@ textarea.field { height: auto; min-height: 64px; padding: 6px 8px; line-height: 
     color: #2a1c00; background: var(--warn);
     border-bottom: 1px solid var(--edge);
 }
+/* Work the browser kept from an earlier visit: an offer, not a warning. */
+.notice-bar.kept { display: flex; align-items: center; gap: 8px; color: var(--ink); background: var(--raised); }
+.notice-bar.kept span { margin-right: 4px; }
 
 /* ═══════════════════════════════════════════════════════════════
    WORKSPACE
@@ -266,6 +273,33 @@ textarea.field { height: auto; min-height: 64px; padding: 6px 8px; line-height: 
 
 #zoom-area { position: absolute; bottom: 8px; right: 8px; display: flex; gap: 4px; z-index: 5; }
 #zoom-reset { min-width: 50px; font-family: var(--mono); font-weight: 500; }
+
+/* The selected node's settings, over the canvas's top right corner. */
+.inspector {
+    position: absolute; top: 8px; right: 8px; z-index: 6;
+    width: 316px; max-width: calc(100% - 16px); max-height: calc(100% - 60px);
+    display: flex; flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    box-shadow: inset 1px 1px 0 var(--light), inset -1px -1px 0 var(--dark), 6px 6px 0 rgba(0, 0, 0, .3);
+}
+.inspector-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-bottom: 1px solid var(--line); }
+.inspector-head h2 { flex: 1; font-size: 14px; }
+.inspector-desc { padding: 9px 12px 0; font-size: 12.5px; color: var(--ink-2); }
+.inspector-problem { margin: 9px 12px 0; padding: 6px 8px; font-size: 12px; font-weight: 600; color: #ffe3e0; background: var(--bad-fill); }
+.inspector-fields { padding: 10px 12px 12px; overflow-y: auto; display: grid; gap: 11px; }
+.inspect-row { position: relative; display: grid; gap: 4px; }
+.inspect-row label { font-weight: 700; font-size: 12.5px; }
+.inspect-row .field { width: 100%; }
+.inspect-row .field.invalid { outline: 2px solid var(--bad); outline-offset: 0; }
+.inspect-row .hint { font-size: 11.5px; }
+/* The names an expression can use, under the field they are being typed into. */
+.suggest { display: grid; background: var(--inset); border: 1px solid var(--edge); }
+.suggest-item { display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 8px; padding: 4px 8px; text-align: left; }
+.suggest-item:hover, .suggest-item:first-child { background: var(--raised); }
+.suggest-item code { padding: 0; background: none; font-weight: 700; }
+.suggest-type { font-size: 11px; color: var(--diamond); }
+.suggest-desc { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* What an empty canvas says. It stands beside the Start node and leaves it free. */
 .guide {
@@ -486,6 +520,18 @@ textarea.field { height: auto; min-height: 64px; padding: 6px 8px; line-height: 
 
 .program-list-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
 .program-list-item:last-child { border-bottom: none; }
+.modal-note { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 9px 14px 0; font-size: 12.5px; color: var(--ink-2); }
+.modal-note code { overflow-wrap: anywhere; }
+.modal-note .btn { margin-left: auto; }
+.folder-heading { display: flex; align-items: center; gap: 8px; padding: 12px 4px 4px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.folder-heading:first-child { padding-top: 2px; }
+.folder-name { font-family: var(--mono); }
+.program-draft { font-size: 12px; font-weight: 600; color: var(--warn); }
+.move-control { display: inline-flex; gap: 4px; }
+.move-control .field { width: 104px; font-size: 12px; }
+.conflict-text { font-weight: 600; margin-bottom: 8px; }
+.conflict-choices { display: grid; gap: 6px; margin-top: 14px; }
+.conflict-choices .btn { justify-content: flex-start; height: 32px; }
 .program-list-item.current .program-name::after { content: "open now"; margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--diamond); }
 .program-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .program-name { font-weight: 700; }

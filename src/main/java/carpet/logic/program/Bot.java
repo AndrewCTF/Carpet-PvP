@@ -96,9 +96,34 @@ public interface Bot
     void executeCommand(String command, UUID owner);
     void stopAll();
 
+    String name();
     double health();
+    double maxHealth();
     double food();
     double armor();
+    double x();
+    double y();
+    double z();
+    double yaw();
+    double pitch();
+    /** The id of what is in the main hand without its namespace, or "air" for an empty hand. */
+    String heldItem();
+    String offhandItem();
+    int heldCount();
+    /** The selected hotbar slot, 1 to 9. */
+    int hotbarSlot();
+    boolean isOnGround();
+    boolean isBlocking();
+    boolean isUsingItem();
+    /** How many of an item the bot carries, by the item's id without its namespace. */
+    int countItem(String item);
+    /** The id of the block at a position without its namespace, or "unloaded" where the world is not loaded. */
+    String blockAt(double x, double y, double z);
+    /**
+     * @param type an entity type's id without its namespace, or "any" for every living thing, "hostile" for monsters
+     * @return how many such entities other than the bot are within the radius
+     */
+    int countEntities(String type, double radius);
     /**
      * @return the distance to the player, or infinity when there is no such player
      */
@@ -123,6 +148,11 @@ public interface Bot
      * @return the target's health, or infinity when there is no target, as there is no distance to it either
      */
     double targetHealth();
+    /** The target's name, or empty when there is none. */
+    String targetName();
+    /** The id of what the target holds, or "air" when it holds nothing or there is no target. */
+    String targetHeldItem();
+    boolean isTargetBlocking();
     /** The fight events the game has reported since this was last called, and forgets them. */
     Set<BotEvents.Event> combatEvents();
 }

@@ -30,6 +30,8 @@ rm -f "$OUT/stop" "$OUT/session.env"
 echo "eula=true" > "$ROOT/run/$V/server/eula.txt"
 printf 'level-type=minecraft\\:flat\nonline-mode=false\nserver-port=%s\nwhite-list=false\nenforce-whitelist=false\n' \
   "$GAME_PORT" > "$ROOT/run/$V/server/server.properties"
+# Every check starts without saved programs, so that the pictures do not depend on the run before.
+rm -rf "$ROOT/run/$V/server/world/carpetlogic/programs"
 FIFO="$OUT/stdin.fifo"; rm -f "$FIFO"; mkfifo "$FIFO"; exec 3<>"$FIFO"
 LOG="$OUT/server.log"; : > "$LOG"
 # carpet.logicPort wins over the carpetLogicPort rule, so this run cannot meet another server's editor.
@@ -79,6 +81,7 @@ LOGIC_URL=$URL
 LOGIC_TOKEN=$TOKEN
 LOGIC_ADMIN=$ADMIN
 LOGIC_SETUP=$SETUP
+LOGIC_SERVER_DIR=$ROOT/run/$V/server
 EOF
 echo "RESULT session=$OUT/session.env"
 

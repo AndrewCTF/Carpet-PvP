@@ -221,7 +221,9 @@ const App = (() => {
             Nodes.register(schema, settings);
             NodeCompiler.setSchema(schema);
             NodeEditor.init(schema);
+            Inspector.init(schema, settings);
             ProgramPanel.remember();
+            ProgramPanel.offerKept();
             $("canvas-state").classList.add("hidden");
             log("Editor ready. Add nodes from the library, choose a bot, press Run.");
             showGuidePresets();
@@ -276,6 +278,8 @@ const App = (() => {
         bar.textContent = text;
         bar.className = "notice-bar" + (text ? "" : " hidden") + (status && status.viewerMode && wasConnected ? " viewer" : "");
         document.body.classList.toggle("viewer-mode", Boolean(status && status.viewerMode));
+        // In viewer mode the server refuses every write, so nothing is sent to be refused.
+        ProgramPanel.setWritable(!(status && status.viewerMode));
     }
 
     // ── Getting in and out ───────────────────────────────────

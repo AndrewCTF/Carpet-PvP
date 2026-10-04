@@ -95,6 +95,11 @@ public final class CarpetSelfTest
             WebServer web = CarpetLogic.INSTANCE.getWebServer();
             return web == null ? null : web.url();
         };
+        SelfTest.programVariable = (botName, name) -> {
+            String value = CarpetLogic.INSTANCE.getProgramExecutor().variable(botName, name);
+            return value == null ? "unset" : value;
+        };
+        SelfTest.reloadPrograms = () -> CarpetLogic.INSTANCE.getProgramStorage().loadAll();
         SelfTest.spawnAttempts = () -> SpawnReporter.spawn_attempts.isEmpty() ? 0L
                 : SpawnReporter.spawn_attempts.values().stream().mapToLong(Long::longValue).sum();
         SelfTest.explosionPositionLeaver = CarpetSelfTest::queueLeftoverPositions;

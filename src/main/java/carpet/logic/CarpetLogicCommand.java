@@ -173,9 +173,12 @@ public class CarpetLogicCommand
             Messenger.m(ctx.getSource(), "y No saved programs");
             return 1;
         }
+        Messenger.m(ctx.getSource(), "g Programs are kept in " + CarpetLogic.INSTANCE.getProgramStorage().location());
         for (BotProgram program : programs)
         {
-            Messenger.m(ctx.getSource(), "w  - " + program.getName(), "g  (" + program.getActionCount() + " actions)");
+            String name = (program.getFolder().isEmpty() ? "" : program.getFolder() + "/") + program.getName();
+            Messenger.m(ctx.getSource(), "w  - " + name, program.getError() == null
+                    ? "g  (" + program.getActionCount() + " actions)" : "y  (does not run yet: " + program.getError() + ")");
         }
         return programs.size();
     }
