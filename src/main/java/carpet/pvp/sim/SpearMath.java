@@ -84,7 +84,8 @@ public final class SpearMath
     /**
      * Mirrors {@code KineticWeapon.Condition.test} for the gate the damage itself is behind: the thrust only
      * lands while the charge is young enough and the bodies are closing fast enough. The speed is scaled by one
-     * for a player, which is the factor the game passes in.
+     * for a player, which is the factor the game passes in, and it is a speed in blocks a second, because that
+     * is what {@code KineticWeapon.getMotion} hands the condition.
      */
     public static boolean damages(int chargeTicks, int maxChargeTicks, double closingSpeed, double minClosingSpeed)
     {

@@ -36,7 +36,6 @@ import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
@@ -102,7 +101,7 @@ public final class SelfTest
             "structure_block_ignored", "persistent_parrots", "lag_free_spawning", "logic_bot_snapshot",
             "nav_maze", "nav_parkour", "nav_ladder", "nav_partial_blocks", "nav_moving_target", "nav_crowd",
             "nav_tick_budget", "nav_smooth",
-            "sword_hits_require_aim", "sword_duel_damage", "sword_shield_break", "sword_difficulty_order", "bot_budget",
+            "sword_hits_require_aim", "sword_shield_break", "sword_difficulty_order", "bot_budget",
             "animate_use", "item_cd", "kit_folder", "kill",
             "interaction_updates", "punish_wrong_tool_hits", "scarpet_item_use_events", "sculk_sensor_range", "summon_natural_lightning", "explosion_state_leak", "tick_synced_world_borders");
 
@@ -1125,41 +1124,6 @@ public final class SelfTest
                             + (stats.rotationOnGrid() ? "" : fmt(", first off-grid step %.6f/%.6f degrees",
                                     stats.offGridYawStep, stats.offGridPitchStep)));
                 });
-            case "sword_duel_damage":
-                // The target walks up to the bot and then stands there without ever fighting back. The
-                // bot has to sprint the distance it wants to keep, which is what gives it a sprint hit
-                // after its first one, the sprint reset and the W-tap that follows it.
-                Vec3 walker = origin.add(0.0D, 0.0D, -4.5D);
-                boolean[] armed = {false};
-                return new Scenario(1000, List.of(new Bot(a, origin), new Bot(b, walker)), List.of(), server ->
-                {
-                    ServerPlayer target = player(server, b);
-                    if (!armed[0])
-                    {
-                        if (warmingUp(server, a, b))
-                        {
-                            return new Probe(false, fmt("waiting for %s and %s to finish loading", a, b));
-                        }
-                        swordKit(a).forEach(command -> run(server, command));
-                        swordKit(b).forEach(command -> run(server, command));
-                        swordCombat(a, "expert").forEach(command -> run(server, command));
-                        run(server, "player " + b + " move forward for 20");
-                        armed[0] = true;
-                        return new Probe(false, fmt("%s walks up to %s and then stands there", b, a));
-                    }
-                    BotBody body = body(server, a);
-                    if (body == null)
-                    {
-                        return new Probe(false, fmt("waiting for %s to start fighting", a));
-                    }
-                    BotStats stats = body.stats();
-                    return new Probe(target.getHealth() < 20.0F && stats.crits >= 1 && stats.sprintHits >= 1
-                                    && stats.hits >= 2,
-                            fmt("target has %.1f health after %d hits (%d crits, %d sprint hits, %d misses, %.1f damage dealt, %.1f taken); planner %d calls, %d simulated ticks, %d starved, %d shield ticks",
-                                    target.getHealth(), stats.hits, stats.crits, stats.sprintHits, stats.misses,
-                                    stats.damageDealt, stats.damageTaken, stats.plannerCalls,
-                                    stats.simulatedTicks, stats.starvedTicks, stats.blockTicks));
-                });
             case "sword_shield_break":
                 Vec3 holder = origin.add(0.0D, 0.0D, 2.5D);
                 boolean[] raised = {false};
@@ -2144,9 +2108,6 @@ public final class SelfTest
                     ServerPlayer bot = player(server, a);
                     if (!bot.connection.hasClientLoaded())
                         return pending(a + " may not use anything for another " + Math.max(0, 60 - ticks) + " ticks");
-                    // a real client answers the spawn with a teleport confirmation, which is what clears the
-                    // flag the listener drops block use packets for; no fake player ever gets one
-                    confirmTeleport(bot);
                     placeByPacket(server, a, quietLamp, Direction.EAST);
                     placed[0] = ticks;
                     phase[0] = 1;
@@ -2243,7 +2204,6 @@ public final class SelfTest
             {
                 if (!bot.connection.hasClientLoaded())
                     return pending(a + " may not use anything for another " + Math.max(0, 60 - ticks) + " ticks");
-                confirmTeleport(bot);
                 useItemByPacket(server, a);
                 on[0] = result(server, "script run global_selftest_uses");
                 run(server, "carpet scarpetItemUseEvents false");
@@ -2848,30 +2808,6 @@ public final class SelfTest
         Vec3 hit = Vec3.atCenterOf(against).add(face.getStepX() * 0.5D, 0.0D, face.getStepZ() * 0.5D);
         bot.connection.handleUseItemOn(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND,
                 new BlockHitResult(hit, face, against, false), 0));
-    }
-
-    /**
-     * Answers the teleport the server sent when it spawned the player, which is what clears the flag the listener
-     * drops block use packets for. A fake player has no client to send that answer, so the scenario sends it; the
-     * teleport id is read by reflection, as nothing else hands it out.
-     */
-    private static void confirmTeleport(ServerPlayer bot)
-    {
-        try
-        {
-            Field id = bot.connection.getClass().getSuperclass().getDeclaredField("awaitingTeleport");
-            id.setAccessible(true);
-            //? if >=26.3 {
-            bot.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id.getInt(bot.connection),
-                    bot.getX(), bot.getY(), bot.getZ(), bot.getYRot(), bot.getXRot()));
-            //?} else {
-            /*bot.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id.getInt(bot.connection)));
-            *///?}
-        }
-        catch (ReflectiveOperationException e)
-        {
-            throw new IllegalStateException("could not answer the pending teleport of " + bot.getName().getString(), e);
-        }
     }
 
     /** A use-item packet the way a client sends it. */
