@@ -80,8 +80,10 @@ public final class ActionSchema
     /**
      * @param options the only values a string parameter may take, or empty when it is free text
      * @param returns what an expr parameter's expression has to give, or null for the other types
+     * @param maxLength how many characters a string parameter may hold
      */
-    public record Param(String name, ParamType type, Object defaultValue, double min, double max, List<String> options, Expression.Type returns)
+    public record Param(String name, ParamType type, Object defaultValue, double min, double max, List<String> options, Expression.Type returns,
+                        int maxLength)
     {
         String expectation()
         {
@@ -89,7 +91,7 @@ public final class ActionSchema
             {
                 case INT, NUMBER -> "a number or an expression";
                 case BOOL -> "true or false";
-                case STRING -> options.isEmpty() ? "text" : "one of " + options;
+                case STRING -> options.isEmpty() ? "text of at most " + maxLength + " characters" : "one of " + options;
                 case EXPR -> "an expression";
             };
         }
@@ -332,7 +334,7 @@ public final class ActionSchema
         Param param = new Param(name, type, defaultValue,
                 json.has("min") ? json.get("min").getAsDouble() : -Double.MAX_VALUE,
                 json.has("max") ? json.get("max").getAsDouble() : Double.MAX_VALUE,
-                List.copyOf(options), returns);
+                List.copyOf(options), returns, json.has("maxLength") ? json.get("maxLength").getAsInt() : MAX_STRING_LENGTH);
         if (problem(param, defaultValue) != null)
         {
             throw new IllegalStateException(action + "." + name + ": the default is not " + param.expectation());
@@ -358,7 +360,7 @@ public final class ActionSchema
                         ? expressionProblem(source, Expression.Type.NUMBER) : " must be " + param.expectation();
             }
             case BOOL -> value instanceof Boolean ? null : " must be " + param.expectation();
-            case STRING -> value instanceof String string && string.length() <= MAX_STRING_LENGTH
+            case STRING -> value instanceof String string && string.length() <= param.maxLength()
                     && (param.options().isEmpty() || param.options().contains(string)) ? null : " must be " + param.expectation();
             case EXPR -> value instanceof String source ? expressionProblem(source, param.returns()) : " must be " + param.expectation();
         };

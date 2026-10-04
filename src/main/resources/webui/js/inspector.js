@@ -31,6 +31,15 @@ const Inspector = (() => {
         any: "An expression: a number, text in quotes, true or false, or a list."
     };
 
+    // What is said under a field that holds code, by the language the schema says it is.
+    const CODE = {
+        scarpet: "Scarpet, as /script run takes it. p is the bot, and x, y and z are where it stands. The program's variables are there under"
+            + " their names, without the $, and what the snippet leaves in them comes back; a name the snippet keeps for itself (p, x, y, z,"
+            + " or one that starts with _ or global_) is not handed over. print needs a player to print to, such as print(player('all'), 'hello')."
+            + " It runs with the permissions of the player who started the program, and nothing stops a snippet that does not end: the server"
+            + " stops with it, as it would for /script run. Expressions and the other nodes are budgeted; this is not."
+    };
+
     /**
      * The fields of a node, one per parameter: how each is edited and what is said under it.
      * @param params the parameters as the action schema (or a macro node) declares them
@@ -49,6 +58,7 @@ const Inspector = (() => {
                     help: (param.type === "int" ? "A whole number" : "A number") + range(param) + ", a variable such as $count, or an expression."
                 });
             }
+            if (param.code) return Object.assign(field, { kind: "code", help: CODE[param.code] || "" });
             return Object.assign(field, { kind: "text", options: options, help: options ? "One of the names this server has, or another." : "" });
         });
     }
@@ -77,13 +87,16 @@ const Inspector = (() => {
         return { word: match[0], start: start };
     }
 
+    const GIVES_A_VARIABLE = { "Control/ForEach": "variable", "Scarpet/Run": "result" };
+
     /** The variables a graph gives a value to, by the nodes that do: what "$" can be followed by. */
     function variablesOf(graph) {
         const names = new Set();
         for (const node of (graph && graph._nodes) || []) {
-            if (/^Variables\//.test(node.type) && node.properties && /^[A-Za-z_][A-Za-z0-9_]*$/.test(node.properties.name || "")) {
-                names.add(node.properties.name);
-            }
+            // The nodes that give a variable its value, and the setting of each that names it.
+            const setting = /^Variables\//.test(node.type) ? "name" : GIVES_A_VARIABLE[node.type];
+            const name = setting && node.properties ? node.properties[setting] : "";
+            if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name || "")) names.add(name);
         }
         return [...names].sort();
     }
@@ -186,11 +199,12 @@ const Inspector = (() => {
             control.addEventListener("change", () => { set(field, control.value); commit(); });
             control.paint = () => { control.value = String(node.properties[field.name]); };
         } else {
-            control = el("input", "field" + (field.kind === "expression" ? " code" : ""));
-            control.type = "text";
+            const isCode = field.kind === "code";
+            control = el(isCode ? "textarea" : "input", "field" + (isCode || field.kind === "expression" ? " code" : ""));
+            if (isCode) control.rows = 7; else control.type = "text";
             control.spellcheck = false;
             control.autocomplete = "off";
-            control.maxLength = 1024;
+            control.maxLength = field.param.maxLength || 1024;
             control.value = String(node.properties[field.name]);
             if (field.options) {
                 const list = el("datalist");
@@ -220,7 +234,7 @@ const Inspector = (() => {
                 } else if (e.key === "Escape" && offeredFor === control) {
                     e.stopPropagation();
                     hideSuggestions();
-                } else if (e.key === "Enter") {
+                } else if (e.key === "Enter" && !isCode) {
                     control.blur();
                 }
             });

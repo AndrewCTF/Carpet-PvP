@@ -221,6 +221,91 @@ class ProgramExecutorTest
         assertEquals("3", executor.variable("bot", "later"));
     }
 
+    // ── The Scarpet node ──
+
+    @Test
+    void aScarpetNodeHandsTheVariablesInAndTakesThemBack()
+    {
+        // What the bot answers stands for the snippet: its result, then what it left in the variables.
+        recorder.answers.put("runScript", List.of(42.0, 7.0, "Steve"));
+        run("[{type: SET, params: {name: n, value: '6'}}, {type: SET, params: {name: who, value: \"'Alex'\"}}, "
+                + "{type: SCARPET, params: {code: 'n = n + 1; n * 6', result: answer}}]");
+        tick(1);
+
+        assertTrue(recorder.questions.contains("runScript[n = n + 1; n * 6, {n=6.0, who=Alex}, null]"), recorder.questions.toString());
+        assertEquals("42", executor.variable("bot", "answer"));
+        assertEquals("7", executor.variable("bot", "n"));
+        assertEquals("Steve", executor.variable("bot", "who"));
+        assertEquals("COMPLETED", status());
+    }
+
+    @Test
+    void aScarpetNodeWithoutAResultKeepsNone()
+    {
+        recorder.answers.put("runScript", List.of("ignored"));
+        run("[{type: SCARPET, params: {code: 'print(1)', result: ''}}]");
+        tick(1);
+        assertEquals("COMPLETED", status());
+        assertNull(executor.variable("bot", "result"));
+    }
+
+    @Test
+    void theNamesASnippetHasForItselfAreNotHandedOver()
+    {
+        run("[{type: SET, params: {name: p, value: '1'}}, {type: SET, params: {name: x, value: '2'}}, {type: SET, params: {name: _i, value: '3'}}, "
+                + "{type: SET, params: {name: global_g, value: '4'}}, {type: SET, params: {name: kept, value: '5'}}, {type: SCARPET, params: {code: 'kept'}}]");
+        tick(1);
+        assertTrue(recorder.questions.contains("runScript[kept, {kept=5.0}, null]"), recorder.questions.toString());
+        assertEquals("1", executor.variable("bot", "p"), "and they are what they were afterwards");
+    }
+
+    @Test
+    void aScarpetNodeIsChargedAFixedNumberOfSteps()
+    {
+        run("[{type: FOREVER, children: [{type: SCARPET, params: {code: '1'}}]}]");
+        tick(1);
+        long ran = recorder.questions.stream().filter(question -> question.startsWith("runScript[")).count();
+        // Each round is the node's fixed cost and a step for the loop; the round that uses the steps up is the last.
+        assertEquals((ProgramExecutor.MAX_STEPS_PER_TICK + ProgramExecutor.SCRIPT_STEPS) / (ProgramExecutor.SCRIPT_STEPS + 1), ran);
+        assertEquals(20, ran, "twenty snippets a tick");
+        assertEquals("RUNNING", status());
+    }
+
+    @Test
+    void aSnippetThatIsRefusedStopsTheProgramWithTheReason()
+    {
+        recorder.failures.put("runScript", new BotActionException("SCARPET only runs in programs a player started from the web editor"));
+        run("[{type: SCARPET, params: {code: '1'}}, {type: JUMP}]");
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("SCARPET only runs in programs a player started from the web editor", executor.getPrograms().get("bot").error());
+        assertEquals(0, recorder.count("jump"));
+    }
+
+    @Test
+    void aScarpetCheckIsTrueForAnythingThatIsNotNothing()
+    {
+        Object[][] cases = {{true, 1}, {false, 0}, {1.0, 1}, {0.0, 0}, {"yes", 1}, {"", 0}, {List.of(0.0), 1}, {List.of(), 0}};
+        for (Object[] each : cases)
+        {
+            recorder.calls.clear();
+            recorder.answers.put("runScript", List.of(each[0]));
+            run("[{type: IF_THEN_ELSE, condition: {type: CONDITION_SCARPET, params: {code: 'check()'}}, children: [{type: JUMP}]}]");
+            tick(1);
+            assertEquals((int) each[1], recorder.count("jump"), "a snippet that gives " + each[0]);
+        }
+    }
+
+    @Test
+    void whatASnippetGivesBackIsHeldToTheLimitsOfAProgram()
+    {
+        recorder.answers.put("runScript", List.of("x".repeat(2000)));
+        run("[{type: SCARPET, params: {code: 'big()', result: big}}]");
+        tick(1);
+        assertEquals("ERROR", status());
+        assertEquals("SCARPET gave back more than a program can hold: A text holds at most 1024 characters", executor.getPrograms().get("bot").error());
+    }
+
     // ── Loops that scripts have ──
 
     @Test

@@ -22,11 +22,16 @@ const Nodes = (() => {
         Variables:  { label: "Variables",     color: "#fed83d", ink: "#1c1702" },
         Crystal:    { label: "Crystal PvP",   color: "#f38baa", ink: "#210a12" },
         Elytra:     { label: "Elytra flight", color: "#9d9d97", ink: "#131312" },
+        Scarpet:    { label: "Scarpet",       color: "#3c44aa", ink: "#ffffff" },
     };
     const NODE_BODY = "#1f2125";
 
     const FLOW_IN = [["in", "flow"]];
     const FLOW_OUT = [["next", "flow"]];
+
+    // Said of every node that runs Scarpet, wherever the node is described.
+    const UNBUDGETED = " Not budgeted: it runs any Scarpet at all with the permissions of the player who started the program,"
+        + " and a snippet that does not end stops the server, as /script run would. Expressions and the other nodes are budgeted; this one is not.";
 
     // Sockets default to one flow input and one "next" output; condition nodes have a single condition output.
     const NODES = {
@@ -113,6 +118,8 @@ const Nodes = (() => {
         "Crystal/DetonateCrystal": { title: "Detonate Crystal", desc: "Hit the end crystal the bot is looking at." },
         "Crystal/PlaceBlock":      { title: "Place Block", desc: "Right click with a block in hand." },
 
+        "Scarpet/Run":             { title: "Scarpet", desc: "Run a Scarpet snippet with the bot as p and the program's variables under their names, and keep what it gives back in a variable." + UNBUDGETED },
+
         "Events/OnEvent":          { title: "On Event", desc: "Register a reaction, then carry on. Its body takes over from the sequence when the event happens, and the sequence resumes where it was. An event that happens again while the body is still running is ignored.",
                                      outputs: [["body", "flow"], ["next", "flow"]] },
 
@@ -122,6 +129,7 @@ const Nodes = (() => {
                                      inputs: [["a", "condition"], ["b", "condition"], ["c", "condition"], ["d", "condition"]] },
         "Conditions/Not":          { title: "Not", desc: "True when the condition wired into it is not.", inputs: [["condition", "condition"]] },
         "Conditions/Expression":   { title: "Expression", desc: "True when an expression is: any mix of values, comparisons, and, or and not." },
+        "Conditions/Scarpet":      { title: "Scarpet Check", desc: "True when a Scarpet snippet gives anything but false, 0, no text or an empty list." + UNBUDGETED },
         "Conditions/Health":       { title: "Health Check", desc: "Compare the bot's health (0-20)." },
         "Conditions/IsFighting":     { title: "Is Fighting", desc: "True while the combat AI is on and the bot has a target." },
         "Conditions/HasTarget":     { title: "Has Target", desc: "True while the combat AI has a target, fighting one or not." },
@@ -182,7 +190,10 @@ const Nodes = (() => {
         // A parameter the schema marks optionsFrom names the list the server sends for it under the same name.
         const served = fromServer || p.optionsFrom;
         // The widget is bound to the property by name, so loading a graph or setting the property updates it.
-        if (p.type === "expr") {
+        if (p.code) {
+            // Code needs the whole width too, and more than one line when it is typed on the canvas.
+            node.addWidget("text", "", p.default, p.name, { multiline: true });
+        } else if (p.type === "expr") {
             // An expression needs the whole width of the node, so its widget goes without a label.
             node.addWidget("text", "", p.default, p.name);
         } else if (p.type === "bool") {
@@ -207,7 +218,21 @@ const Nodes = (() => {
         for (const slot of (node.inputs || []).concat(node.outputs || [])) slot.shape = LiteGraph.BOX_SHAPE;
     }
 
-    function define(type, ui, params, isCondition) {
+    /**
+     * As much of a value as its widget has room for, with an ellipsis where it was cut. The whole of it is in
+     * the inspector. LiteGraph draws 30 characters at most, so no more than that is kept either way.
+     * @param measure how wide a text is drawn, in the same unit as the room
+     */
+    function clip(text, room, measure) {
+        const whole = String(text);
+        let kept = whole.slice(0, 30);
+        if (kept === whole && measure(kept) <= room) return whole;
+        kept = kept.slice(0, 29);
+        while (kept.length > 1 && measure(kept + "\u2026") > room) kept = kept.slice(0, -1);
+        return kept + "\u2026";
+    }
+
+    function define(type, ui, params, isCondition, unbudgeted) {
         const style = CATEGORIES[type.split("/")[0]];
         const inputs = ui.inputs || (isCondition ? [] : FLOW_IN);
         const outputs = ui.outputs || (isCondition ? [["condition", "condition"]] : FLOW_OUT);
@@ -223,7 +248,9 @@ const Nodes = (() => {
         Node.desc = ui.desc;
         Node.title_text_color = style.ink;
         // A node that holds an expression is wide enough to show a short one.
-        if (params.some(p => p.type === "expr")) Node.min_width = 290;
+        if (params.some(p => p.type === "expr" || p.code)) Node.min_width = 290;
+        // A node the per-tick budget cannot interrupt says so wherever it is shown.
+        Node.unbudgeted = Boolean(unbudgeted);
         // A program saved by an earlier editor carries the look it was saved with: it gets today's.
         Node.prototype.onConfigure = function() { dress(this, style); };
         LiteGraph.registerNodeType(type, Node);
@@ -237,14 +264,14 @@ const Nodes = (() => {
         for (const def of Object.values(schema.actions)) {
             const ui = NODES[def.node];
             if (!ui) throw new Error("No editor node is defined for " + def.node);
-            define(def.node, ui, def.params, def.kind === "condition");
+            define(def.node, ui, def.params, def.kind === "condition", def.unbudgeted);
         }
         for (const [type, macro] of Object.entries(MACROS)) {
             define(type, macro, macro.params, false);
         }
     }
 
-    return { register, NODES, MACROS, CATEGORIES, FROM_SERVER };
+    return { register, clip, NODES, MACROS, CATEGORIES, FROM_SERVER };
 })();
 
 if (typeof module !== "undefined") module.exports = Nodes;

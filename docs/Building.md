@@ -234,7 +234,7 @@ before a release or after touching anything under the `client` list.
 ./gradlew :26.3:runSelfTest -PselfTest=spawn,nav_goto   # chosen scenarios, one version
 ```
 
-There are 123 scenarios, 52 built into `SelfTest.java` and 71 registered in `ScenarioIndex.java`.
+There are 124 scenarios, 52 built into `SelfTest.java` and 72 registered in `ScenarioIndex.java`.
 See [SelfTest.md](SelfTest.md) for the table and for how to add one.
 
 All three self-test servers start at once, so each one is given its own world directory, gets the

@@ -27,7 +27,7 @@ async function add(page, name) {
 async function addNamed(page, search, title) {
     await page.eval("document.querySelector('#node-search').value = ''; document.querySelector('#node-search').dispatchEvent(new Event('input')); document.querySelector('#node-search').focus()");
     await page.type("#node-search", search);
-    await page.eval("[...document.querySelectorAll('.node-row')].find(r => r.querySelector('.node-row-title').textContent === " + JSON.stringify(title) + ").click()");
+    await page.eval("[...document.querySelectorAll('.node-row')].find(r => r.querySelector('.node-row-title').firstChild.textContent === " + JSON.stringify(title) + ").click()");
     await page.eval("document.querySelector('#node-search').value = ''; document.querySelector('#node-search').dispatchEvent(new Event('input')); document.activeElement.blur()");
     await page.wait(150);
 }
@@ -209,6 +209,24 @@ async function expressions(shots, env) {
     await page.close();
 }
 
+async function scarpet(shots, env) {
+    const page = await open(shots, env, 1440, 900);
+    await page.click("#btn-bots");
+    await page.click("#btn-autosave");
+    await addNamed(page, "scarpet", "Scarpet");
+    await page.until("!document.querySelector('#inspector').classList.contains('hidden')");
+    await page.eval("document.querySelector('#inspect-code').focus(); document.querySelector('#inspect-code').select()");
+    await page.send("Input.insertText", { text: "set(x, y - 1, z, 'gold_block');\nkills = kills + 1;\nquery(p, 'health')" });
+    await page.eval("document.querySelector('#inspect-result').focus()");
+    await page.send("Input.insertText", { text: "health_now" });
+    await page.eval("document.activeElement.blur()");
+    await page.type("#node-search", "scarpet");
+    await page.wait(300);
+    await page.shot(shots.out("carpetlogic-scarpet.png"));
+    await page.click("#btn-autosave");
+    await page.close();
+}
+
 async function signIn(shots, env) {
     let page = await shots.page(1440, 900);
     await page.goto(env.LOGIC_URL + "/");
@@ -265,5 +283,6 @@ export default async function (shots, env) {
     if (!only || only === "editor") await editor(shots, env);
     if (!only || only === "saving") await saving(shots, env);
     if (!only || only === "expressions") await expressions(shots, env);
+    if (!only || only === "scarpet") await scarpet(shots, env);
     if (!only || only === "signin") await signIn(shots, env);
 }

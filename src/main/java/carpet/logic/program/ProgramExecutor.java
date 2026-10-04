@@ -35,6 +35,11 @@ public class ProgramExecutor
     private static final Logger LOG = LogManager.getLogger("CarpetLogic");
     private static final int FLEE_RETARGET_TICKS = 10;
     public static final int MAX_STEPS_PER_TICK = 1000;
+    /**
+     * What a Scarpet node costs out of the tick's steps. The budget cannot interrupt a snippet, so the node is
+     * charged as a whole: twenty of them fit into a tick, and a loop of them leaves the tick to everything else.
+     */
+    public static final int SCRIPT_STEPS = 50;
 
     public enum Status
     {
@@ -787,6 +792,15 @@ public class ProgramExecutor
             case "ADD_VARIABLE" -> setVariable(state, p.string("name"), variable(state, p.string("name")) + p.number("amount"));
             case "ON_EVENT" -> addHandler(action, state, bot);
             case "EXECUTE_COMMAND" -> bot.executeCommand(p.string("command"), state.owner);
+            case "SCARPET" ->
+            {
+                Object result = runScript(p.string("code"), state, bot);
+                String into = p.string("result");
+                if (!into.isEmpty())
+                {
+                    setVariable(state, into, result);
+                }
+            }
             case "SEQUENCE" -> pushFrame(state, action.getChildren(), 1);
             case "LOOP" -> pushLoop(state, action.getChildren(), p.integer("count"));
             case "FOREVER" ->
@@ -849,6 +863,58 @@ public class ProgramExecutor
         {
             state.stack.push(new Frame(actions, runs));
         }
+    }
+
+    /**
+     * Runs a Scarpet snippet for a program: the program's variables go in, and what the snippet leaves in them
+     * comes back. Nothing here can stop a snippet that does not end; what it costs the tick is fixed.
+     *
+     * @return what the snippet evaluated to
+     */
+    private Object runScript(String code, ProgramState state, Bot bot)
+    {
+        state.stepsLeft -= SCRIPT_STEPS;
+        // The names the snippet has for itself are not handed over: its player, its position and its loop variables.
+        Map<String, Object> shared = new LinkedHashMap<>();
+        state.variables.forEach((name, value) ->
+        {
+            if (!SCRIPT_OWN_NAMES.contains(name) && !name.startsWith("_") && !name.startsWith("global_"))
+            {
+                shared.put(name, value);
+            }
+        });
+        List<Object> answer = bot.runScript(code, shared, state.owner);
+        try
+        {
+            int index = 1;
+            for (String name : shared.keySet())
+            {
+                if (index < answer.size())
+                {
+                    state.variables.put(name, Expression.limited(answer.get(index++)));
+                }
+            }
+            return Expression.limited(answer.getFirst());
+        }
+        catch (ExpressionException e)
+        {
+            throw new BotActionException("SCARPET gave back more than a program can hold: " + e.getMessage());
+        }
+    }
+
+    private static final Set<String> SCRIPT_OWN_NAMES = Set.of("p", "x", "y", "z");
+
+    // What a snippet's result means as a condition: false for false, 0, no text and an empty list.
+    private static boolean truthy(Object value)
+    {
+        return switch (value)
+        {
+            case Boolean bool -> bool;
+            case Double number -> number != 0.0D;
+            case String text -> !text.isEmpty();
+            case List<?> list -> !list.isEmpty();
+            default -> true;
+        };
     }
 
     private static void pushLoop(ProgramState state, List<BotAction> actions, int runs)
@@ -935,6 +1001,7 @@ public class ProgramExecutor
         return switch (condition.getType())
         {
             case "CONDITION_EXPRESSION" -> p.truth("expression");
+            case "CONDITION_SCARPET" -> truthy(runScript(p.string("code"), state, bot));
             case "CONDITION_ALL" -> condition.getConditions().stream().allMatch(each -> test(each, bot, state));
             case "CONDITION_ANY" -> condition.getConditions().stream().anyMatch(each -> test(each, bot, state));
             case "CONDITION_NOT" -> !test(condition.getCondition(), bot, state);

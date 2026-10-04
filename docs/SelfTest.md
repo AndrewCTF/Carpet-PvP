@@ -104,7 +104,7 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-There are **123** of them: 52 built into `SelfTest.java` and 71 more registered in
+There are **124** of them: 52 built into `SelfTest.java` and 72 more registered in
 `ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
 the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
@@ -205,6 +205,7 @@ The built-in list runs first, in the order below, and the index scenarios run af
 | `logic_admin_login` | 15000 | The web editor's admin sign-in over HTTP: with `carpetLogicAdminLogin` off its routes refuse; with it on an operator sets a password through the console's link, signs in and changes `carpetLogicMaxPrograms` with `POST /api/settings`, and the rule really has the new value. A second use of the link, a wrong password, a token from `/carpetlogic open`, a value the rule's validator refuses and the operator once deopped are all refused. It deops its operator and puts both rules back. |
 | `logic_save_draft_and_autosave` | 15000 | Saving from the web editor over HTTP: a program that does not compile is kept as a draft in `<world>/carpetlogic/programs/` under a file named after it (a name with a colon, a space and a slash in it becomes a safe file name), holds its graph and the reason, comes back the same after the folder is read again, and is refused by `/carpetlogic programs run`. Saving it again writes nothing; a save from an older copy gets `409`. The version that compiles is saved over it under a new name, the file is renamed with it, and `programs run` walks the bot. It deletes its files. |
 | `logic_expression_if_while` | 600 | A program whose `WHILE` condition measures the world, `distance(x, y, z) > 1.5 and $steps < 40`, with an `IF` on `$steps % 2 == 0` inside it, walks the bot to a place six blocks ahead and reaches `COMPLETED`. Its variables then hold what happened: the steps it took, how many of them were even, the distance left as the bot's position gives it, and a text put together from them. |
+| `logic_scarpet_node` | 600 | One program with two `SCARPET` nodes and a `CONDITION_SCARPET`, started three times. With no owner it stops with "SCARPET only runs in programs a player started from the web editor"; for a player who is no operator it stops with "SCARPET needs … to be allowed /script run" and the block is still air; for the same player once opped the snippet sets a gold block by the bot's own `x`, `y` and `z`, adds one to the program's variable `n` and gives `n * 6`, the `IF` on `$answer == 42` takes its first branch, `query(p, 'name')` gives the bot's name, and the Scarpet condition reads the block back. The player is deopped and the block cleared afterwards. |
 
 ### The bots
 

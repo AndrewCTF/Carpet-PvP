@@ -10,6 +10,10 @@ import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
 import carpet.pvp.BotEvents;
+import carpet.script.CarpetExpression;
+import carpet.script.CarpetScriptHost;
+import carpet.script.exception.CarpetExpressionException;
+import carpet.script.external.Vanilla;
 import carpet.pvp.BotPvpConfig;
 import carpet.pvp.kit.Kit;
 import carpet.pvp.kit.KitInventory;
@@ -22,6 +26,7 @@ import carpet.utils.ArmorSetDefinition;
 import carpet.utils.CommandHelper;
 import carpet.utils.EquipmentSlotMapping;
 import carpet.utils.Messenger;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -42,6 +47,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -535,6 +541,37 @@ public class BotController implements Bot
                     : "EXECUTE_COMMAND needs the player who started this program to be online");
         }
         server.getCommands().performPrefixedCommand(ownerPlayer.createCommandSourceStack(), command);
+    }
+
+    /**
+     * Runs a snippet as {@code /script run} would for the player the program belongs to: the same two rules
+     * decide whether it may, and it is evaluated by the same call, with the bot in the player's place.
+     */
+    @Override
+    public List<Object> runScript(String code, Map<String, Object> variables, UUID owner)
+    {
+        MinecraftServer server = player.level().getServer();
+        ServerPlayer ownerPlayer = owner == null ? null : server.getPlayerList().getPlayer(owner);
+        CommandSourceStack owned = ownerPlayer == null ? null : ownerPlayer.createCommandSourceStack();
+        // What /script run asks of whoever types it, asked of the owner each time a snippet is about to run.
+        String refusal = ScriptBridge.refusal(owner != null, ownerPlayer == null ? null : ownerPlayer.getGameProfile().name(),
+                owned != null && Vanilla.ServerPlayer_canScriptGeneral(owned), owned != null && Vanilla.ServerPlayer_canScriptACE(owned));
+        if (refusal != null)
+        {
+            throw new BotActionException(refusal);
+        }
+        // The owner's permissions, and the bot as what the snippet calls p.
+        CommandSourceStack source = owned.withEntity(player).withPosition(player.position()).withSuppressedOutput();
+        CarpetScriptHost host = CarpetServer.scriptServer.globalHost;
+        try
+        {
+            CarpetExpression expression = new CarpetExpression(host.main, ScriptBridge.wrap(code, variables), source, BlockPos.ZERO);
+            return ScriptBridge.unwrap(expression.scriptRunCommand(host, BlockPos.containing(source.getPosition())).getLeft(), variables.size());
+        }
+        catch (CarpetExpressionException e)
+        {
+            throw new BotActionException("SCARPET: " + e.getMessage());
+        }
     }
 
     @Override

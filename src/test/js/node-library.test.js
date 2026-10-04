@@ -106,3 +106,8 @@ test("a node is made in its category's colour, with the ink that reads on it", (
     node.configure(node.serialize());
     assert.equal(node.color, Nodes.CATEGORIES.Combat.color);
 });
+
+test("the library marks the nodes the budget cannot interrupt, and no others", () => {
+    const marked = entries.filter(entry => entry.unbudgeted).map(entry => entry.type).sort();
+    assert.deepEqual(marked, ["Conditions/Scarpet", "Scarpet/Run"]);
+});
