@@ -77,18 +77,7 @@ public final class Bow
     /** True while the view is close enough to the aim point that a shot taken now would go through it. */
     public boolean aimedAt(BotBody.Aim point)
     {
-        return onPoint(point, 0, true, 0.0D);
-    }
-
-    /**
-     * As {@link #aimedAt(BotBody.Aim)}, with a tolerance of its own. The dead zone the look controller is given
-     * is the aim point's own radius, so a gate that asks for the same radius back is a gate the controller may
-     * never satisfy: the two measures of an angular distance are not the same one. A caller with a big target
-     * close by can afford a wider one.
-     */
-    public boolean aimedAt(BotBody.Aim point, double tolerance)
-    {
-        return onPoint(point, 0, true, tolerance);
+        return onPoint(point, 0);
     }
 
     /**
@@ -139,35 +128,14 @@ public final class Bow
      */
     public boolean hold(BotBody.Aim point, int wanted)
     {
-        return hold(point, wanted, true, 0.0D);
-    }
-
-    /**
-     * As {@link #hold(BotBody.Aim, int)}, and whether the patience is allowed.
-     *
-     * @param patient   whether the shot may go off without the view being on the point once the draw has run on
-     *                  for {@link #PATIENCE} ticks, which is what a moving target needs and a fixed point does
-     *                  not: the arrow leaves along the view, so a patient shot at a cart that is not moving is an
-     *                  arrow at whatever the view happened to be on
-     * @param tolerance degrees of slack on top of the aim point's own radius, for a caller that wants a gate
-     *                  wider than the dead zone it is aiming at
-     */
-    public boolean hold(BotBody.Aim point, int wanted, boolean patient, double tolerance)
-    {
         int held = held();
         body.holdItem();
-        if (held < wanted || !onPoint(point, held - wanted, patient, tolerance))
+        if (held < wanted || !onPoint(point, held - wanted))
         {
             return false;
         }
         body.releaseItem();
         return true;
-    }
-
-    /** {@link #hold(BotBody.Aim, int, boolean, double)} with the patience and the tolerance of an ordinary shot. */
-    public boolean hold(BotBody.Aim point, int wanted, boolean patient)
-    {
-        return hold(point, wanted, patient, 0.0D);
     }
 
     /** Lets go of the bow, so the next draw starts from nothing. */
@@ -272,7 +240,7 @@ public final class Bow
      * point and stops correcting once it is inside the same radius, which at the range a tnt minecart is shot
      * from is a good deal wider than the fixed tolerance and the only distance a bot can ever reach.
      */
-    private boolean onPoint(BotBody.Aim point, int waited, boolean patient, double tolerance)
+    private boolean onPoint(BotBody.Aim point, int waited)
     {
         if (point == null)
         {
@@ -281,7 +249,6 @@ public final class Bow
         double dy = point.yaw() - body.look().yaw();
         dy -= 360.0 * Math.rint(dy / 360.0);
         double dp = point.pitch() - body.look().pitch();
-        return Math.hypot(dy, dp) <= Math.max(RELEASE_TOLERANCE, point.radius()) + tolerance
-                || (patient && waited >= PATIENCE);
+        return Math.hypot(dy, dp) <= Math.max(RELEASE_TOLERANCE, point.radius()) || waited >= PATIENCE;
     }
 }

@@ -190,9 +190,6 @@ final class RangedScenarios
         Hits[] hits = {new Hits()};
         List<String> course = new ArrayList<>(rangedCourse(a));
         course.add("bot option " + a + " ranged.bow false");
-        // The stock kit has a trident as well, and a crossbow scenario that let it throw one would be
-        // measuring the trident.
-        course.add("bot option " + a + " ranged.trident false");
         course.add("bot option " + a + " ranged.keep 14");
         course.add("effect give " + b + " minecraft:resistance 100000 4 true");
         return new Scenario(900, List.of(new Bot(a, origin), new Bot(b, target)), course, server ->
@@ -248,8 +245,6 @@ final class RangedScenarios
         course.add("bot option " + a + " difficulty expert");
         course.add("bot option " + a + " targetrange 24");
         course.add("bot option " + a + " ranged.keep " + SelfTest.fmt("%.1f", SPEAR_RANGE));
-        // The stock kit has a crossbow as well, and at four blocks the crossbow is what the style would pick.
-        course.add("bot option " + a + " ranged.crossbow false");
         course.add("bot option " + a + " combat true");
         return new Scenario(900, List.of(new Bot(a, origin), new Bot(b, target)), course, server ->
         {
@@ -360,15 +355,11 @@ final class RangedScenarios
                     && !swordReaches(shooter, victim))
             {
                 gapAtReach[0] = gap;
-                // The target is held still at the edge of the reach on purpose, so there is no closing speed
-                // left to report: what the scenario measures is the stand-off and the charge, not a run.
                 return new Probe(true, SelfTest.fmt(
                         "%s stood off with a charged spear at %.2f blocks, where the spear reaches and the %.2f "
-                                + "a sword reaches does not, and kept the spear up for %d ticks of it; the "
-                                + "target is held there, so the closing speed between them is 0.0 by "
-                                + "construction and the number this used to report is not a measurement "
-                                + "any more",
-                        a, gap, DuelSim.REACH, charges[0]));
+                                + "a sword reaches does not; the closing speed between them peaked at %.1f "
+                                + "blocks a second and the spear was up for %d ticks",
+                        a, gap, DuelSim.REACH, fastest[0], charges[0]));
             }
             return SelfTest.pending(SelfTest.fmt("%.2f blocks apart, spear reaches: %s, sword reaches: %s, "
                             + "closing %.1f at best, spear up for %d ticks", gap, spearReaches(shooter, victim),
@@ -447,13 +438,13 @@ final class RangedScenarios
                 hard[0] = true;
                 return SelfTest.pending("the server is on normal so a blast can hurt");
             }
-            // The nearest cart to the bot, which is the one it laid: the bot lays it where it stands, and a
-            // fight carries both fighters away from where they started. Taking whichever cart a query returned
+            // The nearest cart to the bot, which is the one it laid. Taking whichever cart a query returned
             // last instead measures whichever the entity list ended on, which is not a cart at all.
             MinecartTNT cart = null;
             double nearest = Double.MAX_VALUE;
             for (MinecartTNT mine : server.overworld().getEntitiesOfClass(MinecartTNT.class,
-                            new AABB(BlockPos.containing(bot.getX(), bot.getY(), bot.getZ())).inflate(48.0D)))
+                            new AABB(BlockPos.containing(origin.x, SelfTest.SURFACE_Y,
+                                    origin.z + 10.0D)).inflate(24.0D)))
             {
                 double away = mine.distanceTo(bot);
                 if (away < nearest)
@@ -465,10 +456,8 @@ final class RangedScenarios
             if (cart == null)
             {
                 return SelfTest.pending(SelfTest.fmt("%s is looking for somewhere to lay a cart, %d rails and "
-                                + "%d carts in hand, on difficulty %d, at %.1f/%.1f/%.1f; %s", a,
-                        count(bot, Items.RAIL), count(bot, Items.TNT_MINECART),
-                        bot.level().getDifficulty().getId(), bot.getX(), bot.getY(), bot.getZ(),
-                        SelfTest.stats(bot).describe()));
+                                + "%d carts in hand, on difficulty %d", a, count(bot, Items.RAIL),
+                        count(bot, Items.TNT_MINECART), bot.level().getDifficulty().getId()));
             }
             double gap = Math.hypot(cart.getX() - bot.getX(), cart.getZ() - bot.getZ());
             standOff[0] = Math.max(standOff[0], gap);
@@ -479,10 +468,6 @@ final class RangedScenarios
             // The stand-off the scenario asks for is the one the plan itself calls survivable, asked again from
             // where the bot is standing: a hard number would only state what the model said on the day.
             boolean safe = survivableFrom(bot, cart);
-            // The measurement is taken and nothing else this run needs a blast, so the server goes back to a
-            // difficulty that does not hurt anybody before the scenario reports, rather than after it: a run
-            // that fails here would otherwise hand the next scenario a server that is not the one it was
-            // written against.
             SelfTest.run(server, "difficulty peaceful");
             boolean ok = damage[0] > 0.0D && safe && bot.getHealth() >= 20.0F;
             return new Probe(ok, SelfTest.fmt(
@@ -553,11 +538,9 @@ final class RangedScenarios
                 "bot option " + a + " combat true",
                 "bot option " + a + " targetrange 32"));
         course.remove(course.size() - 1);
-        // The scenario is about the keep distance, so the two techniques that deliberately spend it are
-        // switched off: the cart, which the bot walks out of its own blast for, and the spear, which is a run
-        // in to the target's own reach.
+        // The scenario is about the keep distance, so the one technique that deliberately spends it is switched
+        // off the way the crossbow already is above.
         course.add("bot option " + a + " ranged.tntcart false");
-        course.add("bot option " + a + " ranged.spear false");
         course.addAll(List.of(SelfTest.cmd(a + " equip mainhand minecraft:diamond_sword"),
                 SelfTest.cmd(a + " equip head minecraft:diamond_helmet"),
                 SelfTest.cmd(a + " equip chest minecraft:diamond_chestplate"),

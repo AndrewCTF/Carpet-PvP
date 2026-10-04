@@ -21,7 +21,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TridentItem;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.Random;
 
@@ -43,8 +42,6 @@ import java.util.Random;
  */
 public final class RangedStyle implements BotStyle
 {
-
-
     /**
      * How close the bot lets a target come before it puts the sword up. A sword reaches three blocks from the
      * eyes to the box, and the bot only knows where the target was a couple of ticks ago, which at closing
@@ -55,34 +52,10 @@ public final class RangedStyle implements BotStyle
     public static final double SPEAR_APPROACH = 7.5;
     /** Beyond this the bow is the better weapon than a trident, which drops off much faster. */
     public static final double TRIDENT_RANGE = 18.0;
-    /**
-     * How close a bot has to be before it prefers a crossbow to a trident. A crossbow shot leaves at the same
-     * speed as a bow's but takes a second and a quarter to load, so it is a weapon for the short distance
-     * rather than the far one, and a trident or a plain bow is the better answer anywhere else.
-     */
-    public static final double CROSSBOW_RANGE = 8.0;
     /** Ticks a target has to be inside sword range before the bot puts its sword up, which is its reaction. */
     private static final int MELEE_REACTION = 6;
-    /**
-     * Degrees of slack on the cart shot's release gate. The aim point's own radius is what the look controller
-     * stops correcting at, and the two are measured differently, so a gate asking for exactly that radius can
-     * leave the bot drawing at a cart forever. A cart is a block wide a few blocks away, so a couple of degrees
-     * is still well inside it.
-     */
-    private static final double CART_SHOT_SLACK = 5.0D;
     /** Ticks between two flips of the sidestep, so a bot that is being circled does not walk one circle. */
     private static final int STRAFE_TICKS = 40;
-
-    /**
-     * What the bot last let go of at its target, so that the next hit the target takes is counted against it.
-     * A projectile that flies twenty blocks lands a good many ticks after it left the hand, so the counters
-     * cannot be booked at the moment of the throw: the throw is what is counted there, and the hit is counted
-     * when the health of the target goes, while this still says what was fired at it.
-     */
-    private enum Shot
-    {
-        NONE, ARROW, CROSSBOW, TRIDENT, SPEAR
-    }
 
     private final EntityPlayerMPFake bot;
     private final BotStats stats;
@@ -104,10 +77,6 @@ public final class RangedStyle implements BotStyle
     private int strafeTicks;
     /** True while the bot is committed to a run in with a charged spear, which is what a thrust is behind. */
     private boolean spearRun;
-    private Shot fired = Shot.NONE;
-    private ProjectileAim.Aim cartAimHeld;
-    private Vec3 cartAimMark;
-    private float lastTargetHealth = Float.NaN;
 
     public RangedStyle(EntityPlayerMPFake bot, BotBody body, BotPvpConfig cfg, Random random)
     {
@@ -117,7 +86,7 @@ public final class RangedStyle implements BotStyle
         this.bow = new Bow(bot, body);
         this.throwing = new Throw(bot, body);
         this.spear = new Spear(bot, body);
-        this.cart = new TntCart(bot, body);
+        this.cart = new TntCart(bot, body, bow);
         this.kiting = new Kiting(bot);
     }
 
@@ -139,15 +108,6 @@ public final class RangedStyle implements BotStyle
         cart.tick();
         gap = horizontal(me, seen);
         live = bot.distanceTo(target);
-        landed();
-        if (cart.lit())
-        {
-            stats.cartsLit++;
-        }
-        if (!cart.armed())
-        {
-            cartAimHeld = null;
-        }
         if (cart.spent(loadout))
         {
             // A cart with nothing to set it off with is a live minecart next to the target and nothing else, so
@@ -159,11 +119,11 @@ public final class RangedStyle implements BotStyle
         {
             melee();
         }
-        else if (cart.armed())
+        else if (cart.rail() != null)
         {
             setCart();
         }
-        else if (wantsCart() || cart.laying())
+        else if (wantsCart())
         {
             layCart();
         }
@@ -171,21 +131,17 @@ public final class RangedStyle implements BotStyle
         {
             thrustSpear();
         }
-        else if (wantsCrossbow() && gap <= CROSSBOW_RANGE)
-        {
-            shootCrossbow();
-        }
         else if (wantsTrident() && gap <= TRIDENT_RANGE)
         {
             throwTrident();
         }
-        else if (wantsBow())
-        {
-            shootBow();
-        }
         else if (wantsCrossbow())
         {
             shootCrossbow();
+        }
+        else if (wantsBow())
+        {
+            shootBow();
         }
         else
         {
@@ -193,44 +149,18 @@ public final class RangedStyle implements BotStyle
         }
     }
 
-    /**
-     * The bot is not fighting anyone for a tick. That is not the same as the fight being over: a cart laid beside
-     * an opponent is still standing when the opponent steps out of sight for a tick, and a trap the bot threw
-     * away over that would never be lit. The weapon and the loadout are let go, and the cart is left to
-     * {@link TntCart#rail()}, which forgets a cart that is really gone.
-     */
     @Override
     public void disengage(BotBody body)
     {
         bow.lower();
         loadout.forget();
+        cart.forget();
         meleeTicks = 0;
         strafeTicks = 0;
         spearRun = false;
     }
 
     // --- the techniques
-
-    /**
-     * Books the hit the target took, against whatever the bot last let go of at it. A projectile that is still
-     * in the air has not hit anything yet, so this is the only place a hit on a non-melee weapon is counted,
-     * and it is counted against the shot that was fired rather than against the weapon in the hand.
-     */
-    private void landed()
-    {
-        float health = target.getHealth() + target.getAbsorptionAmount();
-        if (health < lastTargetHealth)
-        {
-            switch (fired)
-            {
-                case ARROW -> stats.arrowsHit++;
-                case SPEAR -> stats.spearThrusts++;
-                default -> { }
-            }
-            fired = Shot.NONE;
-        }
-        lastTargetHealth = health;
-    }
 
     /** The sword, for a target that has come inside its reach. */
     private void melee()
@@ -268,7 +198,7 @@ public final class RangedStyle implements BotStyle
         }
         BotBody.Aim point = Bow.pointOf(aim, gap);
         drive(point, distance(false), false);
-        fired(Shot.ARROW, bow.hold(point, aim.drawTicks));
+        bow.hold(point, aim.drawTicks);
     }
 
     /**
@@ -308,7 +238,6 @@ public final class RangedStyle implements BotStyle
         else
         {
             body.pack().start(EntityPlayerActionPack.ActionType.USE, EntityPlayerActionPack.Action.once());
-            fired(Shot.CROSSBOW, true);
         }
     }
 
@@ -322,7 +251,7 @@ public final class RangedStyle implements BotStyle
             // Riptide launches the thrower along its own view, so the body aims at the target itself and the
             // charge only has to be long enough for the game to accept it.
             drive(null, DuelSim.action(1, 0, false, true, false), false);
-            fired(Shot.TRIDENT, throwing.cast(null, TridentItem.THROW_THRESHOLD_TIME, true));
+            throwing.cast(null, TridentItem.THROW_THRESHOLD_TIME, true);
             return;
         }
         ProjectileAim.Aim[] arcs = throwing.solve(seen);
@@ -335,7 +264,7 @@ public final class RangedStyle implements BotStyle
         }
         BotBody.Aim point = Bow.pointOf(aim, gap);
         drive(point, distance(false), false);
-        fired(Shot.TRIDENT, throwing.cast(point, TridentItem.THROW_THRESHOLD_TIME, true));
+        throwing.cast(point, TridentItem.THROW_THRESHOLD_TIME, true);
     }
 
     /**
@@ -371,12 +300,6 @@ public final class RangedStyle implements BotStyle
         // A thrust lands while the target is inside the reach of the spear and the two are closing on each
         // other faster than the weapon's gate, and the run keeps going while it has not landed one yet.
         boolean landing = reach <= SpearMath.maxReach() && spear.fast(target, stack);
-        if (landing)
-        {
-            // The game sweeps the spear's reach on every tick of the charge, so a thrust can land on any of
-            // them: what is counted is the hit, against a thrust the bot is in a position to land.
-            fired = Shot.SPEAR;
-        }
         spearRun = spearRun ? !landing : reach > SpearMath.maxReach();
         if (spearRun || landing)
         {
@@ -391,20 +314,12 @@ public final class RangedStyle implements BotStyle
      *
      * <p>It lays the trap from where it stands rather than walking in to arm one: the plan looks a few blocks
      * around the bot, so a cell next to the target is nearly always within reach of it, and a bot that closes to
-     * lay a cart walks into the sword range of the very fighter it was trying to keep away from. Putting one
-     * down takes several ticks — a hotbar change reaches the hand on the tick after it is asked for, and each
-     * of the two clicks waits for the view to be on the block and for the bot's own click rate — so the cell is
-     * worked on until the cart is down or the plan gives it up.</p>
+     * lay a cart walks into the sword range of the very fighter it was trying to keep away from.</p>
      */
     private void layCart()
     {
-        // A cell is several ticks of the bot's time: nothing else is charged while it is laying one.
-        body.releaseItem();
-        drive(cart.aim(), DuelSim.NOOP, false);
-        if (cart.place(loadout))
-        {
-            stats.cartsLaid++;
-        }
+        drive(null, DuelSim.NOOP, false);
+        cart.place(loadout);
     }
 
     /**
@@ -439,7 +354,7 @@ public final class RangedStyle implements BotStyle
         // A full draw and not the shortest one that reaches: the cart is a small box a few blocks away, and a
         // barely drawn arrow is the one the aim is least sure about, because a tick of draw either side of it
         // is a fifth of the arrow's speed. A player holds a cart shot at full draw for the same reason.
-        ProjectileAim.Aim aim = cartAim(bow.aimAt(mark, ProjectileSim.BOW_FULL_DRAW), mark);
+        ProjectileAim.Aim aim = bow.aimAt(mark, ProjectileSim.BOW_FULL_DRAW);
         if (!aim.solved)
         {
             body.releaseItem();
@@ -452,50 +367,9 @@ public final class RangedStyle implements BotStyle
         // gets is not wanted here: the cart is not going anywhere, so waiting for the aim costs a draw and
         // firing without it spends an arrow on the floor beside the cart.
         body.holdItem();
-        if (bow.aimedAt(point, CART_SHOT_SLACK) && bow.hold(point, aim.drawTicks, false, CART_SHOT_SLACK))
+        if (bow.aimedAt(point))
         {
-            fired(Shot.ARROW, true);
-            cart.shot();
-        }
-    }
-
-    /**
-     * The aim the bot is working on for a cart shot, which it keeps until the shot goes off. A cart is a fixed
-     * point a few blocks away, so a fresh solution every tick is a view that keeps being sent somewhere slightly
-     * different and never arrives: one solution, held until the arrow has left.
-     */
-    private ProjectileAim.Aim cartAim(ProjectileAim.Aim solved, ProjectileSim.Target mark)
-    {
-        Vec3 at = new Vec3(mark.x, mark.y, mark.z);
-        if (cartAimHeld != null && cartAimMark != null && cartAimMark.distanceToSqr(at) < 0.5D)
-        {
-            return cartAimHeld;
-        }
-        cartAimHeld = solved.solved ? solved : null;
-        cartAimMark = solved.solved ? at : null;
-        return solved;
-    }
-
-    /**
-     * Books a shot that has just been let go of, and notes what it was so that the hit it goes on to land can
-     * be counted against it.
-     *
-     * @param what the weapon the shot came from
-     * @param gone whether anything actually left the hand this tick
-     */
-    private void fired(Shot what, boolean gone)
-    {
-        if (!gone)
-        {
-            return;
-        }
-        fired = what;
-        switch (what)
-        {
-            case ARROW -> stats.arrowsShot++;
-            case CROSSBOW -> stats.crossbowShots++;
-            case TRIDENT -> stats.tridentsThrown++;
-            default -> { }
+            bow.hold(point, aim.drawTicks);
         }
     }
 

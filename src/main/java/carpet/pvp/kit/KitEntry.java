@@ -17,7 +17,6 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * One item of a kit.
@@ -68,28 +67,6 @@ public record KitEntry(KitSlot slot, String item, int count, List<KitEnchantment
     }
 
     /**
-     * True when this entry can be built on this version of the game: the item it names is in the registry.
-     * A kit file is shared by every version the mod runs on, and an item one of them does not have is
-     * something to skip rather than a kit that will not build.
-     */
-    public boolean available(RegistryAccess registries)
-    {
-        return stack != null || available(item, registries == null ? id -> false
-                : id -> item(registries).isPresent());
-    }
-
-    /**
-     * Whether a registry has the item an entry names, for a caller that has nothing but the name. Kept apart
-     * from the lookup so the decision a kit is skipped on can be made without a running game.
-     *
-     * @param inRegistry what the registry of this version says about an item id
-     */
-    static boolean available(String id, java.util.function.Predicate<String> inRegistry)
-    {
-        return id != null && inRegistry.test(id);
-    }
-
-    /**
      * Builds the stack this entry gives out. Registry lookups happen here rather than when the kit
      * is read, so a kit can be parsed without a running game.
      *
@@ -99,8 +76,7 @@ public record KitEntry(KitSlot slot, String item, int count, List<KitEnchantment
     {
         if (stack != null) return stack.copy();
 
-        ItemStack result = new ItemStack(item(registries).orElseThrow(
-                () -> new IllegalArgumentException("no such item: " + item)), count);
+        ItemStack result = new ItemStack(item(item, registries), count);
 
         if (potion != null)
         {
@@ -120,10 +96,11 @@ public record KitEntry(KitSlot slot, String item, int count, List<KitEnchantment
         return result;
     }
 
-    /** The item the entry names, or nothing on a version that does not have it. */
-    private Optional<Holder.Reference<Item>> item(RegistryAccess registries)
+    private static Holder<Item> item(String id, RegistryAccess registries)
     {
-        return registries.lookupOrThrow(Registries.ITEM).get(Identifier.parse(item));
+        return registries.lookupOrThrow(Registries.ITEM)
+                .get(Identifier.parse(id))
+                .orElseThrow(() -> new IllegalArgumentException("no such item: " + id));
     }
 
     private static Holder<Potion> potion(String id, RegistryAccess registries)

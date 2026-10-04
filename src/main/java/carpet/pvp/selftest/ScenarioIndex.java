@@ -61,8 +61,6 @@ final class ScenarioIndex
         SCENARIOS.put("tnt_cart_safe", RangedScenarios::tntCartSafe);
         SCENARIOS.put("ranged_keeps_distance", RangedScenarios::rangedKeepsDistance);
         SCENARIOS.put("ranged_duel", RangedScenarios::rangedDuel);
-        // tnt_cart_damage and ranged_expert_uses_techniques are written and not registered: lighting the
-        // minecart with a burning arrow works in about one run in three, so they wait for that.
         SCENARIOS.put("sword_damage_rate", SwordScenarios::damageRate);
         SCENARIOS.put("sword_ladder", SwordScenarios::ladder);
         SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);

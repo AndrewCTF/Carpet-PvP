@@ -71,20 +71,6 @@ public final class BotStats
     public int reTotems;
     /** Ender pearls thrown. */
     public int pearlsThrown;
-    /** Arrows let go of, from any bow the bot holds. */
-    public int arrowsShot;
-    /** Arrows that hit the target. */
-    public int arrowsHit;
-    /** Crossbow shots, which are a load and then a click rather than a draw. */
-    public int crossbowShots;
-    /** Tridents thrown, with or without Riptide. */
-    public int tridentsThrown;
-    /** Spear thrusts that landed while the bot was running in with the weapon charged. */
-    public int spearThrusts;
-    /** Tnt minecarts laid down beside a target. */
-    public int cartsLaid;
-    /** Tnt minecarts the bot set off with a flaming arrow. */
-    public int cartsLit;
     public double damageDealt;
     public double damageTaken;
     /** Planner calls that spent simulated ticks. */
@@ -208,13 +194,6 @@ public final class BotStats
         backedOff = 0;
         reTotems = 0;
         pearlsThrown = 0;
-        arrowsShot = 0;
-        arrowsHit = 0;
-        crossbowShots = 0;
-        tridentsThrown = 0;
-        spearThrusts = 0;
-        cartsLaid = 0;
-        cartsLit = 0;
         damageDealt = 0.0;
         damageTaken = 0.0;
         plannerCalls = 0;
@@ -238,9 +217,6 @@ public final class BotStats
                 + " blown (" + anchorsBlown + " anchors), " + refusedBlasts + " refused, " + backedOff
                 + " backed off, " + blocksPlaced + " blocks]"
                 + " totems=" + reTotems + " pearls=" + pearlsThrown
-                + " shots[" + arrowsShot + " arrows " + arrowsHit + " hit, " + crossbowShots + " crossbow, "
-                + tridentsThrown + " tridents, " + spearThrusts + " spear thrusts, " + cartsLaid + " carts laid, "
-                + cartsLit + " carts lit]"
                 + " dealt=" + round(damageDealt) + " taken=" + round(damageTaken)
                 + " planner=" + plannerCalls + "/" + simulatedTicks + " ticks starved=" + starvedTicks
                 + " rotation[onGrid=" + rotationOnGrid() + " maxStep=" + round(maxRotationStep)
