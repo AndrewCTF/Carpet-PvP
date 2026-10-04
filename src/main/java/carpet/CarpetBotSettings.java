@@ -75,10 +75,7 @@ public final class CarpetBotSettings
         BotSettings.botAutoTotem = CarpetSettings.botAutoTotem;
         BotSettings.botAutoShield = CarpetSettings.botAutoShield;
         BotSettings.botAutoFood = CarpetSettings.botAutoFood;
-        BotSettings.botAutoPotion = CarpetSettings.botAutoPotion;
-        BotSettings.botAutoArmor = CarpetSettings.botAutoArmor;
         BotSettings.botAutoWeapon = CarpetSettings.botAutoWeapon;
-        BotSettings.botAutoRepair = CarpetSettings.botAutoRepair;
         BotSettings.botCombatStyle = CarpetSettings.botCombatStyle;
         BotSettings.botDifficulty = CarpetSettings.botDifficulty;
         BotSettings.botPreferSword = CarpetSettings.botPreferSword;
