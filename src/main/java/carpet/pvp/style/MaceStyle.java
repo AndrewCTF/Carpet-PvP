@@ -697,11 +697,18 @@ public final class MaceStyle implements BotStyle
         {
             bounceLeft--;
         }
-        boolean missed = smashTick >= 0 && flightTicks > smashTick + 1 && !chained;
+        // The launch has missed once the bot is on the way down with enough fall for a smash and the target
+        // is out of its reach, which is a question about where the bot is and not about which tick the model
+        // expected it to arrive: the arc it actually flew is not the arc the model planned.
+        boolean missed = !chained && flightTicks > 2 && !close && me.vy < 0.0 && smash;
         // The charge that keeps the fall harmless goes into the hand while there is still room for the hotbar
         // change to land, and leaves it in the last blocks, where the burst can still reach the bot.
         double above = heightAboveGround(me);
         boolean winding = winding(cfg, me, seen, due, close, missed, above);
+        System.out.println("[macedbg] t=" + flightTicks + " above=" + String.format(java.util.Locale.ROOT, "%.2f", above)
+                + " fall=" + me.fallDistance + " vy=" + me.vy + " g=" + me.onGround + " close=" + close
+                + " wind=" + winding + " missed=" + missed + " fc=" + flightCharges + " slot=" + body.currentSlot()
+                + " cslot=" + gear.chargeSlot() + " ready=" + gear.chargeReady());
         boolean prepare = winding && above <= SAVE_HEIGHT + HOTBAR_TICK;
         boolean throwIt = winding && above <= SAVE_HEIGHT;
         if (prepare)
@@ -720,6 +727,8 @@ public final class MaceStyle implements BotStyle
             actions.glide(false);
             actions.fold();
         }
+        System.out.println("[macedbg] FEND t=" + flightTicks + " airborne=" + airborne + " onGround=" + me.onGround
+                + " chained=" + chained + " hits=" + stats.hits + " hp=" + bot.getHealth());
         if ((airborne && me.onGround) || flightTicks > FLIGHT_TIMEOUT)
         {
             phase = Phase.MELEE;
