@@ -67,5 +67,11 @@ final class ScenarioIndex
         SCENARIOS.put("crystal_retotem", CrystalScenarios::reTotem);
         SCENARIOS.put("crystal_anchor", CrystalScenarios::anchor);
         SCENARIOS.put("crystal_duel", CrystalScenarios::duel);
+        SCENARIOS.put("mace_launch_height", MaceScenarios::launchHeight);
+        SCENARIOS.put("mace_smash_damage", MaceScenarios::smashDamage);
+        SCENARIOS.put("mace_stun_slam", MaceScenarios::stunSlam);
+        SCENARIOS.put("mace_no_fall_damage_on_miss", MaceScenarios::noFallDamageOnMiss);
+        SCENARIOS.put("mace_attribute_swap_probe", MaceScenarios::attributeSwapProbe);
+        SCENARIOS.put("mace_duel", MaceScenarios::duel);
     }
 }

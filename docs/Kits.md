@@ -94,9 +94,10 @@ Permissions:
 | 3 | `minecraft:golden_apple` | 4 | |
 | 4 | `minecraft:ender_pearl` | 3 | |
 | 5 | `minecraft:netherite_axe` | 1 | Sharpness 2 |
-| 6 | `minecraft:totem_of_undying` | 1 | |
+| 6 | `minecraft:netherite_sword` | 1 | Sharpness 3 |
 | 7 | `minecraft:totem_of_undying` | 1 | |
 | 8 | `minecraft:elytra` | 1 | |
+| 9 | `minecraft:totem_of_undying` | 1 | |
 | head | `minecraft:netherite_helmet` | 1 | Protection 4, Unbreaking 3 |
 | chest | `minecraft:netherite_chestplate` | 1 | Protection 4, Unbreaking 3 |
 | legs | `minecraft:netherite_leggings` | 1 | Protection 4, Unbreaking 3 |

@@ -57,6 +57,16 @@ public final class StyleIndex
         OPTIONS.put("crystal.retotem", "true");
         OPTIONS.put("crystal.retotem_delay", "20");
         OPTIONS.put("crystal.reach", "4.0");
+        STYLES.put(CombatStyle.MACE, MaceStyle::new);
+        OPTIONS.put("mace.windcharge", "true");
+        OPTIONS.put("mace.chain", "true");
+        OPTIONS.put("mace.pearl", "true");
+        OPTIONS.put("mace.elytra", "true");
+        OPTIONS.put("mace.stunslam", "true");
+        OPTIONS.put("mace.enchants", "true");
+        OPTIONS.put("mace.bounce", "true");
+        OPTIONS.put("mace.safeland", "true");
+        OPTIONS.put("mace.swap", "true");
     }
 
     public static boolean has(CombatStyle style)
