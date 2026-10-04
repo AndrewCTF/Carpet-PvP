@@ -122,16 +122,23 @@ target = "Lnet/minecraft/client/renderer/LevelRenderer;addMainPass(Lcom/mojang/b
 
     import carpet.network.CarpetClient;
     import carpet.script.utils.ShapesRenderer;
+    import com.llamalad7.mixinextras.sugar.Local;
+    import com.mojang.blaze3d.buffers.GpuBufferSlice;
     import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
     import com.mojang.blaze3d.framegraph.FramePass;
+    import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
     import net.minecraft.client.Camera;
+    import net.minecraft.client.DeltaTracker;
     import net.minecraft.client.Minecraft;
     import net.minecraft.client.renderer.LevelRenderer;
     import net.minecraft.client.renderer.LevelTargetBundle;
-    import net.minecraft.client.renderer.LightTexture;
     import net.minecraft.client.renderer.RenderBuffers;
     import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
     import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+    import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
+    import net.minecraft.client.renderer.state.LevelRenderState;
+    import org.joml.Matrix4f;
+    import org.joml.Vector4f;
     import org.spongepowered.asm.mixin.Final;
     import org.spongepowered.asm.mixin.Mixin;
     import org.spongepowered.asm.mixin.Shadow;
@@ -145,21 +152,27 @@ target = "Lnet/minecraft/client/renderer/LevelRenderer;addMainPass(Lcom/mojang/b
         @Shadow @Final private LevelTargetBundle targets;
 
         @Inject(method = "<init>", at = @At("RETURN"))
-        private void addRenderers(Minecraft minecraft, EntityRenderDispatcher entityRenderDispatcher, BlockEntityRenderDispatcher blockEntityRenderDispatcher, RenderBuffers renderBuffers, CallbackInfo ci)
+        private void addRenderers(Minecraft minecraft, EntityRenderDispatcher entityRenderDispatcher, BlockEntityRenderDispatcher blockEntityRenderDispatcher, RenderBuffers renderBuffers, LevelRenderState levelRenderState, FeatureRenderDispatcher featureRenderDispatcher, CallbackInfo ci)
         {
             CarpetClient.shapes = new ShapesRenderer(minecraft);
         }
 
-        // 1.21.8: addParticlesPass RETURN callback now includes an extra GpuBufferSlice parameter in the injected signature
-        @Inject(method = "addParticlesPass", at = @At("RETURN"))
-        private void renderScarpetThingsLate(FrameGraphBuilder frameGraphBuilder, Camera camera, float f, com.mojang.blaze3d.buffers.GpuBufferSlice unused, CallbackInfo ci)
+        // 1.21.11 hands the frame graph builder to the pass adders, so the shapes pass is added
+        // from renderLevel right after the particles pass instead of from inside one of them.
+        @Inject(method = "renderLevel", at = @At(
+                value = "INVOKE",
+                target = "Lnet/minecraft/client/renderer/LevelRenderer;addParticlesPass(Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V",
+                shift = At.Shift.AFTER
+        ))
+        private void renderScarpetThingsLate(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, Camera camera, Matrix4f modelViewMatrix, Matrix4f projectionMatrix, Matrix4f frustumMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, CallbackInfo ci, @Local FrameGraphBuilder frameGraphBuilder)
         {
             // in normal circumstances we want to render shapes at the very end so it appears correctly behind stuff.
             if (CarpetClient.shapes != null)
             {
                 FramePass pass = frameGraphBuilder.addPass("scarpet_shapes");
                 targets.main = pass.readsAndWrites(targets.main);
-                pass.executes(() -> CarpetClient.shapes.render(null, camera, f));
+                float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
+                pass.executes(() -> CarpetClient.shapes.render(modelViewMatrix, camera, partialTick));
             }
         }
     }
