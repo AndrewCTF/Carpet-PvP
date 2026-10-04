@@ -652,7 +652,7 @@ pitch, the horizontal boost and how many ticks of it.
 | `autoarmor` | `true`/`false` | planned, not implemented |
 | `autoweapon` | `true`/`false` | planned, not implemented |
 | `autorepair` | `true`/`false` | planned, not implemented |
-| `combatstyle` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | stored, not used yet |
+| `combatstyle` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | which style fights; the sword (`sword`, `MELEE`) and the mace (`mace`) are implemented, the others fall back to the sword |
 | `prefersword` | `true`/`false` | stored, not used yet |
 | `shieldbreak` | `true`/`false` | stored, not used yet |
 | `critical` | `true`/`false` | chase with crit hits |
@@ -678,6 +678,30 @@ atkCd=0 | realism[miss=0,mistake=0,reaction=0] | faction=none
 
 Setting `faction` through `ai` also joins or leaves the faction registry, so `/player <name>
 faction info` stays right.
+
+### Mace style options
+
+The mace style reads a set of options of its own, set the same way as any other bot setting and
+per bot:
+
+```
+/player <name> ai mace.windcharge false
+```
+
+| Option | Values | What it does |
+|---|---|---|
+| `mace.windcharge` | `true`/`false` | the wind charge launch |
+| `mace.chain` | `true`/`false` | a second charge on the way down |
+| `mace.pearl` | `true`/`false` | the ender pearl entry |
+| `mace.elytra` | `true`/`false` | the elytra dive, which needs the wings on the chest |
+| `mace.stunslam` | `true`/`false` | the axe on a raised shield, then the smash inside the window |
+| `mace.enchants` | `true`/`false` | pick between the Density and the Breach mace by the target's armour |
+| `mace.bounce` | `true`/`false` | one more hit off the bounce a Wind Burst mace gives |
+| `mace.safeland` | `true`/`false` | the charge that keeps a launch that hit nothing from costing fall damage |
+| `mace.swap` | `true`/`false` | change item on the tick of the hit, where a measurement says it is worth anything |
+
+Every one of them is also gated by the difficulty preset: a beginner knows the launch and the safe
+landing, and each harder preset adds one more of them, up to the swap, which only an expert may try.
 
 What the brain does each tick, in order: survival reflexes, then the combat check, then the retreat
 check, then target selection, then the chase and the strafing. Turning `combat` off only stops a
