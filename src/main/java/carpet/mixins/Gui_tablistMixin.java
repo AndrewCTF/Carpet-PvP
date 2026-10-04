@@ -2,7 +2,7 @@ package carpet.mixins;
 
 import carpet.fakes.PlayerListHudInterface;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Gui;
+//~ if >=26.1 'client.gui.Gui' -> 'client.gui.Hud'
 import net.minecraft.client.gui.Hud;
 import net.minecraft.client.gui.components.PlayerTabOverlay;
 import org.spongepowered.asm.mixin.Final;
@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
+//~ if >=26.1 '@Mixin(Gui.class)' -> '@Mixin(Hud.class)'
 @Mixin(Hud.class)
 public abstract class Gui_tablistMixin
 {
@@ -20,7 +21,8 @@ public abstract class Gui_tablistMixin
 
     @Shadow @Final private PlayerTabOverlay tabList;
 
-    @Redirect(method = "renderTabList", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;isLocalServer()Z"))
+    //~ if <26.1 'extractTabList' -> 'renderTabList'
+    @Redirect(method = "extractTabList", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;isLocalServer()Z"))
     private boolean onDraw(Minecraft minecraftClient)
     {
         return this.minecraft.isLocalServer() && !((PlayerListHudInterface) tabList).hasFooterOrHeader();

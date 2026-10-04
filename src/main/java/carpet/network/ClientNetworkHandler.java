@@ -6,6 +6,7 @@ import carpet.CarpetSettings;
 import carpet.api.settings.CarpetRule;
 import carpet.api.settings.InvalidRuleValueException;
 import carpet.api.settings.SettingsManager;
+import carpet.network.payload.SwordBlockRequestPayload;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,6 +17,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.world.InteractionHand;
 
 public class ClientNetworkHandler
 {
@@ -145,6 +147,14 @@ public class ClientNetworkHandler
         outer.put("clientCommand", tag);
         CarpetClient.getPlayer().connection.send(new ServerboundCustomPayloadPacket(
                 new CarpetClient.CarpetPayload(outer)
+        ));
+    }
+
+    /** Asks the server to open the sword block window, the way pressing use with a sword does on the server. */
+    public static void swordBlockRequest(InteractionHand hand)
+    {
+        CarpetClient.getPlayer().connection.send(new ServerboundCustomPayloadPacket(
+                new SwordBlockRequestPayload(hand)
         ));
     }
 }

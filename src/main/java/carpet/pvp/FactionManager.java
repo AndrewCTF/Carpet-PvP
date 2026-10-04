@@ -1,9 +1,12 @@
 package carpet.pvp;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -55,6 +58,23 @@ public final class FactionManager
         membership.remove(member);
     }
 
+    /**
+     * Makes the registry agree with a member's configured faction, which may be none at all: a member with a
+     * faction is put in it, and one without is taken out of whatever it was in.
+     */
+    public static void sync(UUID member, String faction)
+    {
+        if (faction == null)
+        {
+            leave(member);
+        }
+        else
+        {
+            create(faction);
+            join(faction, member);
+        }
+    }
+
     public static String factionOf(UUID member)
     {
         return membership.get(member);
@@ -102,6 +122,34 @@ public final class FactionManager
         long members = membership.values().stream().filter(f -> f.equals(name)).count();
         Set<String> al = allies.getOrDefault(name, Set.of());
         return "Faction '" + name + "': " + members + " member(s), allies=" + (al.isEmpty() ? "none" : al);
+    }
+
+    /**
+     * Everything the registry holds, in the shape {@link FactionStore} writes it in, so that the
+     * factions of a server survive a restart.
+     */
+    public static FactionStore.Snapshot snapshot()
+    {
+        Map<String, List<String>> friends = new TreeMap<>();
+        allies.forEach((faction, set) -> friends.put(faction, new ArrayList<>(set)));
+        return new FactionStore.Snapshot(new ArrayList<>(factions), new HashMap<>(membership), friends);
+    }
+
+    /** Puts the registry back to what a snapshot held. */
+    public static void restore(FactionStore.Snapshot snapshot)
+    {
+        factions.clear();
+        membership.clear();
+        allies.clear();
+        factions.addAll(snapshot.factions());
+        membership.putAll(snapshot.members());
+        for (Map.Entry<String, List<String>> entry : snapshot.allies().entrySet())
+        {
+            if (!entry.getValue().isEmpty())
+            {
+                allies.put(entry.getKey(), new HashSet<>(entry.getValue()));
+            }
+        }
     }
 
     /** Clears all faction state (used on server shutdown / between sessions). */

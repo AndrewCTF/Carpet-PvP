@@ -58,9 +58,11 @@ jobs:
             fi
             echo "matrix=$(jq -cn --arg v "$REQUESTED" '[$v]')" >> "$GITHUB_OUTPUT"
           else
-            echo "matrix=$(ls versions | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+            # The directories that end in -paper are the Paper plugin; it goes out with the mod of the same
+            # Minecraft version, not as a release of its own
+            echo "matrix=$(ls versions | grep -v -- '-paper$' | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
           fi
-          echo "latest=$(ls versions | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
+          echo "latest=$(ls versions | grep -v -- '-paper$' | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
 
   release:
     needs: versions
@@ -104,11 +106,13 @@ jobs:
           MC_VERSION="${{ matrix.minecraft }}"
           echo "minecraft_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
 
-          # Read other properties; the Fabric API version is per Minecraft version
+          # Read other properties; the Fabric API version and the Minecraft range are per Minecraft version
           FABRIC_LOADER=$(grep -E '^\s*loader_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
           FABRIC_API=$(grep -E '^\s*fabric_version\s*=' "versions/$MC_VERSION/gradle.properties" | sed 's/.*=\s*//' | tr -d '[:space:]')
+          MC_DEPENDENCY=$(grep -E '^\s*minecraft_dependency\s*=' "versions/$MC_VERSION/gradle.properties" | sed 's/.*=\s*//' | tr -d '[:space:]')
           echo "fabric_loader=$FABRIC_LOADER" >> "$GITHUB_OUTPUT"
           echo "fabric_api=$FABRIC_API" >> "$GITHUB_OUTPUT"
+          echo "minecraft_dependency=$MC_DEPENDENCY" >> "$GITHUB_OUTPUT"
 
           # Build date stamp (yyMMdd)
           BUILD_DATE=$(date +%y%m%d)
@@ -140,6 +144,10 @@ jobs:
             echo "::error::Could not determine Minecraft version"
             exit 1
           fi
+          if [ -z "${{ steps.version.outputs.minecraft_dependency }}" ]; then
+            echo "::error::Could not determine the Minecraft range of versions/${{ matrix.minecraft }}/gradle.properties"
+            exit 1
+          fi
           echo "Version validation passed."
 
       - name: Check tag does not already exist
@@ -151,7 +159,11 @@ jobs:
           fi
 
       - name: Build
-        run: ./gradlew --no-daemon ":${{ matrix.minecraft }}:build" -x test
+        run: |
+          ./gradlew --no-daemon ":${{ matrix.minecraft }}:build" -x test
+          if [ -d "versions/${{ matrix.minecraft }}-paper" ]; then
+            ./gradlew --no-daemon ":${{ matrix.minecraft }}-paper:build" -x test
+          fi
 
       - name: Identify built artifacts
         id: artifacts
@@ -166,6 +178,13 @@ jobs:
             exit 1
           fi
 
+          # The jar carries the Minecraft version of its node in its own name, so the three releases
+          # can never be confused with each other
+          case "$(basename "$MAIN_JAR")" in
+            *"${{ matrix.minecraft }}"*) ;;
+            *) echo "::error::$(basename "$MAIN_JAR") is not a ${{ matrix.minecraft }} jar"; exit 1 ;;
+          esac
+
           echo "main_jar=$MAIN_JAR" >> "$GITHUB_OUTPUT"
           echo "main_jar_name=$(basename "$MAIN_JAR")" >> "$GITHUB_OUTPUT"
 
@@ -177,8 +196,22 @@ jobs:
             echo "has_sources=false" >> "$GITHUB_OUTPUT"
           fi
 
+          # The Paper plugin of the same Minecraft version, where this tree has one
+          PAPER_LIBS="versions/${{ matrix.minecraft }}-paper/build/libs"
+          PAPER_JAR=""
+          if [ -d "$PAPER_LIBS" ]; then
+            PAPER_JAR=$(find "$PAPER_LIBS" -name "*paper*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
+            if [ -z "$PAPER_JAR" ]; then
+              echo "::error::No Paper plugin jar found in $PAPER_LIBS"
+              exit 1
+            fi
+          fi
+          echo "paper_jar=$PAPER_JAR" >> "$GITHUB_OUTPUT"
+          echo "paper_jar_name=$(basename "$PAPER_JAR")" >> "$GITHUB_OUTPUT"
+
           echo "=== Artifacts ==="
           ls -lh "$LIBS"
+          [ -d "$PAPER_LIBS" ] && ls -lh "$PAPER_LIBS" || true
 
       - name: Generate release notes
         id: notes
@@ -191,7 +224,7 @@ jobs:
             echo "| Component | Version |"
             echo "|-----------|---------|"
             echo "| **Carpet PvP** | ${{ steps.version.outputs.mod_version }} |"
-            echo "| **Minecraft** | ${{ steps.version.outputs.minecraft_version }} |"
+            echo "| **Minecraft** | ${{ steps.version.outputs.minecraft_version }} (`${{ steps.version.outputs.minecraft_dependency }}`) |"
             echo "| **Fabric Loader** | ${{ steps.version.outputs.fabric_loader }} |"
             echo "| **Fabric API** | ${{ steps.version.outputs.fabric_api }} |"
             echo "| **Java** | ${{ steps.java.outputs.version }}+ |"
@@ -205,6 +238,10 @@ jobs:
             echo "1. Install [Fabric Loader](https://fabricmc.net/use/) (${{ steps.version.outputs.fabric_loader }}+) for Minecraft ${{ steps.version.outputs.minecraft_version }}"
             echo "2. Install [Fabric API](https://modrinth.com/mod/fabric-api) (${{ steps.version.outputs.fabric_api }}+)"
             echo "3. Place \`${{ steps.artifacts.outputs.main_jar_name }}\` in your \`mods\` folder"
+            if [ -n "${{ steps.artifacts.outputs.paper_jar_name }}" ]; then
+              echo ""
+              echo "On a Paper server, put \`${{ steps.artifacts.outputs.paper_jar_name }}\` in the \`plugins\` folder instead: it carries the bots without the rest of the mod."
+            fi
             echo ""
             echo "---"
             echo "*Built from [\`$(git rev-parse --short HEAD)\`](https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)) on $(date -u +"%Y-%m-%d %H:%M UTC")*"
@@ -225,6 +262,7 @@ jobs:
           files: |
             ${{ steps.artifacts.outputs.main_jar }}
             ${{ steps.artifacts.outputs.sources_jar }}
+            ${{ steps.artifacts.outputs.paper_jar }}
           fail_on_unmatched_files: false
 
       - name: Publish to Modrinth

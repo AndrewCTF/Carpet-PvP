@@ -1,0 +1,143 @@
+[
+  {
+    "id": "preset_wtap",
+    "name": "W-Tap",
+    "description": "Sprint, attack, release sprint, re-sprint",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "MOVE", "params": {"direction": "forward", "ticks": 3}},
+      {"type": "ATTACK"},
+      {"type": "SPRINT", "params": {"enabled": false}},
+      {"type": "DELAY", "params": {"ticks": 2}},
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "DELAY", "params": {"ticks": 6}}
+    ]}]
+  },
+  {
+    "id": "preset_blockhit",
+    "name": "Block Hit",
+    "description": "Attack, sword block, repeat (needs swordBlockHitting)",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "ATTACK"},
+      {"type": "SWORD_BLOCK", "params": {"ticks": 4}},
+      {"type": "DELAY", "params": {"ticks": 2}}
+    ]}]
+  },
+  {
+    "id": "preset_critchain",
+    "name": "Crit Chain",
+    "description": "Jump, falling critical attack, repeat",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "ATTACK_CRIT", "params": {"ticks": 10}},
+      {"type": "DELAY", "params": {"ticks": 12}}
+    ]}]
+  },
+  {
+    "id": "preset_circlestrafe",
+    "name": "Circle Strafe",
+    "description": "Strafe around the target while attacking",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "MOVE", "params": {"direction": "left", "ticks": 5}},
+      {"type": "ATTACK"},
+      {"type": "MOVE", "params": {"direction": "forward", "ticks": 3}},
+      {"type": "ATTACK"},
+      {"type": "MOVE", "params": {"direction": "right", "ticks": 5}},
+      {"type": "ATTACK"},
+      {"type": "MOVE", "params": {"direction": "forward", "ticks": 3}}
+    ]}]
+  },
+  {
+    "id": "preset_shieldbreak",
+    "name": "Shield Break",
+    "description": "Axe hit from slot 2 to disable the shield, then sword hits from slot 1",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "HOTBAR", "params": {"slot": 2}},
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "ATTACK"},
+      {"type": "DELAY", "params": {"ticks": 3}},
+      {"type": "HOTBAR", "params": {"slot": 1}},
+      {"type": "ATTACK"},
+      {"type": "DELAY", "params": {"ticks": 2}},
+      {"type": "ATTACK"},
+      {"type": "DELAY", "params": {"ticks": 2}},
+      {"type": "ATTACK"},
+      {"type": "DELAY", "params": {"ticks": 10}}
+    ]}]
+  },
+  {
+    "id": "preset_dummy",
+    "name": "Target Dummy",
+    "description": "Equips diamond armor and stands still",
+    "actions": [
+      {"type": "EQUIP_ARMOR", "params": {"armorSet": "diamond"}},
+      {"type": "LOOK_DIRECTION", "params": {"direction": "north"}}
+    ]
+  },
+  {
+    "id": "preset_combo",
+    "name": "Combo Practice",
+    "description": "W-tap, strafe and critical attacks combined",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "MOVE", "params": {"direction": "forward", "ticks": 3}},
+      {"type": "ATTACK_CRIT", "params": {"ticks": 10}},
+      {"type": "SPRINT", "params": {"enabled": false}},
+      {"type": "DELAY", "params": {"ticks": 1}},
+      {"type": "SPRINT", "params": {"enabled": true}},
+      {"type": "MOVE", "params": {"direction": "left", "ticks": 4}},
+      {"type": "ATTACK"},
+      {"type": "MOVE", "params": {"direction": "right", "ticks": 4}},
+      {"type": "ATTACK"},
+      {"type": "SWORD_BLOCK", "params": {"ticks": 3}},
+      {"type": "ATTACK"},
+      {"type": "DELAY", "params": {"ticks": 5}}
+    ]}]
+  },
+  {
+    "id": "preset_patrol_fight",
+    "name": "Patrol and Fight",
+    "description": "Walk a patrol; whatever hits the bot, it fights back and then carries on",
+    "actions": [
+      {"type": "GIVE_KIT", "params": {"kit": "sword"}},
+      {"type": "ON_EVENT",
+        "params": {"event": "when_hit"},
+        "children": [
+          {"type": "FIGHT", "params": {"targets": "bots", "timeout": 1200, "range": 24, "rangeTicks": 100}}
+        ]},
+      {"type": "FOREVER", "children": [
+        {"type": "PATROL", "params": {"x1": 0, "y1": 64, "z1": 0, "x2": 24, "y2": 64, "z2": 0, "loop": true, "ticks": 800}},
+        {"type": "DELAY", "params": {"ticks": 20}}
+      ]}
+    ]
+  },
+  {
+    "id": "preset_duel_rekit",
+    "name": "Duel then Re-Kit",
+    "description": "Fight the nearest bot until the duel is over, take a fresh kit and wait for the next opponent",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "GIVE_KIT", "params": {"kit": "sword"}},
+      {"type": "FIGHT", "params": {"targets": "bots", "timeout": 1800, "range": 32, "rangeTicks": 200}},
+      {"type": "STOP_MOVEMENT"},
+      {"type": "DELAY", "params": {"ticks": 40}}
+    ]}]
+  },
+  {
+    "id": "preset_retreat_low",
+    "name": "Retreat when Low",
+    "description": "Fight; below six health break off, run away and eat, then go back in",
+    "actions": [{"type": "FOREVER", "children": [
+      {"type": "GIVE_KIT", "params": {"kit": "sword"}},
+      {"type": "COMBAT_START", "params": {"targets": "players", "difficulty": "casual"}},
+      {"type": "WAIT_UNTIL",
+        "params": {"timeout": 1200},
+        "condition": {"type": "CONDITION_HEALTH", "params": {"operator": "<", "value": 6}}},
+      {"type": "COMBAT_STOP"},
+      {"type": "FLEE_FROM", "params": {"player": "", "distance": 24, "ticks": 60}},
+      {"type": "USE", "params": {"mode": "continuous", "ticks": 40}},
+      {"type": "STOP_MOVEMENT"},
+      {"type": "DELAY", "params": {"ticks": 20}}
+    ]}]
+  }
+]

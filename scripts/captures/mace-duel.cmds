@@ -1,0 +1,35 @@
+# A mace bot against a sword bot on a flat world. The camera stands back from the fight and looks at
+# the sword bot, because the mace bot spends much of the fight in the air above it.
+gamemode spectator Viewer
+time set noon
+weather clear
+bot spawn Alpha mace expert at 0.5 -60 0.5
+bot spawn Bravo sword expert at 9.5 -60 0.5
+tp Viewer 5.0 -55.0 -13.0 0 14
+sleep 5
+shot mace-duel-01-spawned
+bot duel Alpha Bravo
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-02
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-03
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-04
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-05
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-06
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-07
+sleep 1
+execute at Bravo run tp Viewer ~ ~5 ~-13 facing entity Bravo eyes
+shot mace-duel-08
+bot stats Alpha
+bot stats Bravo
+sleep 1

@@ -1,16 +1,14 @@
 package carpet.patches;
 
-import carpet.CarpetSettings;
+import net.minecraft.ChatFormatting;
 import com.mojang.authlib.GameProfile;
-import com.mojang.brigadier.ParseResults;
-import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
@@ -25,8 +23,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.players.ProfileResolver;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.stats.Stats;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.damagesource.DamageSource;
@@ -50,15 +46,17 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.util.Mth;
-import net.minecraft.world.item.component.Weapon;
-import carpet.fakes.ServerPlayerInterface;
-import carpet.utils.Messenger;
+import net.minecraft.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import carpet.helpers.EntityPlayerActionPack;
 import carpet.pvp.BotBrain;
 import carpet.pvp.BotPvpConfig;
+import carpet.pvp.BotSettings;
+import carpet.utils.DelayedTasks;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -67,11 +65,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.BlocksAttacks;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
@@ -81,10 +78,13 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 public class EntityPlayerMPFake extends ServerPlayer
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(EntityPlayerMPFake.class);
-    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private static final Set<String> spawning = new HashSet<>();
     private static final int DEFAULT_SHIELD_DISABLE_TICKS = 100;
     private static final double TICKS_PER_SECOND = 20.0D;
+    private static final Method DISABLE_BLOCKING = disableBlockingMethod(4);
+    private static final Method DISABLE_BLOCKING_WITH_ATTACKER = disableBlockingMethod(5);
+
+    private final EntityPlayerActionPack actionPack;
 
     public Runnable fixStartingPosition = () -> {};
     public boolean isAShadow;
@@ -94,8 +94,20 @@ public class EntityPlayerMPFake extends ServerPlayer
     // PvP combat-AI state (lazily initialised so it also covers shadow players).
     private BotPvpConfig pvpConfig;
     private BotBrain botBrain;
+    /** Knockback a hit handed us, waiting for the next tick to apply. See {@link #setPendingKnockback}. */
+    private Vec3 pendingKnockback;
+    /** What this player's velocity was before the hit being processed, to tell knockback from a repeat. */
+    private Vec3 velocityBeforeDamage;
+    /** True from a hit on this player until the motion packet that carries its knockback, or its next tick. */
+    private boolean knockbackDue;
     /** UUID of the most recent attacker, used by the combat-AI revenge logic. */
     public UUID lastAttackerUUID;
+    /**
+     * The game tick this fake player last died on, or {@link Long#MIN_VALUE} while it never has. A fake
+     * player has no death screen and no dead flag, and it is put back a tick later, so this is what lets
+     * whoever was fighting it see afterwards that the fight ended.
+     */
+    private long diedTick = Long.MIN_VALUE;
     /** Game-time tick at which {@link #lastAttackerUUID} last dealt damage. */
     public long lastAttackerTick;
 
@@ -104,6 +116,39 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         if (pvpConfig == null) pvpConfig = new BotPvpConfig();
         return pvpConfig;
+    }
+
+    /**
+     * A hit on a fake player leaves it with no knockback of its own: vanilla sends the victim the
+     * motion it was given and puts its velocity back, expecting a client to apply it. The fake
+     * packet listener catches that motion packet and hands it here, and the next tick turns it into
+     * real movement.
+     */
+    public void setPendingKnockback(Vec3 velocity)
+    {
+        pendingKnockback = velocity;
+    }
+
+    /** Remembers the velocity a hit is about to change, so the motion packet it sends can be read. */
+    public void noteDamage()
+    {
+        velocityBeforeDamage = getDeltaMovement();
+        knockbackDue = true;
+    }
+
+    /**
+     * Whether the given velocity is one a hit on this player produced, rather than the one it started from.
+     * Only the attacker's hit sends the victim its knockback and then puts the victim's velocity back, which
+     * is the one case there is anything to keep for the next tick. Every other motion packet a player is sent
+     * about itself repeats a velocity the server has already given it: a mace sends its own wielder one from
+     * inside the smash, before the Wind Burst that follows has thrown it, and applying that a tick late would
+     * take the burst away again.
+     */
+    public boolean isKnockback(Vec3 velocity)
+    {
+        boolean due = knockbackDue;
+        knockbackDue = false;
+        return due && (velocityBeforeDamage == null || !velocity.equals(velocityBeforeDamage));
     }
 
     /** The per-bot combat-AI driver, ticked each game tick from the action pack. */
@@ -149,72 +194,118 @@ public class EntityPlayerMPFake extends ServerPlayer
         return (int) Mth.clamp(disableTicks, 0L, Integer.MAX_VALUE);
     }
 
-    // Returns true if it was successful, false if couldn't spawn due to the player not existing in Mojang servers
+    // Returns true if the spawn was started, false if the name cannot be spawned at all. On an online mode
+    // server the profile is still coming, so the placement happens later, on the server thread.
+    /** The form other mods call: problems are reported to the server console. */
     public static boolean createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
     {
-        //prolly half of that crap is not necessary, but it works
+        return createFake(username, server, server.createCommandSourceStack(), pos, yaw, pitch, dimensionId, gamemode, flying);
+    }
+
+    public static boolean createFake(String username, MinecraftServer server, CommandSourceStack source, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
+    {
         ServerLevel worldIn = server.getLevel(dimensionId);
-        ProfileResolver profileResolver = server.services().profileResolver();
-        GameProfile gameprofile = profileResolver.fetchByName(username).orElse(null);
-        if (gameprofile == null)
+        if (!server.usesAuthentication())
         {
-            if (!CarpetSettings.allowSpawningOfflinePlayers)
-            {
-                return false;
-            } else {
-                gameprofile = new GameProfile(UUIDUtil.createOfflinePlayerUUID(username), username);
-            }
+            // Offline mode: the profile is built locally, so Mojang is never asked and the name stays as typed.
+            if (!BotSettings.allowSpawningOfflinePlayers) return false;
+            GameProfile profile = offlineProfile(username);
+            return canPlace(profile, server, source) && placeFake(profile, server, worldIn, pos, yaw, pitch, dimensionId, gamemode, flying);
         }
-        GameProfile finalGP = gameprofile;
 
-        // We need to mark this player as spawning so that we do not
-        // try to spawn another player with the name while the profile
-        // is being fetched - preventing multiple players spawning
-        String name = gameprofile.name();
-        spawning.add(name);
-
-        fetchGameProfile(server, name).whenCompleteAsync((p, t) -> {
+        // Mark the name as spawning so that we do not try to spawn another player with the name while
+        // the profile is being fetched - preventing multiple players spawning
+        spawning.add(username);
+        fetchGameProfile(server, username).whenCompleteAsync((p, t) -> {
             // Always remove the name, even if exception occurs
-            spawning.remove(name);
-            if (t != null)
+            spawning.remove(username);
+            GameProfile profile = p == null ? null : p.orElse(null);
+            if (profile == null)
             {
-                return;
+                if (!BotSettings.allowSpawningOfflinePlayers)
+                {
+                    source.sendSuccess(() -> Component.literal("Player " + username + " doesn't exist and cannot spawn in online mode. "
+                            + "Turn the server offline or the allowSpawningOfflinePlayers on to spawn non-existing players")
+                            .withStyle(ChatFormatting.RED), false);
+                    return;
+                }
+                profile = offlineProfile(username);
             }
-
-            GameProfile current = finalGP;
-            if (p.isPresent())
-            {
-                current = p.get();
-            }
-            EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, current, ClientInformation.createDefault(), false);
-            instance.fixStartingPosition = () -> instance.snapTo(pos.x, pos.y, pos.z, (float) yaw, (float) pitch);
-            server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), instance, new CommonListenerCookie(current, 0, instance.clientInformation(), false));
-            instance.teleportTo(worldIn, pos.x, pos.y, pos.z, Set.of(), (float) yaw, (float) pitch, true);
-            instance.setHealth(20.0F);
-            instance.unsetRemoved();
-            instance.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
-            // Always spawn fake players in survival by default.
-            instance.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
-            instance.getAbilities().flying = false;
-            instance.spawnPos = pos;
-            instance.spawnYaw = yaw;
-            server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);//instance.dimension);
-            server.getPlayerList().broadcastAll(ClientboundEntityPositionSyncPacket.of(instance), dimensionId);//instance.dimension);
-            //instance.world.getChunkManager(). updatePosition(instance);
-            instance.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f); // show all model layers (incl. capes)
-            
-            // Restore equipment state if available (for server restart scenarios)
-            instance.restoreEquipmentState();
-            
-            // Ensure equipment is synchronized to all clients
-            instance.syncAllEquipmentToClients();
+            if (!canPlace(profile, server, source)) return;
+            placeFake(profile, server, worldIn, pos, yaw, pitch, dimensionId, gamemode, flying);
         }, server);
         return true;
     }
 
+    private static GameProfile offlineProfile(String username)
+    {
+        return new GameProfile(UUIDUtil.createOfflinePlayerUUID(username), username);
+    }
+
+    /** The spawn checks that need the resolved profile: bans and the whitelist. */
+    private static boolean canPlace(GameProfile profile, MinecraftServer server, CommandSourceStack source)
+    {
+        PlayerList players = server.getPlayerList();
+        NameAndId nameAndId = new NameAndId(profile.id(), profile.name());
+        if (players.getBans().isBanned(nameAndId))
+        {
+            source.sendSuccess(() -> Component.literal("Player " + nameAndId.name() + " is banned on this server")
+                    .withStyle(ChatFormatting.RED), false);
+            return false;
+        }
+        if (players.isUsingWhitelist() && players.isWhiteListed(nameAndId) && !Commands.LEVEL_GAMEMASTERS.check(source.permissions()))
+        {
+            source.sendSuccess(() -> Component.literal("Whitelisted players can only be spawned by operators")
+                    .withStyle(ChatFormatting.RED), false);
+            return false;
+        }
+        return true;
+    }
+
+    /** Places the fake player in the world. Must run on the server thread. */
+    private static boolean placeFake(GameProfile profile, MinecraftServer server, ServerLevel worldIn, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
+    {
+        EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, profile, ClientInformation.createDefault(), false);
+        instance.fixStartingPosition = () -> instance.snapTo(pos.x, pos.y, pos.z, (float) yaw, (float) pitch);
+        join(server, instance, profile, false);
+        instance.teleportTo(worldIn, pos.x, pos.y, pos.z, Set.of(), (float) yaw, (float) pitch, true);
+        instance.setHealth(20.0F);
+        instance.unsetRemoved();
+        instance.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
+        instance.gameMode.changeGameModeForPlayer(gamemode);
+        instance.getAbilities().flying = flying;
+        instance.spawnPos = pos;
+        instance.spawnYaw = yaw;
+        server.getPlayerList().broadcastAll(new ClientboundRotateHeadPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);//instance.dimension);
+        server.getPlayerList().broadcastAll(ClientboundEntityPositionSyncPacket.of(instance), dimensionId);//instance.dimension);
+        //instance.world.getChunkManager(). updatePosition(instance);
+        instance.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f); // show all model layers (incl. capes)
+
+        // Restore equipment state if available (for server restart scenarios)
+        instance.restoreEquipmentState();
+
+        // Ensure equipment is synchronized to all clients
+        instance.syncAllEquipmentToClients();
+        return true;
+    }
+
+    /**
+     * Puts the fake player into the player list and swaps the vanilla packet listener the join
+     * created for the fake one, which drops the packets a client would have handled. The listener's
+     * constructor is what assigns {@code player.connection}, so building it afterwards is enough.
+     */
+    private static void join(MinecraftServer server, EntityPlayerMPFake fake, GameProfile profile, boolean transferred)
+    {
+        FakeClientConnection connection = new FakeClientConnection(PacketFlow.SERVERBOUND);
+        CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, transferred);
+        server.getPlayerList().placeNewPlayer(connection, fake, cookie);
+        new NetHandlerPlayServerFake(server, connection, fake, cookie);
+    }
+
     private static CompletableFuture<Optional<GameProfile>> fetchGameProfile(MinecraftServer server, String name) {
         ProfileResolver resolver = server.services().profileResolver();
-        return CompletableFuture.supplyAsync(() -> resolver.fetchByName(name), server);
+        // The lookup blocks on the network, so it goes to the vanilla background pool instead of the server thread.
+        return CompletableFuture.supplyAsync(() -> resolver.fetchByName(name), Util.nonCriticalIoPool());
     }
 
     public static EntityPlayerMPFake createShadow(MinecraftServer server, ServerPlayer player)
@@ -225,12 +316,13 @@ public class EntityPlayerMPFake extends ServerPlayer
         GameProfile gameprofile = player.getGameProfile();
         EntityPlayerMPFake playerShadow = new EntityPlayerMPFake(server, worldIn, gameprofile, player.clientInformation(), true);
         playerShadow.setChatSession(player.getChatSession());
-        server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
+        join(server, playerShadow, gameprofile, true);
 
         playerShadow.setHealth(player.getHealth());
         playerShadow.connection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         playerShadow.gameMode.changeGameModeForPlayer(player.gameMode.getGameModeForPlayer());
-        ((ServerPlayerInterface) playerShadow).getActionPack().copyFrom(((ServerPlayerInterface) player).getActionPack());
+        // The player's own action pack comes from Carpet's mixin, which only exists on Fabric, so the
+        // caller hands it over once the shadow is in place.
         // this might create problems if a player logs back in...
         playerShadow.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(0.6F);
         playerShadow.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, player.getEntityData().get(DATA_PLAYER_MODE_CUSTOMISATION));
@@ -258,6 +350,12 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         return spawning.contains(username);
     }
+
+    /** Forgets the names whose profile lookup never came back, so they can be spawned again. */
+    public static void forgetSpawningPlayers()
+    {
+        spawning.clear();
+    }
     
     // Note: Equipment persistence across server restarts is not implemented
     // Equipment will be preserved during dimension changes and respawns within the same session
@@ -266,6 +364,17 @@ public class EntityPlayerMPFake extends ServerPlayer
     {
         super(server, worldIn, profile, cli);
         isAShadow = shadow;
+        actionPack = new EntityPlayerActionPack(this);
+    }
+
+    /**
+     * The fake player's own action pack. A real player gets one from Carpet's mixin into
+     * {@link ServerPlayer}; a fake player owns it outright, so the same code works where there is no
+     * mixin to add it. It is ticked from {@link #tick()}.
+     */
+    public EntityPlayerActionPack getActionPack()
+    {
+        return actionPack;
     }
 
     @Override
@@ -493,33 +602,75 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     @Override
     public void kill(ServerLevel level) {
-        kill(Messenger.s("Killed"));
-        DamageSource dmgSource = level.damageSources().fellOutOfWorld();
-        die(dmgSource);
+        kill(Component.literal("Killed"));
     }
 
     public void kill(Component reason) {
         shakeOff();
 
-        if (reason.getContents() instanceof TranslatableContents text && text.getKey().equals("multiplayer.disconnect.duplicate_login")) {
-            this.connection.onDisconnect(new DisconnectionDetails(reason));
+        // A fake player has no client that could have been shown a death screen, so being killed takes it
+        // off the server the same way a disconnect does. Dying in the world is a different thing and goes
+        // through die(), which respawns the bot.
+        this.fakePlayerDisconnect(reason);
+    }
+
+    /**
+     * Removes every fake player when the server stops. Vanilla's shutdown asks each connection to
+     * disconnect and then waits until no chunk tickets are left; a fake connection ignores that
+     * request, so a fake player left in a level keeps its tickets and the server never stops.
+     */
+    public static void disconnectAll(MinecraftServer server) {
+        Component reason = Component.translatable("multiplayer.disconnect.server_shutdown");
+        for (ServerPlayer player : List.copyOf(server.getPlayerList().getPlayers())) {
+            if (player instanceof EntityPlayerMPFake fake) {
+                fake.shakeOff();
+                fake.connection.onDisconnect(new DisconnectionDetails(reason));
+            }
         }
     }
 
     public void fakePlayerDisconnect(Component reason) {
-        this.level().getServer().schedule(new TickTask(this.level().getServer().getTickCount(), () -> {
-            this.connection.onDisconnect(new DisconnectionDetails(reason));
+        MinecraftServer server = this.level().getServer();
+        server.schedule(new TickTask(server.getTickCount(), () -> {
+            // The server removes fake players itself when it stops; do not disconnect twice.
+            if (server.getPlayerList().getPlayer(this.getUUID()) == this) {
+                this.connection.onDisconnect(new DisconnectionDetails(reason));
+            }
         }));
+    }
 
+    /**
+     * A real player's position is whatever its client last reported, so the server leaves the counting of
+     * its fall distance to the client's movement packets. A fake player has no client and nothing else
+     * counts it, so the server is the authority for it and the game builds the counter itself. Paper
+     * asks this question before counting, and without the answer the counter stays at zero: a bot dropped
+     * off a ledge read no fall distance at all and took no fall damage.
+     */
+    @Override
+    public boolean isClientAuthoritative()
+    {
+        return false;
     }
 
     @Override
     public void tick() {
+        if (pendingKnockback != null)
+        {
+            setDeltaMovement(pendingKnockback);
+            pendingKnockback = null;
+        }
+        knockbackDue = false;
+        actionPack.onUpdate();
         if (this.level().getServer().getTickCount() % 10 == 0)
         {
             this.connection.resetPosition();
             ((net.minecraft.server.level.ServerLevel)this.level()).getChunkSource().move(this);
         }
+        // A real player's known movement is the distance its client last reported it had moved, which is where
+        // the game reads a player's speed from: a spear reads the closing speed of two fighters out of it. A
+        // fake player has no client, so it reports the distance the server moved it by this tick. Not its
+        // velocity: that already has the tick's friction taken off and reads a sprint as a little over half.
+        Vec3 before = position();
         try
         {
             super.tick();
@@ -530,8 +681,19 @@ public class EntityPlayerMPFake extends ServerPlayer
             // happens with that paper port thingy - not sure what that would fix, but hey
             // the game not gonna crash violently.
         }
+        setKnownMovement(position().subtract(before));
 
 
+    }
+
+    /** Vanilla keeps the shield's cooldown method, Paper's copy of it takes the attacker as well. */
+    private static Method disableBlockingMethod(int parameterCount)
+    {
+        for (Method method : BlocksAttacks.class.getMethods())
+        {
+            if (method.getName().equals("disable") && method.getParameterCount() == parameterCount) return method;
+        }
+        return null;
     }
 
     private void shakeOff()
@@ -555,18 +717,24 @@ public class EntityPlayerMPFake extends ServerPlayer
         this.setDeltaMovement(0, 0, 0);
         this.setHealth(1.0F);
         this.setPose(Pose.STANDING);
+        this.diedTick = this.level().getGameTime();
 
         this.level().getScoreboard().forAllObjectives(ObjectiveCriteria.DEATH_COUNT, this, ScoreAccess::increment);
 
-        if (CarpetSettings.fakePlayerDropInventoryOnDeath) {
-            this.dropAllDeathLoot(this.level(), cause);
+        if (BotSettings.fakePlayerDropInventoryOnDeath) {
+            this.dropFakePlayerLoot(this.level(), cause);
         }
 
         // Keep fake players in-world and immediately schedule a respawn.
-        EntityPlayerMPFake.executor.schedule(this::respawn, 1L, TimeUnit.MILLISECONDS);
+        DelayedTasks.scheduleNextTick(this.level().getServer(), this::respawn);
     }
 
-    protected void dropAllDeathLoot(ServerLevel serverLevel, DamageSource damageSource) {
+    /**
+     * What a fake player drops when it dies and the rule asks for it. Not an override: Paper declares
+     * its own {@code dropAllDeathLoot} that returns an event, so a method of that name here would be an
+     * override of something that does not return what this one does.
+     */
+    private void dropFakePlayerLoot(ServerLevel serverLevel, DamageSource damageSource) {
         boolean keepInventory = serverLevel.getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY);
 
         if (!keepInventory) {
@@ -630,21 +798,27 @@ public class EntityPlayerMPFake extends ServerPlayer
             LOGGER.debug("Respawning fake player {}", getName().getString());
             resetDeathStateForRespawn();
             this.teleportTo(spawnPos.x, spawnPos.y, spawnPos.z);
-            
+
             // Ensure equipment synchronization after respawn
-            executor.schedule(() -> {
+            DelayedTasks.schedule(this.level().getServer(), 1, () -> {
                 try {
                     syncAllEquipmentToClients();
                     LOGGER.debug("Equipment synchronized after respawn for fake player {}", getName().getString());
                 } catch (Exception e) {
-                    LOGGER.error("Failed to sync equipment after respawn for fake player {}: {}", 
+                    LOGGER.error("Failed to sync equipment after respawn for fake player {}: {}",
                         getName().getString(), e.getMessage(), e);
                 }
-            }, 50, TimeUnit.MILLISECONDS);
-            
+            });
+
         } catch (Exception e) {
             LOGGER.error("Error during respawn for fake player {}: {}", getName().getString(), e.getMessage(), e);
         }
+    }
+
+    /** The game tick this fake player last died on, or {@link Long#MIN_VALUE} while it never has. */
+    public long diedTick()
+    {
+        return diedTick;
     }
 
     /**
@@ -690,12 +864,12 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     @Override
     public boolean allowsListing() {
-        return CarpetSettings.allowListingFakePlayers;
+        return BotSettings.allowListingFakePlayers;
     }
 
     @Override
     protected void checkFallDamage(double y, boolean onGround, BlockState state, BlockPos pos) {
-        if (!CarpetSettings.fakePlayerFallDamage) {
+        if (!BotSettings.fakePlayerFallDamage) {
             return;
         }
         super.checkFallDamage(y, onGround, state, pos);
@@ -725,9 +899,10 @@ public class EntityPlayerMPFake extends ServerPlayer
             }
             
             // Restore equipment state after teleportation if this is still the same player instance
+            MinecraftServer server = this.level().getServer();
             if (result == this) {
                 // Schedule equipment restoration to happen after teleportation is complete
-                executor.schedule(() -> {
+                DelayedTasks.schedule(server, 2, () -> {
                     try {
                         restoreEquipmentState();
                         LOGGER.debug("Equipment restoration completed after dimension teleport for fake player {}", 
@@ -736,10 +911,10 @@ public class EntityPlayerMPFake extends ServerPlayer
                         LOGGER.error("Failed to restore equipment after dimension teleport for fake player {}: {}", 
                             getName().getString(), e.getMessage(), e);
                     }
-                }, 100, TimeUnit.MILLISECONDS);
+                });
             } else if (result instanceof EntityPlayerMPFake fakeResult) {
                 // If a new instance was created, transfer equipment state
-                executor.schedule(() -> {
+                DelayedTasks.schedule(server, 2, () -> {
                     try {
                         fakeResult.restoreEquipmentState();
                         LOGGER.debug("Equipment transferred to new instance after dimension teleport for fake player {}", 
@@ -748,7 +923,7 @@ public class EntityPlayerMPFake extends ServerPlayer
                         LOGGER.error("Failed to transfer equipment to new instance after dimension teleport for fake player {}: {}", 
                             getName().getString(), e.getMessage(), e);
                     }
-                }, 100, TimeUnit.MILLISECONDS);
+                });
             }
             
             return result;
@@ -764,60 +939,16 @@ public class EntityPlayerMPFake extends ServerPlayer
     public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float f) {
         // Record the attacker so the combat-AI revenge logic can retaliate.
         if (f > 0.0f && source.getEntity() instanceof LivingEntity attacker && attacker != this) {
+            noteDamage();
             this.lastAttackerUUID = attacker.getUUID();
             this.lastAttackerTick = serverLevel.getGameTime();
         }
-        // In 1.21+, directional blocking is handled by applyItemBlocking (uses BLOCKS_ATTACKS component).
-        if (f > 0.0f && this.isBlocking()) {
-            float blockedDamage = this.applyItemBlocking(serverLevel, source, f);
-            if (blockedDamage <= 0.0f) return super.hurtServer(serverLevel, source, f);
-
-            ItemStack stack = this.getItemBlockingWith();
-            float weaponDisableSeconds = 0.0F;
-            if (source.getEntity() instanceof LivingEntity attacker)
-            {
-                Weapon weapon = attacker.getMainHandItem().get(DataComponents.WEAPON);
-                if (weapon != null)
-                {
-                    weaponDisableSeconds = weapon.disableBlockingForSeconds();
-                }
-            }
-            boolean canDisable = weaponDisableSeconds > 0.0F;
-            if(canDisable){
-                this.playSound(SoundEvents.SHIELD_BREAK.value(), 0.8F, 0.8F + this.level().getRandom().nextFloat() * 0.4F);
-                this.stopUsingItem();
-                int disableTicks;
-                if (this.hasDisableBlockingForSecondsOverride())
-                {
-                    disableTicks = this.getDisableBlockingTicks();
-                }
-                else
-                {
-                    disableTicks = Math.round(weaponDisableSeconds * 20.0F);
-                }
-                if (disableTicks > 0)
-                {
-                    this.getCooldowns().addCooldown(stack, disableTicks);
-                }
-                if(!CarpetSettings.shieldStunning) {
-                    //~ if >=26.3 'this.invulnerableTime = 20' -> 'this.setInvulnerableTime(20)'
-                    this.setInvulnerableTime(20);
-                }
-                String ign = this.getGameProfile().name();
-                MinecraftServer srv = this.level().getServer();
-                CommandSourceStack commandSource = srv.createCommandSourceStack().withSuppressedOutput();
-                ParseResults<CommandSourceStack> parseResults
-                        = srv.getCommands().getDispatcher().parse(String.format("function practicebot:shielddisable", ign), commandSource);
-                srv.getCommands().performCommand(parseResults, "");
-            } else {
-                this.playSound(SoundEvents.SHIELD_BLOCK.value(), 1.0F, 0.8F + this.level().getRandom().nextFloat() * 0.4F);
-            }
-            CriteriaTriggers.ENTITY_HURT_PLAYER.trigger((ServerPlayer)this, source, f, 0, true);
-            if(blockedDamage < 3.4028235E37F){
-                ((ServerPlayer)this).awardStat(Stats.DAMAGE_BLOCKED_BY_SHIELD, Math.round(blockedDamage * 10.0F));
-            }
-            return false;
-        }
+        // Everything else is the game's: a blocking item is applied by LivingEntity.hurtServer through
+        // applyItemBlocking, which takes what the item blocked off the damage and carries on with the
+        // rest, the hurt time, the knockback and the sounds that go with it, exactly as it does for a real
+        // player. The rules this mod adds on purpose are elsewhere and apply to fake and real players
+        // alike: swordBlockHitting in Player_swordBlockStateMixin, and shieldStunning, which clears the
+        // invulnerability a disabled shield leaves behind on the next tick (Player_shieldStunMixin).
         return super.hurtServer(serverLevel, source, f);
     }
 
@@ -825,9 +956,70 @@ public class EntityPlayerMPFake extends ServerPlayer
         return super.applyItemBlocking(serverLevel, damageSource, f);
     }
 
-    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/) {
-        // Commenting out original LivingEntity shield blocking knockback code that
-        // caused the fake player to jump forward when holding a shield that was hit.
-        //this.knockback(0.5, livingEntity.getX() - this.getX(), livingEntity.getZ() - this.getZ());
+    // A blocked hit knocks no fake player back (see blockedByItem), so the blocking item is disabled
+    // here instead: with the vanilla duration of the weapon that hit, or with the bot's own duration.
+//? if <26.1 {
+/*    @Override
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity)
+    {
+*///?} else {
+    @Override
+    protected void blockUsingItem(ServerLevel serverLevel, LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/)
+    {
+//?}
+        if (!this.hasDisableBlockingForSecondsOverride())
+        {
+//? if <26.1 {
+/*            super.blockUsingItem(serverLevel, livingEntity);
+*///?} else {
+            super.blockUsingItem(serverLevel, livingEntity, damageSource, f/*? if >=26.3 {*/, fullyBlocked/*?}*/);
+//?}
+            return;
+        }
+        ItemStack blocking = this.getItemBlockingWith();
+        BlocksAttacks blocksAttacks = blocking == null ? null : blocking.get(DataComponents.BLOCKS_ATTACKS);
+        if (blocksAttacks == null || livingEntity.getSecondsToDisableBlocking() <= 0.0F) return;
+        if (this.disableBlockingForSeconds <= 0.0F)
+        {
+            // Asked for no cooldown, but the hit still breaks the block.
+            this.stopUsingItem();
+            return;
+        }
+        disableBlocking(serverLevel, livingEntity, blocksAttacks, blocking);
     }
+
+    /**
+     * Turns the fake player's shield off for as long as its own rule says. Paper's copy of this
+     * method takes the attacker as well, so the call goes through whichever overload the server has.
+     */
+    private void disableBlocking(ServerLevel serverLevel, LivingEntity attacker, BlocksAttacks blocksAttacks, ItemStack blocking)
+    {
+        float seconds = (float) this.disableBlockingForSeconds;
+        try
+        {
+            if (DISABLE_BLOCKING_WITH_ATTACKER != null)
+            {
+                DISABLE_BLOCKING_WITH_ATTACKER.invoke(blocksAttacks, serverLevel, this, seconds, blocking, attacker);
+            }
+            else
+            {
+                DISABLE_BLOCKING.invoke(blocksAttacks, serverLevel, this, seconds, blocking);
+            }
+        }
+        catch (ReflectiveOperationException e)
+        {
+            throw new IllegalStateException("Could not put the shield on cooldown", e);
+        }
+    }
+
+    // A blocked hit used to knock the fake player forward when it held a raised shield, which is not
+    // what a client sees. Only the knockback is dropped: blockUsingItem still disables blocking.
+    @Override
+//? if <26.1 {
+/*    protected void blockedByItem(LivingEntity livingEntity) {
+    }
+*///?} else {
+    protected void blockedByItem(LivingEntity livingEntity, DamageSource damageSource, float f/*? if >=26.3 {*/, boolean fullyBlocked/*?}*/) {
+    }
+//?}
 }

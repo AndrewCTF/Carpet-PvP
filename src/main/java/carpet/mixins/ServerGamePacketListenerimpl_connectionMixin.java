@@ -2,6 +2,8 @@ package carpet.mixins;
 
 import carpet.network.CarpetClient;
 import carpet.network.ServerNetworkHandler;
+import carpet.network.payload.SwordBlockRequestPayload;
+import carpet.pvp.PvpInitializer;
 import net.minecraft.network.protocol.PacketUtils;
 import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ServerGamePacketListener;
@@ -28,6 +30,11 @@ public class ServerGamePacketListenerimpl_connectionMixin
             // thread safe, and also allows for client commands to be executed
             PacketUtils.ensureRunningOnSameThread(serverboundCustomPayloadPacket, (ServerGamePacketListener) this, player.level());
             ServerNetworkHandler.onClientData(player, cpp.data());
+            ci.cancel();
+        }
+        if (serverboundCustomPayloadPacket.payload() instanceof SwordBlockRequestPayload request) {
+            PacketUtils.ensureRunningOnSameThread(serverboundCustomPayloadPacket, (ServerGamePacketListener) this, player.level());
+            PvpInitializer.startSwordBlock(player, request.hand());
             ci.cancel();
         }
     }

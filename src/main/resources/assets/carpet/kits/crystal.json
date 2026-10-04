@@ -1,0 +1,22 @@
+{
+  "name": "crystal",
+  "items": [
+    { "item": "minecraft:netherite_sword", "slot": 0, "enchantments": [ { "id": "minecraft:sharpness", "level": 4 } ] },
+    { "item": "minecraft:end_crystal", "count": 8, "slot": 1 },
+    { "item": "minecraft:obsidian", "count": 16, "slot": 2 },
+    { "item": "minecraft:respawn_anchor", "count": 16, "slot": 3 },
+    { "item": "minecraft:glowstone", "count": 16, "slot": 4 },
+    { "item": "minecraft:ender_pearl", "count": 3, "slot": 5 },
+    { "item": "minecraft:golden_apple", "count": 4, "slot": 6 },
+    { "item": "minecraft:experience_bottle", "count": 16, "slot": 7 },
+    { "item": "minecraft:netherite_pickaxe", "slot": 8, "enchantments": [ { "id": "minecraft:fortune", "level": 3 } ] },
+    { "item": "minecraft:totem_of_undying", "count": 1, "slot": 9 },
+    { "item": "minecraft:totem_of_undying", "count": 1, "slot": 10 },
+    { "item": "minecraft:totem_of_undying", "count": 1, "slot": 11 },
+    { "item": "minecraft:netherite_helmet", "slot": "head", "enchantments": [ { "id": "minecraft:blast_protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_chestplate", "slot": "chest", "enchantments": [ { "id": "minecraft:blast_protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_leggings", "slot": "legs", "enchantments": [ { "id": "minecraft:blast_protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:netherite_boots", "slot": "feet", "enchantments": [ { "id": "minecraft:protection", "level": 4 }, { "id": "minecraft:unbreaking", "level": 3 } ] },
+    { "item": "minecraft:totem_of_undying", "count": 1, "slot": "offhand" }
+  ]
+}

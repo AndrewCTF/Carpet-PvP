@@ -1,0 +1,28 @@
+# Two sword bots duel on a flat world, one expert and one average. The camera is moved next to the
+# fight before every capture because the bots do not stay where they started.
+gamerule spawn_mobs false
+kill @e[type=!player]
+gamemode spectator Viewer
+time set noon
+weather clear
+bot spawn Expert sword expert at 0.5 -60 0.5
+bot spawn Average sword average at 10.5 -60 0.5
+tp Viewer 5.5 -57.5 -7.5 0 18
+sleep 5
+shot sword-duel-01-spawned
+bot duel Expert Average
+sleep 4
+execute at Expert run tp Viewer ~4 ~2.5 ~-5 facing entity Expert eyes
+sleep 1
+shot sword-duel-02-fighting
+sleep 2
+execute at Expert run tp Viewer ~4 ~2.5 ~-5 facing entity Expert eyes
+sleep 1
+shot sword-duel-03-fighting
+sleep 2
+execute at Average run tp Viewer ~-4 ~2.5 ~-5 facing entity Average eyes
+sleep 1
+shot sword-duel-04-fighting
+bot stats Expert
+bot stats Average
+sleep 1

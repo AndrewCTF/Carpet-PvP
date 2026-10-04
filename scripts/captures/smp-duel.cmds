@@ -1,0 +1,29 @@
+# Two smp bots duel on a flat world. The camera is moved next to the fight before every capture.
+gamemode spectator Viewer
+time set noon
+weather clear
+bot spawn Alpha smp expert at 0.5 -60 0.5
+bot spawn Bravo smp skilled at 9.5 -60 0.5
+tp Viewer 5.0 -57.5 -7.5 0 18
+sleep 5
+shot smp-duel-01-spawned
+bot duel Alpha Bravo
+sleep 5
+execute at Alpha run tp Viewer ~3.5 ~2.5 ~-5 facing entity Alpha eyes
+sleep 1
+shot smp-duel-02
+sleep 3
+execute at Alpha run tp Viewer ~3.5 ~2.5 ~-5 facing entity Alpha eyes
+sleep 1
+shot smp-duel-03
+sleep 3
+execute at Bravo run tp Viewer ~-3.5 ~2.5 ~-5 facing entity Bravo eyes
+sleep 1
+shot smp-duel-04
+sleep 4
+execute at Alpha run tp Viewer ~3.5 ~3 ~-6 facing entity Alpha eyes
+sleep 1
+shot smp-duel-05
+bot stats Alpha
+bot stats Bravo
+sleep 1

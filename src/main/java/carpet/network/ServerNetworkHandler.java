@@ -5,6 +5,7 @@ import carpet.CarpetSettings;
 import carpet.api.settings.CarpetRule;
 import carpet.api.settings.RuleHelper;
 import carpet.fakes.ServerGamePacketListenerImplInterface;
+import carpet.network.payload.SwordBlockPayload;
 import carpet.script.utils.SnoopyCommandSource;
 
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 
 public class ServerNetworkHandler
 {
@@ -66,6 +68,23 @@ public class ServerNetworkHandler
         DataBuilder data = DataBuilder.create(playerEntity.level().getServer()); // tickrate related settings are sent on world change
         CarpetServer.forEachManager(sm -> sm.getCarpetRules().forEach(data::withRule));
         playerEntity.connection.send(data.build());
+    }
+
+    /**
+     * Tells the clients watching a player whether they are sword blocking, with the number of ticks of the block window
+     * left or zero when it just ended.
+     */
+    public static void sendSwordBlock(ServerLevel level, Entity player, int ticks)
+    {
+        if (CarpetSettings.superSecretSetting) return;
+        ClientboundCustomPayloadPacket message = new ClientboundCustomPayloadPacket(new SwordBlockPayload(player.getId(), ticks));
+        for (ServerPlayer other : level.players())
+        {
+            if (other.distanceToSqr(player) < 64 * 64)
+            {
+                other.connection.send(message);
+            }
+        }
     }
 
     public static void sendPlayerLevelData(ServerPlayer player, ServerLevel level)

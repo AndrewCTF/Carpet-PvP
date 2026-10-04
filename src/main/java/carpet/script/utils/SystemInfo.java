@@ -78,7 +78,11 @@ public class SystemInfo
 
         options.put("world_time", c -> new NumericValue(c.level().getGameTime()));
 
+//? if >=26.1 {
         options.put("game_difficulty", c -> StringValue.of(c.server().getWorldData().getDifficulty().toString().toLowerCase()));
+//?} else {
+/*        options.put("game_difficulty", c -> StringValue.of(c.server().getWorldData().getDifficulty().getKey()));
+*///?}
         options.put("game_hardcore", c -> BooleanValue.of(c.server().getWorldData().isHardcore()));
         options.put("game_storage_format", c -> StringValue.of(c.server().getWorldData().getStorageVersionName(c.server().getWorldData().getVersion())));
         options.put("game_default_gamemode", c -> StringValue.of(c.server().getDefaultGameType().getName()));

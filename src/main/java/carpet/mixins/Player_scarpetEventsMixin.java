@@ -12,12 +12,14 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_ATTACKS_ENTITY;
 import static carpet.script.CarpetEventServer.Event.PLAYER_DEALS_DAMAGE;
@@ -65,7 +67,11 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
     }
 
     @Inject(method = "interactOn", cancellable = true, at = @At("HEAD"))
-    private void doInteract(Entity entity, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir)
+//? if >=26.1 {
+    private void doInteract(Entity entity, InteractionHand hand, Vec3 pos, CallbackInfoReturnable<InteractionResult> cir)
+//? } else {
+/*    private void doInteract(Entity entity, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir)
+*///?}
     {
         if (!level().isClientSide() && PLAYER_INTERACTS_WITH_ENTITY.isNeeded())
         {
@@ -85,5 +91,15 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
                 ci.cancel();
             }
         }
+    }
+
+    @ModifyReturnValue(method = "wantsToStopRiding", at = @At("TAIL"))
+    private boolean dontUnmountFromIfPermanentVehicle(boolean original)
+    {
+        if (this.getVehicle() == null) {
+            // may also be called when leaving entity camera in spectator
+            return original;
+        }
+        return original && !((EntityInterface) this.getVehicle()).isPermanentVehicle();
     }
 }

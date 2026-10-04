@@ -1,0 +1,13 @@
+gamemode spectator Viewer
+time set noon
+carpet swordBlockHitting true
+player Blk spawn at 4.5 -60 0.5 facing 180 0 in minecraft:overworld in survival
+item replace entity Blk weapon.mainhand with minecraft:diamond_sword
+tp Viewer 4.5 -59.2 -2.6 0 8
+sleep 4
+shot 01-idle
+player Blk use continuous
+sleep 2
+shot 02-blocking
+sleep 1
+shot 03-blocking

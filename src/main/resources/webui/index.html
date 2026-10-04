@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarpetLogic</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="lib/litegraph-0.7.18.css">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="lib/litegraph-0.7.18.core.min.js"></script>
+</head>
+<body>
+
+    <!-- ═══ Top bar: the program being edited, and who is editing ═══ -->
+    <header id="top-bar">
+        <div class="brand" title="CarpetLogic, the bot editor of Carpet PvP">
+            <span class="carpet-mark" aria-hidden="true"></span>
+            <span class="brand-name">CarpetLogic</span>
+        </div>
+        <button class="btn narrow-only" id="btn-library" title="Show the node library (/)" aria-controls="library" aria-expanded="false">Nodes</button>
+
+        <div class="bar-group" role="group" aria-label="Program">
+            <input id="program-name" type="text" value="Untitled" maxlength="64" spellcheck="false" autocomplete="off" title="Program name" aria-label="Program name">
+            <button class="btn" id="btn-new" title="New program (Ctrl+N)">New</button>
+            <button class="btn" id="btn-load" title="Open a saved program or a preset (Ctrl+O)">Open</button>
+            <button class="btn" id="btn-save" title="Save the program on the server now (Ctrl+S)">Save</button>
+            <button class="btn lamp" id="btn-autosave" role="switch" aria-checked="true">Autosave</button>
+            <span id="program-state" class="chip quiet" role="status" aria-live="polite">Not saved</span>
+        </div>
+        <div class="bar-group" role="group" aria-label="Edit">
+            <button class="btn" id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
+            <button class="btn" id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
+            <button class="btn" id="btn-clear" title="Remove every node but Start. Undo brings them back">Clear</button>
+        </div>
+
+        <div class="bar-space"></div>
+
+        <div class="conn" role="status" aria-live="polite">
+            <span id="connection-dot" class="conn-dot disconnected" aria-hidden="true"></span>
+            <span id="connection-text" class="conn-label">Connecting</span>
+        </div>
+        <button class="btn" id="btn-bots" title="Bots: live status, and what you may do to them (B)" aria-controls="right-panel" aria-expanded="false">Bots <span id="bots-count"></span></button>
+        <button class="btn" id="btn-settings" title="The rules this editor and its bots run under">Settings</button>
+        <button class="btn icon" id="btn-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+        <div id="identity" class="identity hidden">
+            <span id="identity-name" class="identity-name"></span>
+            <span id="identity-role" class="chip hidden">admin</span>
+            <button class="btn hidden" id="btn-admin" title="Sign in with your admin password to change settings">Admin sign in</button>
+            <button class="btn" id="btn-signout" title="End this session here and on the server">Sign out</button>
+        </div>
+    </header>
+
+    <div id="notice-bar" class="notice-bar hidden" role="status" aria-live="polite"></div>
+    <div id="recovery-bar" class="notice-bar kept hidden" role="status">
+        <span id="recovery-text"></span>
+        <button class="btn small" id="recovery-restore">Restore it</button>
+        <button class="btn small" id="recovery-discard">Discard it</button>
+    </div>
+
+    <!-- ═══ Workspace ═══ -->
+    <div id="workspace">
+
+        <!-- Node library -->
+        <aside id="library" aria-label="Node library">
+            <div class="lib-head">
+                <label class="lib-search">
+                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M7 2a5 5 0 1 0 3.1 8.9l3.5 3.5 1-1-3.5-3.5A5 5 0 0 0 7 2Zm0 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" fill="currentColor"/></svg>
+                    <input id="node-search" type="search" placeholder="Find a node" spellcheck="false" autocomplete="off" aria-label="Find a node" aria-controls="node-list">
+                    <kbd>/</kbd>
+                </label>
+                <button class="btn icon narrow-only" id="library-close" aria-label="Hide the node library">&times;</button>
+            </div>
+            <div id="node-list" class="node-list" role="listbox" aria-label="Nodes"></div>
+            <p class="lib-foot">Click a node to add it after the selected one, or drag it onto the canvas.</p>
+        </aside>
+
+        <!-- Canvas -->
+        <main id="canvas-wrap">
+            <div id="canvas-area">
+                <canvas id="graph-canvas" aria-label="Program graph"></canvas>
+
+                <!-- What to do with an empty canvas -->
+                <section id="guide" class="guide hidden" aria-label="Getting started">
+                    <h2>Build a bot program</h2>
+                    <ol class="guide-steps">
+                        <li id="guide-step-nodes">
+                            <span class="step-mark" aria-hidden="true"></span>
+                            <div><b>Add nodes after Start.</b>
+                                <span>Click one in the library on the left, or press <kbd>/</kbd> and type its name. It is placed after the node that is selected and wired to it; drag from a socket to wire by hand.</span></div>
+                        </li>
+                        <li id="guide-step-bot">
+                            <span class="step-mark" aria-hidden="true"></span>
+                            <div><b>Choose the bot it runs on.</b>
+                                <span id="guide-bot-text">There is no bot on the server yet.</span>
+                                <button class="btn small" id="guide-bots">Open the bots panel</button></div>
+                        </li>
+                        <li id="guide-step-run">
+                            <span class="step-mark" aria-hidden="true"></span>
+                            <div><b>Press Run.</b>
+                                <span>The bot walks the graph one step per game tick. What it does, and anything that goes wrong, shows in the console below.</span></div>
+                        </li>
+                    </ol>
+                    <div class="guide-presets">
+                        <span class="guide-label">Or start from a preset</span>
+                        <div id="guide-preset-list" class="guide-preset-list"></div>
+                    </div>
+                </section>
+
+                <!-- Before the node set has arrived, and when it could not be fetched -->
+                <section id="canvas-state" class="canvas-state" role="status">
+                    <div class="state-block">
+                        <span class="state-swatch" aria-hidden="true"></span>
+                        <p id="canvas-state-text">Loading the node set from the server</p>
+                        <button class="btn hidden" id="canvas-retry">Try again</button>
+                    </div>
+                </section>
+
+                <!-- The selected node's settings -->
+                <aside id="inspector" class="inspector hidden" aria-label="Node settings">
+                    <div class="inspector-head">
+                        <span id="inspector-swatch" class="swatch" aria-hidden="true"></span>
+                        <h2 id="inspector-title"></h2>
+                        <button class="btn icon" id="inspector-close" aria-label="Hide the node's settings">&times;</button>
+                    </div>
+                    <p id="inspector-desc" class="inspector-desc"></p>
+                    <p id="inspector-problem" class="inspector-problem hidden" role="status"></p>
+                    <div id="inspector-fields" class="inspector-fields"></div>
+                    <div id="inspector-suggest" class="suggest hidden" role="listbox" aria-label="Names an expression can use"></div>
+                </aside>
+
+                <div id="zoom-area" role="group" aria-label="View">
+                    <button class="btn icon" id="zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+                    <button class="btn" id="zoom-reset" title="Back to full size">100%</button>
+                    <button class="btn icon" id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+                    <button class="btn" id="zoom-fit" title="Bring the whole program into view (F)">Fit</button>
+                </div>
+            </div>
+
+            <!-- Run bar -->
+            <div id="run-bar" role="group" aria-label="Run">
+                <button id="exec-run-btn" class="btn go" title="Run the program on the chosen bot (Ctrl+Enter)">
+                    <span class="glyph-run" aria-hidden="true"></span>Run
+                </button>
+                <label class="run-on" for="target-bot-select">on</label>
+                <select id="target-bot-select" class="field" title="The bot the program runs on">
+                    <option value="">No bot</option>
+                </select>
+                <button id="btn-stop" class="btn stop" title="Stop the program of the chosen bot (Ctrl+.)">
+                    <span class="glyph-stop" aria-hidden="true"></span>Stop
+                </button>
+                <span id="exec-state" class="run-state">Idle</span>
+                <span id="run-target" class="run-target">No bot selected</span>
+            </div>
+        </main>
+
+        <!-- Bots -->
+        <aside id="right-panel" class="panel-closed" aria-label="Bots">
+            <div class="rp-top">
+                <div class="rp-tabs" role="tablist">
+                    <button class="rp-tab active" data-tab="bots" role="tab" aria-selected="true">Bots</button>
+                    <button class="rp-tab" data-tab="matches" role="tab" aria-selected="false">Matches</button>
+                </div>
+                <button id="rp-close" class="btn icon" aria-label="Hide the bots panel" title="Hide (B)">&times;</button>
+            </div>
+
+            <div class="rp-tab-panel active" data-panel="bots">
+                <form id="spawn-form" class="spawn" autocomplete="off">
+                    <label for="bot-name-input">Spawn a bot</label>
+                    <div class="spawn-row">
+                        <input id="bot-name-input" class="field" type="text" value="PvPBot" maxlength="16" spellcheck="false" placeholder="Name">
+                        <button id="spawn-bot-btn" class="btn" type="submit">Spawn</button>
+                    </div>
+                    <p class="hint">It appears where you stand in game, or at the world spawn for a link from the console.</p>
+                </form>
+                <div id="panel-stale" class="rp-stale hidden" role="status">Not connected. These numbers may be out of date.</div>
+                <div id="bot-list" class="bot-cards"></div>
+            </div>
+
+            <div class="rp-tab-panel" data-panel="matches">
+                <div id="match-list" class="match-list"></div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ═══ Console ═══ -->
+    <div id="console-bar">
+        <div id="console-header">
+            <button id="log-toggle" class="console-title" aria-expanded="false" aria-controls="log-panel" title="Show or hide the console (`)">
+                <span class="glyph-caret" aria-hidden="true"></span>
+                <span>Console</span>
+            </button>
+            <span id="log-last" class="log-last"></span>
+            <button id="clear-log-btn" class="btn small">Clear</button>
+        </div>
+        <div id="log-panel" class="collapsed" role="log" aria-live="polite">
+            <div id="log-entries"></div>
+        </div>
+    </div>
+
+    <!-- ═══ Open a program ═══ -->
+    <div id="load-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="load-title">
+        <div class="modal-card">
+            <div class="modal-top">
+                <h2 id="load-title" class="modal-heading">Open a program</h2>
+                <button class="btn icon modal-close" aria-label="Close">&times;</button>
+            </div>
+            <p class="modal-note">Programs are kept in <code id="load-folder"></code> on the server, one file each.
+                <button class="btn small" id="load-refresh" title="Read the folder again, for files put there by hand">Refresh</button></p>
+            <div class="modal-tools">
+                <div class="modal-tabs" role="tablist">
+                    <button class="modal-tab active" data-tab="programs" role="tab">Saved <span id="count-programs" class="count"></span></button>
+                    <button class="modal-tab" data-tab="presets" role="tab">Presets <span id="count-presets" class="count"></span></button>
+                </div>
+                <input id="load-filter" class="field" type="search" placeholder="Filter by name" spellcheck="false" autocomplete="off" aria-label="Filter programs by name">
+            </div>
+            <div class="modal-content">
+                <div id="panel-programs" class="modal-tab-panel active">
+                    <div id="load-program-list" class="modal-list"></div>
+                </div>
+                <div id="panel-presets" class="modal-tab-panel">
+                    <div id="preset-program-list" class="modal-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Two copies of one program ═══ -->
+    <div id="conflict-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+        <div class="modal-card narrow">
+            <div class="modal-top">
+                <h2 id="conflict-title" class="modal-heading">Saved somewhere else</h2>
+                <button class="btn icon modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <p id="conflict-text" class="conflict-text"></p>
+                <p class="hint">Another tab or another person saved this program after you opened it. Nothing has been overwritten. Choose which copy stays.</p>
+                <div class="conflict-choices">
+                    <button class="btn" id="conflict-mine">Keep mine, replace theirs</button>
+                    <button class="btn" id="conflict-theirs">Open theirs, drop mine</button>
+                    <button class="btn" id="conflict-copy">Keep both: save mine as a copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Settings ═══ -->
+    <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-card wide">
+            <div class="modal-top">
+                <h2 id="settings-title" class="modal-heading">Settings</h2>
+                <span id="settings-mode" class="chip quiet">Read only</span>
+                <input id="settings-filter" class="field" type="search" placeholder="Find a rule" spellcheck="false" autocomplete="off" aria-label="Find a rule">
+                <button class="btn icon modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div id="settings-banner" class="settings-banner"></div>
+            <div class="settings-body">
+                <nav id="settings-nav" class="settings-nav" aria-label="Groups"></nav>
+                <div id="settings-list" class="settings-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Keyboard shortcuts ═══ -->
+    <div id="help-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <div class="modal-card narrow">
+            <div class="modal-top">
+                <h2 id="help-title" class="modal-heading">Keyboard</h2>
+                <button class="btn icon modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <dl class="keys">
+                    <div><dt><kbd>/</kbd></dt><dd>Find a node; <kbd>Enter</kbd> adds the first match</dd></div>
+                    <div><dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run on the chosen bot</dd></div>
+                    <div><dt><kbd>Ctrl</kbd> <kbd>.</kbd></dt><dd>Stop its program</dd></div>
+                    <div><dt><kbd>Ctrl</kbd> <kbd>S</kbd></dt><dd>Save</dd></div>
+                    <div><dt><kbd>Ctrl</kbd> <kbd>O</kbd></dt><dd>Open a program or a preset</dd></div>
+                    <div><dt><kbd>Ctrl</kbd> <kbd>N</kbd></dt><dd>New program</dd></div>
+                    <div><dt><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Y</kbd></dt><dd>Undo, redo</dd></div>
+                    <div><dt><kbd>Delete</kbd></dt><dd>Remove the selected nodes</dd></div>
+                    <div><dt><kbd>F</kbd></dt><dd>Fit the program into view</dd></div>
+                    <div><dt><kbd>B</kbd></dt><dd>Show or hide the bots panel</dd></div>
+                    <div><dt><kbd>`</kbd></dt><dd>Show or hide the console</dd></div>
+                    <div><dt><kbd>Esc</kbd></dt><dd>Close what is open</dd></div>
+                </dl>
+                <p class="hint">On the canvas: drag the background to pan, scroll to zoom, right-click a node for its menu.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Getting in: no session, the admin sign-in, and the page that sets an admin's password ═══ -->
+    <div id="auth-screen" class="auth hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <div class="auth-carpet" aria-hidden="true">
+            <svg class="auth-sword" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="#0d3b36" d="M13 0h3v1h-3zM12 1h1v1h-1zM15 1h1v1h-1zM11 2h1v1h-1zM14 2h1v1h-1zM10 3h1v1h-1zM13 3h1v1h-1zM9 4h1v1h-1zM12 4h1v1h-1zM8 5h1v1h-1zM11 5h1v1h-1zM2 6h2v1h-2zM7 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1zM9 7h1v1h-1zM3 8h1v1h-1zM5 8h1v1h-1zM8 8h1v1h-1zM4 9h1v1h-1zM7 9h1v1h-1zM3 10h1v1h-1zM5 10h1v1h-1zM7 10h1v1h-1zM2 11h1v1h-1zM4 11h1v1h-1zM6 11h1v1h-1zM8 11h1v1h-1zM1 12h1v1h-1zM3 12h1v1h-1zM7 12h2v1h-2zM0 13h1v1h-1zM2 13h1v1h-1zM0 14h2v1h-2z"/><path fill="#a4f7ea" d="M13 1h1v1h-1zM12 2h1v1h-1zM11 3h1v1h-1zM10 4h1v1h-1zM9 5h1v1h-1zM8 6h1v1h-1zM7 7h1v1h-1zM6 8h1v1h-1z"/><path fill="#4fe0cf" d="M14 1h1v1h-1zM13 2h1v1h-1zM12 3h1v1h-1zM11 4h1v1h-1zM10 5h1v1h-1zM9 6h1v1h-1zM8 7h1v1h-1zM7 8h1v1h-1zM6 9h1v1h-1z"/><path fill="#1f8f82" d="M3 7h1v1h-1zM4 8h1v1h-1zM5 9h1v1h-1zM6 10h1v1h-1zM7 11h1v1h-1zM1 13h1v1h-1z"/><path fill="#7a5a2a" d="M4 10h1v1h-1zM3 11h1v1h-1zM2 12h1v1h-1z"/></svg>
+            <div class="auth-wordmark">CarpetLogic</div>
+            <p>Program fake-player bots with a node graph.</p>
+            <p id="auth-host" class="auth-host"></p>
+        </div>
+        <div class="auth-side">
+            <div class="auth-panel">
+                <h1 id="auth-title">CarpetLogic</h1>
+
+                <section id="auth-checking" class="auth-view">
+                    <p class="auth-lead">Asking the server how to let you in.</p>
+                </section>
+
+                <section id="auth-none" class="auth-view hidden">
+                    <p class="auth-lead" id="auth-none-reason">This page has no session.</p>
+                    <ol class="auth-steps">
+                        <li><span>Join the server this editor belongs to.</span></li>
+                        <li><span>Run <code>/carpetlogic open</code> in chat.</span></li>
+                        <li><span>Click the link it gives you. It is for you only, and it brings you straight here.</span></li>
+                    </ol>
+                    <p class="hint">The command needs the permission the <code>commandCarpetLogic</code> rule asks for, which is operator by default.</p>
+                </section>
+
+                <form id="auth-signin" class="auth-view hidden" novalidate>
+                    <p class="auth-lead" id="auth-signin-reason">Sign in as an admin of this server.</p>
+                    <label for="auth-name">Minecraft name</label>
+                    <input id="auth-name" class="field" type="text" maxlength="32" spellcheck="false" autocomplete="username" autocapitalize="off">
+                    <label for="auth-password">Web password</label>
+                    <input id="auth-password" class="field" type="password" maxlength="128" autocomplete="current-password">
+                    <p id="auth-error" class="auth-error hidden" role="alert"></p>
+                    <button id="auth-submit" class="btn go wide" type="submit">Sign in</button>
+                    <div class="auth-help">
+                        <p><b>No password yet?</b> Run <code>/carpetlogic password</code> in game. It answers with a link that sets one, for you only. Admins are the players who may use <code>/carpet</code>.</p>
+                        <p><b>Not an admin?</b> Run <code>/carpetlogic open</code> in game for a link that opens the editor without one.</p>
+                    </div>
+                </form>
+
+                <form id="auth-setup" class="auth-view hidden" novalidate>
+                    <p class="auth-lead">Set the web password for <b id="auth-setup-name"></b>.</p>
+                    <input id="auth-setup-user" type="text" autocomplete="username" class="visually-hidden" tabindex="-1" aria-hidden="true" readonly>
+                    <label for="auth-new">New password</label>
+                    <input id="auth-new" class="field" type="password" maxlength="128" autocomplete="new-password" aria-describedby="auth-rule">
+                    <p id="auth-rule" class="hint">At least 10 characters. A few unrelated words are easier to keep than symbols.</p>
+                    <label for="auth-repeat">The same again</label>
+                    <input id="auth-repeat" class="field" type="password" maxlength="128" autocomplete="new-password">
+                    <p id="auth-setup-error" class="auth-error hidden" role="alert"></p>
+                    <button id="auth-setup-submit" class="btn go wide" type="submit">Set password and sign in</button>
+                    <p class="hint">This link works once. The password is kept on the server as a salted hash, and it never appears in chat or in the console.</p>
+                </form>
+
+                <button id="auth-back" class="btn hidden" type="button">Back to the editor</button>
+                <p id="auth-wire" class="auth-wire hidden">This page was loaded over plain HTTP from another machine: a password typed here can be read on the way. Ask the server's owner to put the editor behind HTTPS.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Scripts ═══ -->
+    <script src="js/nodes.js"></script>
+    <script src="js/expression.js"></script>
+    <script src="js/node-compiler.js"></script>
+    <script src="js/graph-builder.js"></script>
+    <script src="js/node-library.js"></script>
+    <script src="js/node-editor.js"></script>
+    <script src="js/inspector.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/autosave.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/bot-panel.js"></script>
+    <script src="js/program-panel.js"></script>
+    <script src="js/settings-panel.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

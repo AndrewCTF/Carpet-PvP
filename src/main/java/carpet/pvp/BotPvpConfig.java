@@ -1,21 +1,126 @@
 package carpet.pvp;
 
-import carpet.CarpetSettings;
+import carpet.pvp.sim.DifficultyPreset;
+import carpet.pvp.sim.DifficultyPresets;
+import carpet.pvp.sim.PlannerParams;
 
+import java.util.Locale;
 import java.util.UUID;
 
 /**
  * Per-bot PvP combat-AI configuration for a single {@link carpet.patches.EntityPlayerMPFake}.
  *
  * <p>Every field is seeded from the matching global {@code /carpet} rule (see
- * {@link CarpetSettings}) when the bot spawns, and may be overridden per-bot through
+ * {@link BotSettings}) when the bot spawns, and may be overridden per-bot through
  * {@code /player <name> ai <setting> <value>}. Global rules therefore act as the default,
  * while per-bot overrides win.</p>
  */
 public final class BotPvpConfig
 {
     /** Combat styles a bot can use against its target. */
-    public enum CombatStyle { MELEE, CRYSTAL, ANCHOR, RANGED, MACE }
+    public enum CombatStyle { MELEE, CRYSTAL, ANCHOR, RANGED, MACE, SMP }
+
+    /** Options only one combat style reads, by the names {@link carpet.pvp.style.StyleIndex#options()} declares. */
+    private final java.util.Map<String, String> styleOptions = new java.util.HashMap<>();
+
+    /** Skill presets; {@link #difficulty} picks the one a bot starts from. */
+    public enum Difficulty { BEGINNER, CASUAL, AVERAGE, SKILLED, EXPERT }
+
+    /** One named set of skill, pace and technique settings. */
+    private record Preset(double skill, int reactionDelay, int pingTicks, double clicksPerSecond,
+                           boolean critical, boolean strafe, boolean wtap, boolean shieldPlay,
+                           int horizon, int population)
+    {
+        Preset
+        {
+            skill = clampD(skill, 0.0, 1.0);
+            reactionDelay = clampI(reactionDelay, 0, 40);
+            pingTicks = clampI(pingTicks, 0, 20);
+            clicksPerSecond = clampD(clicksPerSecond, 1.0, 20.0);
+            horizon = clampI(horizon, 2, 40);
+            population = clampI(population, 2, 64);
+        }
+    }
+
+    private static Preset presetOf(Difficulty difficulty)
+    {
+        DifficultyPreset tuned = measuredPreset(difficulty);
+        boolean[] technique = techniquesOf(difficulty);
+        return new Preset(skillOf(difficulty), tuned.reactionDelay(), pingOf(difficulty),
+                clicksOf(difficulty), technique[0], technique[1], technique[2], technique[3],
+                tuned.params().horizon(), tuned.params().population());
+    }
+
+    /**
+     * The measured preset a difficulty level fights with: the planner parameters, the reaction delay and the
+     * miss rate that self-play tuning settled on, in the order of the measured ladder. A bot's five levels
+     * are its ladder, so there is one set of numbers and not one per consumer.
+     */
+    public static DifficultyPreset measuredPreset(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> DifficultyPresets.BEGINNER;
+            case CASUAL -> DifficultyPresets.AMATEUR;
+            case AVERAGE -> DifficultyPresets.SKILLED;
+            case SKILLED -> DifficultyPresets.EXPERT;
+            case EXPERT -> DifficultyPresets.MASTER;
+        };
+    }
+
+    /** The planner parameters of a bot's difficulty, which is what a style builds its planner from. */
+    public PlannerParams plannerParams()
+    {
+        return measuredPreset(difficulty).params();
+    }
+
+    private static double skillOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> 0.15;
+            case CASUAL -> 0.35;
+            case AVERAGE -> 0.60;
+            case SKILLED -> 0.80;
+            case EXPERT -> 1.00;
+        };
+    }
+
+    private static int pingOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER, CASUAL -> 1;
+            case AVERAGE, SKILLED, EXPERT -> 0;
+        };
+    }
+
+    private static double clicksOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> 6.0;
+            case CASUAL -> 8.0;
+            case AVERAGE -> 10.0;
+            case SKILLED -> 12.0;
+            case EXPERT -> 14.0;
+        };
+    }
+
+    /**
+     * Which techniques a difficulty level may use: the jump crit from the second level on, strafing from the
+     * middle, the W-tap from there too, and the shield only once the bot is good enough to time it.
+     */
+    private static boolean[] techniquesOf(Difficulty difficulty)
+    {
+        return switch (difficulty)
+        {
+            case BEGINNER -> new boolean[] {false, false, false, true};
+            case CASUAL -> new boolean[] {true, false, false, true};
+            case AVERAGE -> new boolean[] {true, true, false, true};
+            case SKILLED, EXPERT -> new boolean[] {true, true, true, true};
+        };
+    }
 
     // --- master / targeting ---
     public boolean combat;
@@ -31,25 +136,40 @@ public final class BotPvpConfig
     public boolean autoTotem;
     public boolean autoShield;
     public boolean autoFood;
-    public boolean autoPotion;
-    public boolean autoArmor;
     public boolean autoWeapon;
-    public boolean autoRepair;
 
     // --- combat tactics ---
     public CombatStyle combatStyle;
+    public Difficulty difficulty;
     public boolean preferSword;
     public boolean shieldBreak;
     public boolean critical;
     public boolean strafe;
     public boolean bhop;
+    public boolean wtap;
+    public boolean shieldPlay;
     public double meleeRange;
     public int attackCooldown;
+
+    // --- human model ---
+    /** Skill from 0 (beginner) to 1 (expert); drives the look profile and the presets. */
+    public double skill;
+    /** Ticks between seeing the target and reacting to it. */
+    public int reactionDelay;
+    /** Ticks the target's state is behind, as if it were on a laggy connection. */
+    public int pingTicks;
+    /** Mouse clicks per second. */
+    public double clicksPerSecond;
+    /** Blocks from the target within which the navigation controller takes over. */
+    public double plannerRange;
+
+    // --- planner ---
+    public int plannerHorizon;
+    public int plannerPopulation;
 
     // --- realism ---
     public int missChance;     // 0-100
     public int mistakeChance;  // 0-100
-    public int reactionDelay;  // ticks
 
     // --- faction membership (null = no faction) ---
     public String faction;
@@ -59,43 +179,150 @@ public final class BotPvpConfig
      */
     public BotPvpConfig()
     {
-        combat        = CarpetSettings.botCombat;
-        autoTarget    = CarpetSettings.botAutoTarget;
-        targetPlayers = CarpetSettings.botTargetPlayers;
-        targetMobs    = CarpetSettings.botTargetMobs;
-        targetBots    = CarpetSettings.botTargetBots;
-        revenge       = CarpetSettings.botRevenge;
-        targetRange   = CarpetSettings.botTargetRange;
-        retreatHealth = CarpetSettings.botRetreatHealth;
+        combat        = BotSettings.botCombat;
+        autoTarget    = BotSettings.botAutoTarget;
+        targetPlayers = BotSettings.botTargetPlayers;
+        targetMobs    = BotSettings.botTargetMobs;
+        targetBots    = BotSettings.botTargetBots;
+        revenge       = BotSettings.botRevenge;
+        targetRange   = BotSettings.botTargetRange;
+        retreatHealth = BotSettings.botRetreatHealth;
 
-        autoTotem  = CarpetSettings.botAutoTotem;
-        autoShield = CarpetSettings.botAutoShield;
-        autoFood   = CarpetSettings.botAutoFood;
-        autoPotion = CarpetSettings.botAutoPotion;
-        autoArmor  = CarpetSettings.botAutoArmor;
-        autoWeapon = CarpetSettings.botAutoWeapon;
-        autoRepair = CarpetSettings.botAutoRepair;
+        autoTotem  = BotSettings.botAutoTotem;
+        autoShield = BotSettings.botAutoShield;
+        autoFood   = BotSettings.botAutoFood;
+        autoWeapon = BotSettings.botAutoWeapon;
 
-        combatStyle    = parseStyle(CarpetSettings.botCombatStyle);
-        preferSword    = CarpetSettings.botPreferSword;
-        shieldBreak    = CarpetSettings.botShieldBreak;
-        critical       = CarpetSettings.botCritical;
-        strafe         = CarpetSettings.botStrafe;
-        bhop           = CarpetSettings.botBhop;
-        meleeRange     = CarpetSettings.botMeleeRange;
-        attackCooldown = CarpetSettings.botAttackCooldown;
+        combatStyle    = parseStyle(BotSettings.botCombatStyle);
+        difficulty     = parseDifficulty(BotSettings.botDifficulty);
+        preferSword    = BotSettings.botPreferSword;
+        shieldBreak    = BotSettings.botShieldBreak;
+        critical       = BotSettings.botCritical;
+        strafe         = BotSettings.botStrafe;
+        bhop           = BotSettings.botBhop;
+        wtap           = BotSettings.botWTap;
+        shieldPlay     = BotSettings.botShieldPlay;
+        meleeRange     = BotSettings.botMeleeRange;
+        attackCooldown = BotSettings.botAttackCooldown;
 
-        missChance    = CarpetSettings.botMissChance;
-        mistakeChance = CarpetSettings.botMistakeChance;
-        reactionDelay = CarpetSettings.botReactionDelay;
+        skill          = BotSettings.botSkill;
+        reactionDelay  = BotSettings.botReactionDelay;
+        pingTicks      = BotSettings.botPingTicks;
+        clicksPerSecond = BotSettings.botClicksPerSecond;
+        plannerRange   = BotSettings.botPlannerRange;
+        plannerHorizon = BotSettings.botPlannerHorizon;
+        plannerPopulation = BotSettings.botPlannerPopulation;
+
+        missChance    = BotSettings.botMissChance;
+        mistakeChance = BotSettings.botMistakeChance;
 
         faction = null;
     }
 
     private static CombatStyle parseStyle(String s)
     {
-        try { return CombatStyle.valueOf(s.toUpperCase()); }
+        try { return styleOf(s); }
         catch (IllegalArgumentException e) { return CombatStyle.MELEE; }
+    }
+
+    /** A combat style by name; "sword" is the melee style. Throws IllegalArgumentException for an unknown name. */
+    public static CombatStyle styleOf(String name)
+    {
+        String upper = name.toUpperCase(Locale.ROOT);
+        return upper.equals("SWORD") ? CombatStyle.MELEE : CombatStyle.valueOf(upper);
+    }
+
+    /** The value of a style option, or the default the style declared for it. */
+    public String option(String key)
+    {
+        String value = styleOptions.get(key);
+        return value != null ? value : carpet.pvp.style.StyleIndex.options().get(key);
+    }
+
+    public boolean flag(String key)
+    {
+        return Boolean.parseBoolean(option(key));
+    }
+
+    public double number(String key)
+    {
+        return Double.parseDouble(option(key));
+    }
+
+    /** Every setting name /bot option and /player ai accept: the common ones and the style options. */
+    public static String[] keys()
+    {
+        java.util.List<String> all = new java.util.ArrayList<>(java.util.List.of(KEYS));
+        all.addAll(carpet.pvp.style.StyleIndex.options().keySet());
+        return all.toArray(new String[0]);
+    }
+
+    private static Difficulty parseDifficulty(String s)
+    {
+        try { return Difficulty.valueOf(s.toUpperCase(Locale.ROOT)); }
+        catch (IllegalArgumentException e) { return Difficulty.AVERAGE; }
+    }
+
+    /** The named difficulty presets, for tab-completion. */
+    public static String[] difficulties()
+    {
+        Difficulty[] values = Difficulty.values();
+        String[] names = new String[values.length];
+        for (int i = 0; i < values.length; i++)
+        {
+            names[i] = values[i].name().toLowerCase(Locale.ROOT);
+        }
+        return names;
+    }
+
+    /**
+     * The combat styles by the names {@code /bot spawn} takes, where the melee style is the sword, so that
+     * neither the command nor anything reading them has to list them.
+     */
+    public static String[] styles()
+    {
+        CombatStyle[] values = CombatStyle.values();
+        String[] names = new String[values.length];
+        for (int i = 0; i < values.length; i++)
+        {
+            names[i] = values[i] == CombatStyle.MELEE ? "sword" : values[i].name().toLowerCase(Locale.ROOT);
+        }
+        return names;
+    }
+
+    /**
+     * Applies a named difficulty preset: the skill, the pace and the techniques of that preset
+     * replace the current values, everything else is left alone.
+     *
+     * @return the error string, or null on success
+     */
+    public String applyDifficulty(String name)
+    {
+        Difficulty wanted;
+        try
+        {
+            wanted = Difficulty.valueOf(name.toUpperCase(Locale.ROOT));
+        }
+        catch (IllegalArgumentException e)
+        {
+            return "Unknown difficulty: " + name;
+        }
+        Preset preset = presetOf(wanted);
+        DifficultyPreset tuned = measuredPreset(wanted);
+        difficulty = wanted;
+        skill = preset.skill();
+        reactionDelay = preset.reactionDelay();
+        pingTicks = preset.pingTicks();
+        clicksPerSecond = preset.clicksPerSecond();
+        critical = preset.critical();
+        strafe = preset.strafe();
+        wtap = preset.wtap();
+        shieldPlay = preset.shieldPlay();
+        plannerHorizon = preset.horizon();
+        plannerPopulation = preset.population();
+        // The share of the swings a level of the ladder throws early, as a percentage like the rule it fills.
+        missChance = (int) Math.round(tuned.missChance() * 100.0D);
+        return null;
     }
 
     /**
@@ -107,7 +334,7 @@ public final class BotPvpConfig
     {
         try
         {
-            switch (key.toLowerCase())
+            switch (key.toLowerCase(Locale.ROOT))
             {
                 case "combat"        -> combat = parseBool(value);
                 case "autotarget"    -> autoTarget = parseBool(value);
@@ -121,27 +348,45 @@ public final class BotPvpConfig
                 case "autototem"  -> autoTotem = parseBool(value);
                 case "autoshield" -> autoShield = parseBool(value);
                 case "autofood"   -> autoFood = parseBool(value);
-                case "autopotion" -> autoPotion = parseBool(value);
-                case "autoarmor"  -> autoArmor = parseBool(value);
                 case "autoweapon" -> autoWeapon = parseBool(value);
-                case "autorepair" -> autoRepair = parseBool(value);
 
-                case "combatstyle"    -> combatStyle = CombatStyle.valueOf(value.toUpperCase());
+                case "combatstyle"    -> combatStyle = styleOf(value);
+                case "difficulty"     -> {
+                    String error = applyDifficulty(value);
+                    if (error != null) return error;
+                }
                 case "prefersword"    -> preferSword = parseBool(value);
                 case "shieldbreak"    -> shieldBreak = parseBool(value);
                 case "critical"       -> critical = parseBool(value);
                 case "strafe"         -> strafe = parseBool(value);
                 case "bhop"           -> bhop = parseBool(value);
+                case "wtap"           -> wtap = parseBool(value);
+                case "shieldplay"     -> shieldPlay = parseBool(value);
                 case "meleerange"     -> meleeRange = clampD(Double.parseDouble(value), 2.0, 6.0);
                 case "attackcooldown" -> attackCooldown = clampI(Integer.parseInt(value), 0, 40);
 
+                case "skill"           -> skill = clampD(Double.parseDouble(value), 0.0, 1.0);
+                case "reactiondelay"   -> reactionDelay = clampI(Integer.parseInt(value), 0, 40);
+                case "pingticks"       -> pingTicks = clampI(Integer.parseInt(value), 0, 20);
+                case "clickspersecond" -> clicksPerSecond = clampD(Double.parseDouble(value), 1.0, 20.0);
+                case "plannerrange"    -> plannerRange = clampD(Double.parseDouble(value), 2.0, 16.0);
+                case "plannerhorizon"  -> plannerHorizon = clampI(Integer.parseInt(value), 2, 40);
+                case "plannerpopulation" -> plannerPopulation = clampI(Integer.parseInt(value), 2, 64);
+
                 case "misschance"    -> missChance = clampI(Integer.parseInt(value), 0, 100);
                 case "mistakechance" -> mistakeChance = clampI(Integer.parseInt(value), 0, 100);
-                case "reactiondelay" -> reactionDelay = clampI(Integer.parseInt(value), 0, 40);
 
                 case "faction" -> faction = value.isEmpty() || value.equalsIgnoreCase("none") ? null : value;
 
-                default -> { return "Unknown setting: " + key; }
+                default -> {
+                    String option = key.toLowerCase(Locale.ROOT);
+                    String standard = carpet.pvp.style.StyleIndex.options().get(option);
+                    if (standard == null) return "Unknown setting: " + key;
+                    // a style option keeps the type of its default: a number stays a number, a switch a switch
+                    if (standard.equals("true") || standard.equals("false")) value = String.valueOf(parseBool(value));
+                    else if (isNumber(standard)) value = String.valueOf(Double.parseDouble(value));
+                    styleOptions.put(option, value);
+                }
             }
         }
         catch (NumberFormatException e)
@@ -163,12 +408,24 @@ public final class BotPvpConfig
                 + " revenge=" + revenge
                 + " range=" + targetRange + " retreatHP=" + retreatHealth
                 + " | auto[totem=" + autoTotem + ",shield=" + autoShield + ",food=" + autoFood
-                + ",potion=" + autoPotion + ",armor=" + autoArmor + ",weapon=" + autoWeapon + ",repair=" + autoRepair + "]"
-                + " | style=" + combatStyle + " preferSword=" + preferSword + " shieldBreak=" + shieldBreak
+                + ",weapon=" + autoWeapon + "]"
+                + " | style=" + combatStyle + " difficulty=" + difficulty
+                + " preferSword=" + preferSword + " shieldBreak=" + shieldBreak
                 + " crit=" + critical + " strafe=" + strafe + " bhop=" + bhop
+                + " wtap=" + wtap + " shieldPlay=" + shieldPlay
                 + " meleeRange=" + meleeRange + " atkCd=" + attackCooldown
-                + " | realism[miss=" + missChance + ",mistake=" + mistakeChance + ",reaction=" + reactionDelay + "]"
-                + " | faction=" + (faction == null ? "none" : faction);
+                + " | human[skill=" + skill + ",reaction=" + reactionDelay + ",ping=" + pingTicks
+                + ",clicks/s=" + clicksPerSecond + ",plannerRange=" + plannerRange + "]"
+                + " planner[horizon=" + plannerHorizon + ",population=" + plannerPopulation + "]"
+                + " | realism[miss=" + missChance + ",mistake=" + mistakeChance + "]"
+                + " | faction=" + (faction == null ? "none" : faction)
+                + (styleOptions.isEmpty() ? "" : " | style options " + new java.util.TreeMap<>(styleOptions));
+    }
+
+    private static boolean isNumber(String v)
+    {
+        try { Double.parseDouble(v); return true; }
+        catch (NumberFormatException e) { return false; }
     }
 
     private static boolean parseBool(String v)
@@ -185,9 +442,14 @@ public final class BotPvpConfig
     public static final String[] KEYS = {
             "combat", "autotarget", "targetplayers", "targetmobs", "targetbots", "revenge",
             "targetrange", "retreathealth",
-            "autototem", "autoshield", "autofood", "autopotion", "autoarmor", "autoweapon", "autorepair",
-            "combatstyle", "prefersword", "shieldbreak", "critical", "strafe", "bhop",
-            "meleerange", "attackcooldown",
-            "misschance", "mistakechance", "reactiondelay", "faction"
+            "autototem", "autoshield", "autofood", "autoweapon",
+            "combatstyle", "difficulty", "prefersword", "shieldbreak", "critical", "strafe", "bhop",
+            "wtap", "shieldplay", "meleerange", "attackcooldown",
+            "skill", "reactiondelay", "pingticks", "clickspersecond", "plannerrange",
+            "plannerhorizon", "plannerpopulation",
+            "misschance", "mistakechance", "faction"
     };
+
+    /** Default mouse sensitivity the bot's look profile is built for. */
+    public static final float SENSITIVITY = 0.5F;
 }

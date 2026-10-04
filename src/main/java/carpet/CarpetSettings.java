@@ -151,8 +151,8 @@ public class CarpetSettings
             @Rule(desc = "Allows fake players to use precise elytra gliding controls via /player <name> glide ...", category = {CREATIVE})
             public static boolean fakePlayerElytraGlide = false;
 
-            @Rule(desc = "Allows fake players to use built-in navigation/pathfinding via /player <name> nav ...", category = {CREATIVE})
-            public static boolean fakePlayerNavigation = false;
+            @Rule(desc = "Allows fake players to use built-in navigation/pathfinding: /player <name> nav ..., combat bots closing on a target and CarpetLogic navigation nodes", category = {CREATIVE})
+            public static boolean fakePlayerNavigation = true;
 
             @Rule(desc = "Allow fake-player navigation to break blocks in its way", category = {FEATURE})
             public static boolean fakePlayerNavBreakBlocks = false;
@@ -220,6 +220,12 @@ public class CarpetSettings
             @Rule(desc = "Allow underwater swimming during navigation (default: false = float on surface)", category = {FEATURE})
             public static boolean fakePlayerNavAllowSwimming = false;
 
+            @Rule(desc = "Node expansions one bot may pathfind in a single tick", category = {FEATURE}, options = {"500", "1500", "3000", "6000"})
+            public static int fakePlayerNavSearchBudget = 1500;
+
+            @Rule(desc = "Node expansions all the bots together may pathfind in a single tick", category = {FEATURE}, options = {"4000", "12000", "24000", "50000"})
+            public static int fakePlayerNavSearchBudgetTotal = 12000;
+
             @Rule(desc = "Enable fall damage for real players", category = {SURVIVAL, FEATURE})
             public static boolean playerFallDamage = true;
 
@@ -229,8 +235,10 @@ public class CarpetSettings
     @Rule(desc = "Gbhs sgnf sadsgras fhskdpri!!!", category = EXPERIMENTAL)
     public static boolean superSecretSetting = false;
 
-    @Rule(desc = "Dropping entire stacks works also from on the crafting UI result slot", category = {BUGFIX, SURVIVAL})
+//? if <26.1 {
+/*    @Rule(desc = "Dropping entire stacks works also from on the crafting UI result slot", category = {BUGFIX, SURVIVAL})
     public static boolean ctrlQCraftingFix = false;
+*///?}
 
     @Rule(desc = "Parrots don't get of your shoulders until you receive proper damage", category = {SURVIVAL, FEATURE})
     public static boolean persistentParrots = false;
@@ -487,9 +495,6 @@ public class CarpetSettings
     @Rule(desc = "Enables /spawn command for spawn tracking", category = COMMAND)
     public static String commandSpawn = "ops";
 
-    @Rule(desc = "Enables /tick command to control game clocks", category = COMMAND)
-    public static String commandTick = "ops";
-
     @Rule(
             desc = "Enables /profile command to monitor game performance",
             extra = "subset of /tick command capabilities",
@@ -668,6 +673,13 @@ public class CarpetSettings
     @Rule(desc = "Enables /player command to control/spawn players", category = COMMAND)
     public static String commandPlayer = "true";
 
+    @Rule(desc = "Enables /bot command to spawn and drive PvP combat bots and manage their kits", category = COMMAND)
+    public static String commandBot = "true";
+
+    @Rule(desc = "Enables /auto-setup command, which sets a player up to fight a bot and takes it all back down again", category = COMMAND,
+            options = {"true", "false", "ops"})
+    public static String commandAutoSetup = "true";
+
     @Rule(desc = "Spawn offline players in online mode if online-mode player with specified name does not exist", category = COMMAND)
     public static boolean allowSpawningOfflinePlayers = true;
 
@@ -695,13 +707,15 @@ public class CarpetSettings
     @Rule(desc = "Disables breaking of blocks caused by flowing liquids", category = CREATIVE)
     public static boolean liquidDamageDisabled = false;
 
-
-    @Rule(
+//? if <26.1 {
+/*    @Rule(
             desc = "Smooth client animations with low tps settings",
             extra = "Works only in SP, and will slow down players",
             category = {CREATIVE, SURVIVAL, CLIENT}
     )
     public static boolean smoothClientAnimations = false;
+*///?}
+
 
     private static class PushLimitLimits extends Validator<Integer> {
         @Override public Integer validate(CommandSourceStack source, CarpetRule<Integer> currentRule, Integer newValue, String string) {
@@ -1181,21 +1195,44 @@ public class CarpetSettings
     @Rule(desc = "Bots auto-eat when hungry (uses existing nav auto-eat)", category = PVP)
     public static boolean botAutoFood = true;
 
-    @Rule(desc = "Bots auto-drink/throw potions in combat (planned)", category = PVP)
-    public static boolean botAutoPotion = false;
-
-    @Rule(desc = "Bots auto-equip the best available armor (planned)", category = PVP)
-    public static boolean botAutoArmor = false;
-
     @Rule(desc = "Bots auto-equip the best available weapon (planned)", category = PVP)
     public static boolean botAutoWeapon = false;
 
-    @Rule(desc = "Bots auto-repair gear with Mending XP (planned)", category = PVP)
-    public static boolean botAutoRepair = false;
-
     @Rule(desc = "Default bot combat style", category = PVP,
-            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE"}, strict = true)
+            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE", "SMP"}, strict = true)
     public static String botCombatStyle = "MELEE";
+
+    @Rule(desc = "Default bot difficulty preset, sets skill, pace and techniques at once", category = PVP,
+            options = {"BEGINNER", "CASUAL", "AVERAGE", "SKILLED", "EXPERT"}, strict = true)
+    public static String botDifficulty = "AVERAGE";
+
+    @Rule(desc = "Default bot skill from 0 (beginner) to 1 (expert), drives the aim and reaction model", category = PVP,
+            validate = Validators.Probablity.class)
+    public static double botSkill = 0.6D;
+
+    @Rule(desc = "Default ticks the bot's view of its target lags behind, as on a slow connection", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botPingTicks = 1;
+
+    @Rule(desc = "Default mouse clicks per second of a bot", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static double botClicksPerSecond = 10.0D;
+
+    @Rule(desc = "Default distance in blocks from the target within which the bot plans its fight", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static double botPlannerRange = 8.0D;
+
+    @Rule(desc = "Default number of ticks the fight planner looks ahead", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botPlannerHorizon = 12;
+
+    @Rule(desc = "Default number of action sequences the fight planner keeps", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botPlannerPopulation = 10;
+
+    @Rule(desc = "Simulated ticks every bot of the server may plan per server tick, split between them", category = PVP,
+            validate = Validators.NonNegativeNumber.class)
+    public static int botSimBudget = 20000;
 
     @Rule(desc = "Bots prefer swords over axes for melee", category = PVP)
     public static boolean botPreferSword = true;
@@ -1211,6 +1248,12 @@ public class CarpetSettings
 
     @Rule(desc = "Bots bunny-hop while chasing (planned)", category = PVP)
     public static boolean botBhop = false;
+
+    @Rule(desc = "Bots tap sprint (W-tap) after a sprint hit instead of holding sprint", category = PVP)
+    public static boolean botWTap = true;
+
+    @Rule(desc = "Bots raise their shield to block an incoming hit", category = PVP)
+    public static boolean botShieldPlay = true;
 
     @Rule(desc = "Default melee engagement range in blocks", category = PVP,
             validate = Validators.NonNegativeNumber.class)
@@ -1286,6 +1329,63 @@ public class CarpetSettings
 
     @Rule(desc = "Damage invulnerability ticks for other/unknown damage types", category = FEATURE, validate = Validators.NonNegativeNumber.class)
     public static int damageTickOther = 10;
+
+    @Rule(desc = "Enables /carpetlogic command to run bot programs on fake players and open the web editor", category = COMMAND)
+    public static String commandCarpetLogic = "ops";
+
+    private static class CarpetLogicPortValidator extends Validator<Integer> {
+        @Override public Integer validate(CommandSourceStack source, CarpetRule<Integer> currentRule, Integer newValue, String string) {
+            return (newValue > 0 && newValue <= 65535) ? newValue : null;
+        }
+        @Override
+        public String description() { return "You must choose a value from 1 to 65535";}
+    }
+    @Rule(
+            desc = "Port the CarpetLogic web editor listens on",
+            extra = "Applied when the server starts",
+            options = {"9876"},
+            category = CREATIVE,
+            strict = false,
+            validate = CarpetLogicPortValidator.class
+    )
+    public static int carpetLogicPort = 9876;
+
+    @Rule(
+            desc = "Address the CarpetLogic web editor listens on",
+            extra = {
+                    "127.0.0.1 only accepts connections from the machine the server runs on",
+                    "Applied when the server starts"
+            },
+            options = {"127.0.0.1", "0.0.0.0"},
+            category = CREATIVE,
+            strict = false
+    )
+    public static String carpetLogicBindAddress = "127.0.0.1";
+
+    @Rule(desc = "Hours a link from /carpetlogic open stays valid", category = CREATIVE,
+            options = {"1", "24"}, strict = false, validate = Validators.NonNegativeNumber.class)
+    public static int carpetLogicSessionHours = 24;
+
+    @Rule(desc = "Ticks between bot status updates sent to the CarpetLogic web editor", category = CREATIVE,
+            options = {"1", "5", "20"}, strict = false, validate = PushLimitLimits.class)
+    public static int carpetLogicUpdateInterval = 5;
+
+    @Rule(desc = "The CarpetLogic web editor can look at bots and programs but not change or run anything", category = CREATIVE)
+    public static boolean carpetLogicViewerMode = false;
+
+    @Rule(
+            desc = "Offers an admin sign-in on the CarpetLogic web editor, which lets its Settings panel change rules",
+            extra = {
+                    "An admin is a player who may use /carpet; /carpetlogic password gives one a link to set a web password",
+                    "The editor speaks plain HTTP: put it behind a reverse proxy with TLS before offering it beyond localhost"
+            },
+            category = CREATIVE
+    )
+    public static boolean carpetLogicAdminLogin = false;
+
+    @Rule(desc = "Maximum number of bot programs running at the same time", category = CREATIVE,
+            validate = Validators.NonNegativeNumber.class)
+    public static int carpetLogicMaxPrograms = 4;
 
     // ...existing code...
 }

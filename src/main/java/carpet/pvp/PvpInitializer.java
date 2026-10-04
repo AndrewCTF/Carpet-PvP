@@ -1,15 +1,92 @@
 package carpet.pvp;
 
+import carpet.CarpetServer;
+import carpet.CarpetSettings;
+import carpet.fakes.PlayerSwordBlockInterface;
+import carpet.helpers.EntityPlayerActionPack;
+import carpet.logic.CarpetLogic;
+import carpet.network.ServerNetworkHandler;
+import carpet.pvp.autosetup.AutoSetupManager;
 import net.fabricmc.api.ModInitializer;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
-public final class PvpInitializer implements ModInitializer {
-    private static final Logger LOGGER = LogManager.getLogger("CarpetPvp");
-
+public final class PvpInitializer implements ModInitializer
+{
     @Override
-    public void onInitialize() {
-        // Stub initializer to satisfy Fabric entrypoint during migration.
-        LOGGER.info("Carpet PVP main initializer loaded (stub). PvP hooks are not yet wired for 26.1.2.");
+    public void onInitialize()
+    {
+        CarpetServer.manageExtension(CarpetLogic.INSTANCE);
+        AttackBlockCallback.EVENT.register(PvpInitializer::punishWrongToolHits);
+        // The practices of the server tick, load their world folder and put it away again.
+        ServerLifecycleEvents.SERVER_STARTED.register(PvpSystems::onServerStarted);
+        ServerLifecycleEvents.SERVER_STOPPED.register(PvpSystems::onServerStopped);
+        ServerTickEvents.END_SERVER_TICK.register(PvpSystems::tick);
+        ServerLifecycleEvents.SERVER_STARTED.register(AutoSetupManager::load);
+        ServerLifecycleEvents.SERVER_STOPPING.register(AutoSetupManager::onServerStopping);
+        ServerTickEvents.END_SERVER_TICK.register(AutoSetupManager::tick);
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+                AutoSetupManager.onPlayerJoined(server, handler.player));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
+                AutoSetupManager.onPlayerLeft(server, handler.player));
+        // The window a sword opens lives in Carpet's rule and its mixin, so the shared action pack
+        // reaches it through this instead of calling in.
+        EntityPlayerActionPack.swordBlockStarter = PvpInitializer::startSwordBlock;
+    }
+
+    /** Breaking a block that needs a tool with the wrong one in hand costs a heart, like hitting a player does. */
+    private static InteractionResult punishWrongToolHits(Player player, Level level, InteractionHand hand, BlockPos pos, Direction side)
+    {
+        if (!CarpetSettings.punishWrongToolHits) return InteractionResult.PASS;
+        BlockState state = level.getBlockState(pos);
+        if (!state.requiresCorrectToolForDrops() || player.isSpectator()) return InteractionResult.PASS;
+        ItemStack held = player.getMainHandItem();
+        boolean lacksTool = held.isEmpty() || !held.isCorrectToolForDrops(state);
+        if (!lacksTool || player.isCreative()) return InteractionResult.PASS;
+        if (!level.isClientSide() && player.level() instanceof ServerLevel serverLevel)
+        {
+            player.hurtServer(serverLevel, serverLevel.damageSources().generic(), 1.0F);
+        }
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+ * Opens the block window of a player that started using a sword. Called for the vanilla use item packets, for
+ * the client's own sword block request and by the fake player's use action; the clients watching the player
+ * are told about it right away. Calling it again while the window is already open only tops it up.
+ */
+    public static void startSwordBlock(Player player, InteractionHand hand)
+    {
+        if (!CarpetSettings.swordBlockHitting) return;
+        if (!(player.level() instanceof ServerLevel level)) return;
+        if (!player.getItemInHand(hand).is(ItemTags.SWORDS)) return;
+        PlayerSwordBlockInterface block = (PlayerSwordBlockInterface) player;
+        boolean wasOpen = block.carpet$getSwordBlockTicks() > 0;
+        block.carpet$setSwordBlockTicks(CarpetSettings.swordBlockWindowTicks);
+        if (!player.isUsingItem()) player.startUsingItem(hand);
+        // A pose the clients have already been told about does not need saying a second time.
+        if (!wasOpen) ServerNetworkHandler.sendSwordBlock(level, player, CarpetSettings.swordBlockWindowTicks);
+    }
+
+    /** The block window is over, so the clients watching this player stop showing the blocking pose. */
+    public static void stopSwordBlock(LivingEntity entity)
+    {
+        if (!CarpetSettings.swordBlockHitting) return;
+        if (!(entity.level() instanceof ServerLevel level)) return;
+        ((PlayerSwordBlockInterface) entity).carpet$setSwordBlockTicks(0);
+        ServerNetworkHandler.sendSwordBlock(level, entity, 0);
     }
 }

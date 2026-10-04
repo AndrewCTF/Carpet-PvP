@@ -110,7 +110,11 @@ public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements W
         if (hadOnlyAir != hasOnlyAir)
         {
             this.level.getChunkSource().getLightEngine().updateSectionStatus(blockPos_1, hasOnlyAir);
+//? if >=26.1 {
             this.level.getChunkSource().onSectionEmptinessChanged(chunkPos.x(), SectionPos.blockToSectionCoord(y), chunkPos.z(), hasOnlyAir);
+//?} else {
+/*            this.level.getChunkSource().onSectionEmptinessChanged(chunkPos.x, SectionPos.blockToSectionCoord(y), chunkPos.z, hasOnlyAir);
+*///?}
         }
 
         if (LightEngine.hasDifferentLightProperties(oldBlockState, newBlockState)) {

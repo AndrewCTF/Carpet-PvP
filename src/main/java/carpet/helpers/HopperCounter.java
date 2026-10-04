@@ -268,18 +268,28 @@ public class HopperCounter
      * {@link Block#defaultMapColor()} method as these items have those same colours.
      */
     private static final Map<Item, Block> DEFAULTS = Map.ofEntries(
+//~ if >=26.1 'Blocks.YELLOW_WOOL' -> 'Blocks.WOOL.yellow()'
             entry(Items.DANDELION, Blocks.WOOL.yellow()),
+//~ if >=26.1 'Blocks.RED_WOOL' -> 'Blocks.WOOL.red()'
             entry(Items.POPPY, Blocks.WOOL.red()),
+//~ if >=26.1 'Blocks.LIGHT_BLUE_WOOL' -> 'Blocks.WOOL.lightBlue()'
             entry(Items.BLUE_ORCHID, Blocks.WOOL.lightBlue()),
+//~ if >=26.1 'Blocks.MAGENTA_WOOL' -> 'Blocks.WOOL.magenta()'
             entry(Items.ALLIUM, Blocks.WOOL.magenta()),
             entry(Items.AZURE_BLUET, Blocks.SNOW_BLOCK),
+//~ if >=26.1 'Blocks.RED_WOOL' -> 'Blocks.WOOL.red()'
             entry(Items.RED_TULIP, Blocks.WOOL.red()),
+//~ if >=26.1 'Blocks.ORANGE_WOOL' -> 'Blocks.WOOL.orange()'
             entry(Items.ORANGE_TULIP, Blocks.WOOL.orange()),
             entry(Items.WHITE_TULIP, Blocks.SNOW_BLOCK),
+//~ if >=26.1 'Blocks.PINK_WOOL' -> 'Blocks.WOOL.pink()'
             entry(Items.PINK_TULIP, Blocks.WOOL.pink()),
             entry(Items.OXEYE_DAISY, Blocks.SNOW_BLOCK),
+//~ if >=26.1 'Blocks.BLUE_WOOL' -> 'Blocks.WOOL.blue()'
             entry(Items.CORNFLOWER, Blocks.WOOL.blue()),
+//~ if >=26.1 'Blocks.BLACK_WOOL' -> 'Blocks.WOOL.black()'
             entry(Items.WITHER_ROSE, Blocks.WOOL.black()),
+//~ if >=26.1 'Blocks.WHITE_WOOL' -> 'Blocks.WOOL.white()'
             entry(Items.LILY_OF_THE_VALLEY, Blocks.WOOL.white()),
             entry(Items.BROWN_MUSHROOM, Blocks.BROWN_MUSHROOM_BLOCK),
             entry(Items.RED_MUSHROOM, Blocks.RED_MUSHROOM_BLOCK),
@@ -288,50 +298,80 @@ public class HopperCounter
             entry(Items.IRON_INGOT, Blocks.IRON_BLOCK),
             entry(Items.DIAMOND, Blocks.DIAMOND_BLOCK),
             entry(Items.NETHERITE_INGOT, Blocks.NETHERITE_BLOCK),
+//~ if >=26.1 'Blocks.YELLOW_WOOL' -> 'Blocks.WOOL.yellow()'
             entry(Items.SUNFLOWER, Blocks.WOOL.yellow()),
+//~ if >=26.1 'Blocks.MAGENTA_WOOL' -> 'Blocks.WOOL.magenta()'
             entry(Items.LILAC, Blocks.WOOL.magenta()),
+//~ if >=26.1 'Blocks.RED_WOOL' -> 'Blocks.WOOL.red()'
             entry(Items.ROSE_BUSH, Blocks.WOOL.red()),
+//~ if >=26.1 'Blocks.PINK_WOOL' -> 'Blocks.WOOL.pink()'
             entry(Items.PEONY, Blocks.WOOL.pink()),
+//~ if >=26.1 'Blocks.ORANGE_WOOL' -> 'Blocks.WOOL.orange()'
             entry(Items.CARROT, Blocks.WOOL.orange()),
+//~ if >=26.1 'Blocks.RED_WOOL' -> 'Blocks.WOOL.red()'
             entry(Items.APPLE, Blocks.WOOL.red()),
             entry(Items.WHEAT, Blocks.HAY_BLOCK),
+//~ if >=26.1 'Blocks.PINK_WOOL' -> 'Blocks.WOOL.pink()'
             entry(Items.PORKCHOP, Blocks.WOOL.pink()),
+//~ if >=26.1 'Blocks.PINK_WOOL' -> 'Blocks.WOOL.pink()'
             entry(Items.RABBIT, Blocks.WOOL.pink()),
+//~ if >=26.1 'Blocks.WHITE_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.white()'
             entry(Items.CHICKEN, Blocks.DYED_TERRACOTTA.white()),
             entry(Items.BEEF, Blocks.NETHERRACK),
             entry(Items.ENCHANTED_GOLDEN_APPLE, Blocks.GOLD_BLOCK),
+//~ if >=26.1 'Blocks.WHITE_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.white()'
             entry(Items.COD, Blocks.DYED_TERRACOTTA.white()),
             entry(Items.SALMON, Blocks.ACACIA_PLANKS),
+//~ if >=26.1 'Blocks.BROWN_WOOL' -> 'Blocks.WOOL.brown()'
             entry(Items.ROTTEN_FLESH, Blocks.WOOL.brown()),
+//? if <26.1 {
+/*            entry(Items.PUFFERFISH, Blocks.YELLOW_TERRACOTTA),
+*///?} else {
             entry(Items.PUFFERFISH, Blocks.DYED_TERRACOTTA.orange()),
+//?}
+//~ if >=26.1 'Blocks.ORANGE_WOOL' -> 'Blocks.WOOL.orange()'
             entry(Items.TROPICAL_FISH, Blocks.WOOL.orange()),
+//~ if >=26.1 'Blocks.WHITE_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.white()'
             entry(Items.POTATO, Blocks.DYED_TERRACOTTA.white()),
+//~ if >=26.1 'Blocks.RED_WOOL' -> 'Blocks.WOOL.red()'
             entry(Items.MUTTON, Blocks.WOOL.red()),
             entry(Items.BEETROOT, Blocks.NETHERRACK),
             entry(Items.MELON_SLICE, Blocks.MELON),
             entry(Items.POISONOUS_POTATO, Blocks.SLIME_BLOCK),
             entry(Items.SPIDER_EYE, Blocks.NETHERRACK),
+//~ if >=26.1 'Blocks.GRAY_WOOL' -> 'Blocks.WOOL.gray()'
             entry(Items.GUNPOWDER, Blocks.WOOL.gray()),
+//~ if >=26.1 'Blocks.LIME_WOOL' -> 'Blocks.WOOL.lime()'
             entry(Items.TURTLE_SCUTE, Blocks.WOOL.lime()),
             entry(Items.ARMADILLO_SCUTE, Blocks.ANCIENT_DEBRIS),
+//~ if >=26.1 'Blocks.WHITE_WOOL' -> 'Blocks.WOOL.white()'
             entry(Items.FEATHER, Blocks.WOOL.white()),
+//~ if >=26.1 'Blocks.BLACK_WOOL' -> 'Blocks.WOOL.black()'
             entry(Items.FLINT, Blocks.WOOL.black()),
             entry(Items.LEATHER, Blocks.SPRUCE_PLANKS),
             entry(Items.GLOWSTONE_DUST, Blocks.GLOWSTONE),
+//~ if >=26.1 'Blocks.WHITE_WOOL' -> 'Blocks.WOOL.white()'
             entry(Items.PAPER, Blocks.WOOL.white()),
             entry(Items.BRICK, Blocks.BRICKS),
+//~ if >=26.1 'Blocks.BLACK_WOOL' -> 'Blocks.WOOL.black()'
             entry(Items.INK_SAC, Blocks.WOOL.black()),
             entry(Items.SNOWBALL, Blocks.SNOW_BLOCK),
             entry(Items.WATER_BUCKET, Blocks.WATER),
             entry(Items.LAVA_BUCKET, Blocks.LAVA),
+//~ if >=26.1 'Blocks.WHITE_WOOL' -> 'Blocks.WOOL.white()'
             entry(Items.MILK_BUCKET, Blocks.WOOL.white()),
             entry(Items.CLAY_BALL, Blocks.CLAY),
             entry(Items.COCOA_BEANS, Blocks.COCOA),
             entry(Items.BONE, Blocks.BONE_BLOCK),
+//~ if >=26.1 'Blocks.BROWN_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.brown()'
             entry(Items.COD_BUCKET, Blocks.DYED_TERRACOTTA.brown()),
+//~ if >=26.1 'Blocks.YELLOW_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.yellow()'
             entry(Items.PUFFERFISH_BUCKET, Blocks.DYED_TERRACOTTA.yellow()),
+//~ if >=26.1 'Blocks.PINK_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.pink()'
             entry(Items.SALMON_BUCKET, Blocks.DYED_TERRACOTTA.pink()),
+//~ if >=26.1 'Blocks.ORANGE_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.orange()'
             entry(Items.TROPICAL_FISH_BUCKET, Blocks.DYED_TERRACOTTA.orange()),
+//~ if >=26.1 'Blocks.WHITE_WOOL' -> 'Blocks.WOOL.white()'
             entry(Items.SUGAR, Blocks.WOOL.white()),
             entry(Items.BLAZE_POWDER, Blocks.GOLD_BLOCK),
             entry(Items.ENDER_PEARL, Blocks.WARPED_PLANKS),
@@ -345,12 +385,15 @@ public class HopperCounter
             entry(Items.HEART_OF_THE_SEA, Blocks.CONDUIT),
             entry(Items.HONEYCOMB, Blocks.HONEYCOMB_BLOCK),
             entry(Items.NAME_TAG, Blocks.BONE_BLOCK),
+//~ if >=26.1 'Blocks.YELLOW_TERRACOTTA' -> 'Blocks.DYED_TERRACOTTA.yellow()'
             entry(Items.TOTEM_OF_UNDYING, Blocks.DYED_TERRACOTTA.yellow()),
             entry(Items.TRIDENT, Blocks.PRISMARINE),
+//~ if >=26.1 'Blocks.WHITE_WOOL' -> 'Blocks.WOOL.white()'
             entry(Items.GHAST_TEAR, Blocks.WOOL.white()),
             entry(Items.PHANTOM_MEMBRANE, Blocks.BONE_BLOCK),
             entry(Items.EGG, Blocks.BONE_BLOCK),
             //entry(Items.,Blocks.),
+//~ if >=26.1 'Blocks.COPPER_BLOCK' -> 'Blocks.COPPER_BLOCK.weathering().unaffected()'
             entry(Items.COPPER_INGOT, Blocks.COPPER_BLOCK.weathering().unaffected()),
             entry(Items.AMETHYST_SHARD, Blocks.AMETHYST_BLOCK));
 
@@ -361,14 +404,22 @@ public class HopperCounter
     {
         if (DEFAULTS.containsKey(item))
         {
+//? if >=26.1 {
             // defaultMapColor() may have changed - use a fixed color for hopper counters
             return TextColor.fromRgb(0x8B8B8B); // Gray for default
+//?} else {
+/*            return TextColor.fromRgb(appropriateColor(DEFAULTS.get(item).defaultMapColor().col));
+*///?}
         }
         if (item instanceof DyeItem dye)
         {
+//? if >=26.1 {
             // In 26.1, DyeItem doesn't have getDyeColor - use default instance tint
             // Just return gray for dye items to skip for now
             return TextColor.fromRgb(0x8B8B8B);
+//?} else {
+/*            return TextColor.fromRgb(appropriateColor(dye.getDyeColor().getMapColor().col));
+*///?}
         }
         Block block = null;
         final Registry<Item> itemRegistry = registryAccess.lookupOrThrow(Registries.ITEM);

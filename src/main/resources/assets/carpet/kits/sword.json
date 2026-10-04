@@ -1,0 +1,10 @@
+{
+  "name": "sword",
+  "items": [
+    { "item": "minecraft:diamond_sword", "slot": 0, "enchantments": [ { "id": "minecraft:sharpness", "level": 2 } ] },
+    { "item": "minecraft:diamond_helmet", "slot": "head", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:diamond_chestplate", "slot": "chest", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:diamond_leggings", "slot": "legs", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] },
+    { "item": "minecraft:diamond_boots", "slot": "feet", "enchantments": [ { "id": "minecraft:protection", "level": 4 } ] }
+  ]
+}

@@ -2,12 +2,25 @@ package carpet.script.external;
 
 import carpet.CarpetSettings;
 import carpet.fakes.MinecraftServerInterface;
+import carpet.mixins.Objective_scarpetMixin;
+import carpet.mixins.PoiRecord_scarpetMixin;
+import carpet.mixins.Scoreboard_scarpetMixin;
 import carpet.fakes.ServerPlayerInteractionManagerInterface;
-import carpet.fakes.ServerWorldInterface;
 import carpet.fakes.SpawnHelperInnerInterface;
-import carpet.fakes.TicketsFetcherInterface;
 //? if <26.3
 //import carpet.fakes.RandomStateVisitorAccessor;
+//? if <26.3
+//import net.minecraft.world.level.levelgen.DensityFunction;
+//? if <26.3
+//import net.minecraft.world.level.levelgen.RandomState;
+//? if <26.1 {
+/*import carpet.fakes.BiomeInterface;
+import carpet.fakes.BlockPredicateInterface;
+import carpet.mixins.Objective_scarpetMixin;
+import carpet.mixins.PoiRecord_scarpetMixin;
+import carpet.mixins.Scoreboard_scarpetMixin;
+*///?}
+import carpet.fakes.TicketsFetcherInterface;
 import carpet.fakes.BlockStateArgumentInterface;
 import carpet.fakes.InventoryBearerInterface;
 import carpet.fakes.AbstractContainerMenuInterface;
@@ -58,6 +71,8 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.NaturalSpawner;
 import net.minecraft.world.level.PotentialCalculator;
+//? if <26.1
+//import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -66,7 +81,6 @@ import net.minecraft.world.level.block.state.pattern.BlockInWorld;
 //import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.storage.LevelStorageSource;
-import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
@@ -106,18 +120,12 @@ public class Vanilla
 
     public static void Objective_setCriterion(Objective objective, ObjectiveCriteria criterion)
     {
-        // Stub - objective.setCriterion not accessible in 26.1
+        ((Objective_scarpetMixin) objective).setCriterion(criterion);
     }
 
     public static Map<ObjectiveCriteria, List<Objective>> Scoreboard_getObjectivesByCriterion(Scoreboard scoreboard)
     {
-        // Stub - scoreboard.getObjectivesByCriterion not accessible in 26.1
-        return Map.of();
-    }
-
-    public static ServerLevelData ServerLevel_getWorldProperties(ServerLevel world)
-    {
-        return ((ServerWorldInterface) world).getWorldPropertiesCM();
+        return ((Scoreboard_scarpetMixin) scoreboard).getObjectivesByCriterion();
     }
 
     public static Long2ObjectOpenHashMap<List<Ticket>> ChunkTicketManager_getTicketsByPosition(DistanceManager ticketManager)
@@ -183,11 +191,13 @@ public class Vanilla
         return MapValue.wrap(ret);
     }
 
+//? if <26.1 {
+/*    public static LevelStorageSource.LevelStorageAccess MinecraftServer_storageSource(MinecraftServer server)
+    {
+        return ((MinecraftServerInterface) server).getCMSession();
+    }
+*///?}
     // LevelStorageSource methods require actual mixin implementation - comment out for now
-    // public static LevelStorageSource.LevelStorageAccess MinecraftServer_storageSource(MinecraftServer server)
-    // {
-    //     return ((MinecraftServerInterface) server).getCMSession();
-    // }
 
     public static BlockPos ServerPlayerGameMode_getCurrentBlockPosition(ServerPlayerGameMode gameMode)
     {
@@ -331,16 +341,20 @@ public class Vanilla
 
     public static int PoiRecord_getFreeTickets(PoiRecord record)
     {
-        // PoiRecord_scarpetMixin is in carpet.mixins package - not accessible here
-        // Stub - POI ticket access not available without mixin
-        return 0;
+        return ((PoiRecord_scarpetMixin) record).getFreeTickets();
     }
 
     public static void PoiRecord_callAcquireTicket(PoiRecord record)
     {
-        // PoiRecord_scarpetMixin is in carpet.mixins package - not accessible here
-        // Stub - POI ticket acquisition not available without mixin
+        ((PoiRecord_scarpetMixin) record).callAcquireTicket();
     }
+
+//? if <26.1 {
+/*    public static ServerLevelData ServerLevel_getWorldProperties(ServerLevel world)
+    {
+        return (ServerLevelData) world.getLevelData();
+    }
+*///?}
 
     public record BlockPredicatePayload(BlockState state, TagKey<Block> tagKey, Map<Value, Value> properties, CompoundTag tag) {
         public static BlockPredicatePayload of(Predicate<BlockInWorld> blockPredicate)

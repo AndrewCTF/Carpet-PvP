@@ -1,14 +1,48 @@
 name: Gradle CI
 
 on:
+  # A branch with a pull request open is tested once, by the pull request.
   push:
-    branches: [ "**" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "**" ]
 
 jobs:
-  build:
+  # One Stonecutter node per directory under versions/: the Fabric mod per Minecraft version, and the
+  # Paper plugin per Minecraft version in the directories that end in -paper.
+  nodes:
     runs-on: ubuntu-latest
+    outputs:
+      fabric: ${{ steps.list.outputs.fabric }}
+      paper: ${{ steps.list.outputs.paper }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: List the build nodes
+        id: list
+        run: |
+          for dir in versions/*/; do
+            node="${dir%/}"
+            if [ ! -f "$node/gradle.properties" ]; then
+              echo "::error::$node has no gradle.properties"
+              exit 1
+            fi
+          done
+          fabric=$(ls versions | grep -v -- '-paper$' | jq -R . | jq -sc .)
+          paper=$(ls versions | grep -- '-paper$' | jq -R . | jq -sc .)
+          echo "fabric=$fabric" >> "$GITHUB_OUTPUT"
+          echo "paper=$paper" >> "$GITHUB_OUTPUT"
+          echo "Fabric: $fabric"
+          echo "Paper: $paper"
+
+  # One runner per node: a self-test server wants the cores to itself, and three of them on one runner
+  # took three times as long and lost more fights to timing.
+  fabric:
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.nodes.outputs.fabric) }}
     steps:
       - uses: actions/checkout@v4
       - name: Read Java version
@@ -20,7 +54,6 @@ jobs:
             exit 1
           fi
           echo "version=$JAVA_VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Set up JDK ${{ steps.java.outputs.version }}
         uses: actions/setup-java@v4
         with:
@@ -29,16 +62,66 @@ jobs:
           cache: gradle
       - name: Make gradlew executable
         run: chmod +x ./gradlew
-      - name: Check Java & Gradle versions
+      - name: Build ${{ matrix.node }} and run its unit tests
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:build"
+      - name: Self-test the ${{ matrix.node }} server
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:runSelfTest"
+      - name: Check the client mixins
+        # The dev client needs a display; the task starts its own Xvfb with Mesa's software renderer.
+        # From 26.3 the client opens its window through SDL, which finds no GLX visual on the runner's
+        # Xvfb ("Couldn't find matching GLX visual") and then sits there until the task times out. That
+        # client is checked on a developer's machine; the older ones are checked here.
+        if: ${{ startsWith(matrix.node, '1.') || startsWith(matrix.node, '26.1') || startsWith(matrix.node, '26.2') }}
         run: |
-          java --version
-          ./gradlew --version
-      - name: Build, test and self-test every Minecraft version
-        run: ./gradlew --no-daemon build runSelfTest
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+          ./gradlew --no-daemon ":${{ matrix.node }}:runClientCheck"
       - name: Upload self-test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: selftest-reports
-          path: run/selftest-*/selftest-report.json
+          name: selftest-reports-${{ matrix.node }}
+          path: |
+            run/selftest-*/selftest-report.json
+            run/selftest-*/logs/latest.log
+            run/*/clientCheck/logs/latest.log
+          if-no-files-found: ignore
+
+  # A Paper self-test is one server for a long time, so each node gets a runner of its own.
+  paper:
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.nodes.outputs.paper) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Java version
+        id: java
+        run: |
+          JAVA_VERSION=$(grep -E '^\s*java_version\s*=' gradle.properties | sed 's/.*=\s*//' | tr -d '[:space:]')
+          if [ -z "$JAVA_VERSION" ]; then
+            echo "::error::Could not determine Java version from gradle.properties"
+            exit 1
+          fi
+          echo "version=$JAVA_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Set up JDK ${{ steps.java.outputs.version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.java.outputs.version }}
+          cache: gradle
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      - name: Self-test the Paper plugin on ${{ matrix.node }}
+        run: ./gradlew --no-daemon ":${{ matrix.node }}:build" ":${{ matrix.node }}:runSelfTest"
+      - name: Upload self-test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-reports-${{ matrix.node }}
+          path: |
+            run/selftest-*/selftest-report.json
+            run/selftest-*/logs/latest.log
           if-no-files-found: ignore

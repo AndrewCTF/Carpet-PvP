@@ -3,9 +3,10 @@ package carpet.commands;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.helpers.EntityPlayerActionPack.Action;
 import carpet.helpers.EntityPlayerActionPack.ActionType;
-import carpet.helpers.pathfinding.ElytraAStarPathfinder;
-import carpet.helpers.pathfinding.BotNavMode;
+import carpet.pvp.nav.ElytraAStarPathfinder;
+import carpet.pvp.nav.BotNavMode;
 import carpet.CarpetSettings;
+import carpet.fakes.ItemCooldownsInterface;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotPvpConfig;
@@ -39,7 +40,6 @@ import net.minecraft.commands.arguments.item.ItemArgument;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
@@ -53,6 +53,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemCooldowns;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -95,7 +96,7 @@ public class PlayerCommand
             .then(makeActionCommand("swing", ActionType.SWING))
             .then(literal("animate")
                 .then(literal("attack").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
-                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.once()))))
+                .then(literal("use").executes(manipulation(ap -> ap.start(ActionType.SWING_OFF_HAND, Action.once()))))
                 .then(literal("continuous").executes(manipulation(ap -> ap.start(ActionType.SWING, Action.continuous()))))
                 .then(literal("interval").then(argument("ticks", IntegerArgumentType.integer(1))
                     .executes(c -> manipulate(c, ap -> ap.start(ActionType.SWING, Action.interval(IntegerArgumentType.getInteger(c, "ticks"))))))))
@@ -703,8 +704,8 @@ public class PlayerCommand
         ap.setNavChase(targetPlayer.getUUID(), crit, distance, interval);
         String intervalStr = interval > 0 ? String.valueOf(interval) : "continuous";
         Messenger.m(context.getSource(), "g ", player.getName(), "g  is now chasing ", targetPlayer.getName(),
-            "w  mode=", "y ", modeLabel, "w  range=", String.format("y %.1f", distance),
-                "w  interval=", "y ", intervalStr);
+            "w  mode=", "y " + modeLabel, "w  range=", String.format("y %.1f", distance),
+                "w  interval=", "y " + intervalStr);
         return 1;
     }
 
@@ -1163,7 +1164,7 @@ public class PlayerCommand
             .then(literal("show").executes(PlayerCommand::aiShow))
             .then(literal("reset").executes(PlayerCommand::aiReset))
             .then(argument("setting", StringArgumentType.word())
-                .suggests((c, b) -> suggest(List.of(BotPvpConfig.KEYS), b))
+                .suggests((c, b) -> suggest(List.of(BotPvpConfig.keys()), b))
                 .then(argument("value", StringArgumentType.greedyString())
                     .executes(PlayerCommand::aiSet)));
     }
@@ -1209,27 +1210,12 @@ public class PlayerCommand
             if (!(p instanceof EntityPlayerMPFake bot)) continue;
             String err = bot.getPvpConfig().apply(setting, value);
             if (err != null) { Messenger.m(context.getSource(), "r " + err); return 0; }
-            syncBotFaction(bot);
+            FactionManager.sync(bot.getUUID(), bot.getPvpConfig().faction);
             count++;
         }
         if (count == 0) { Messenger.m(context.getSource(), "r No fake players selected"); return 0; }
         Messenger.m(context.getSource(), "w Set " + setting + " = " + value + " on " + count + " bot(s)");
         return count;
-    }
-
-    /** Keeps the faction registry in sync with a bot's config faction field. */
-    private static void syncBotFaction(EntityPlayerMPFake bot)
-    {
-        String faction = bot.getPvpConfig().faction;
-        if (faction == null)
-        {
-            FactionManager.leave(bot.getUUID());
-        }
-        else
-        {
-            FactionManager.create(faction);
-            FactionManager.join(faction, bot.getUUID());
-        }
     }
 
     // ===== Factions (`/player <name> faction ...`) =====
@@ -1504,28 +1490,8 @@ public class PlayerCommand
             Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is already logged on");
             return true;
         }
-        GameProfile profile = server.services().profileResolver().fetchByName(playerName).orElse(null);
-        if (profile == null)
-        {
-            if (!CarpetSettings.allowSpawningOfflinePlayers)
-            {
-                Messenger.m(context.getSource(), "r Player "+playerName+" is either banned by Mojang, or auth servers are down. " +
-                        "Banned players can only be summoned in Singleplayer and in servers in off-line mode.");
-                return true;
-            } else {
-                profile = new GameProfile(UUIDUtil.createOfflinePlayerUUID(playerName), playerName);
-            }
-        }
-        if (manager.getBans().isBanned(nameAndId(profile)))
-        {
-            Messenger.m(context.getSource(), "r Player ", "rb " + playerName, "r  is banned on this server");
-            return true;
-        }
-        if (manager.isUsingWhitelist() && manager.isWhiteListed(nameAndId(profile)) && !CommandHelper.hasPermissionLevel(context.getSource(), 2))
-        {
-            Messenger.m(context.getSource(), "r Whitelisted players can only be spawned by operators");
-            return true;
-        }
+        // The profile is resolved by createFake, as it blocks on Mojang on an online mode server. Bans
+        // and the whitelist are checked there too, once the profile is known.
         return false;
     }
 
@@ -1613,9 +1579,9 @@ public class PlayerCommand
             Messenger.m(source, "rb Player " + playerName + " cannot be placed outside of the world");
             return 0;
         }
-        boolean success = EntityPlayerMPFake.createFake(playerName, source.getServer(), pos, facing.y, facing.x, dimType, mode, flying);
+        boolean success = EntityPlayerMPFake.createFake(playerName, source.getServer(), source, pos, facing.y, facing.x, dimType, mode, flying);
         if (!success) {
-            Messenger.m(source, "rb Player " + playerName + " doesn't exist and cannot spawn in online mode. " +
+            Messenger.m(source, "rb Player " + playerName + " doesn't exist and cannot spawn with allowSpawningOfflinePlayers off. " +
                     "Turn the server offline or the allowSpawningOfflinePlayers on to spawn non-existing players");
             return 0;
         };
@@ -1679,7 +1645,8 @@ public class PlayerCommand
         int shadowed = 0;
         for (ServerPlayer player : players)
         {
-            EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
+            EntityPlayerMPFake shadow = EntityPlayerMPFake.createShadow(((ServerLevel) player.level()).getServer(), player);
+            shadow.getActionPack().copyFrom(((ServerPlayerInterface) player).getActionPack());
             shadowed++;
         }
         return shadowed;
@@ -1762,10 +1729,14 @@ public class PlayerCommand
     {
         if (cantManipulate(context)) return 0;
         ServerPlayer player = getPlayer(context);
-        // Reset cooldowns by setting zero-tick cooldown on a fresh instance (ItemCooldowns has no removeAll).
-        // This effectively tells the player the cooldown system on the player, which ticks down to 0 immediately.
-        Messenger.m(context.getSource(), "g Item cooldowns will clear on next tick for ", player.getName());
-        return 1;
+        ItemCooldowns cooldowns = player.getCooldowns();
+        // ItemCooldowns has no removeAll and only knows how to forget one group at a time, so the
+        // groups it holds are collected first and then each dropped, which also tells the client.
+        List<Identifier> groups = new ArrayList<>(((ItemCooldownsInterface) cooldowns).carpet$getCooldowns().keySet());
+        for (Identifier group : groups) cooldowns.removeCooldown(group);
+        Messenger.m(context.getSource(), "g Cleared ", String.valueOf(groups.size()),
+                groups.size() == 1 ? "g  item cooldown for " : "g  item cooldowns for ", player.getName());
+        return groups.size();
     }
 
     private static int itemCdQuery(CommandContext<CommandSourceStack> context)
@@ -1775,7 +1746,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             float pct = player.getCooldowns().getCooldownPercent(item.getDefaultInstance(), 0.0F);
             int remaining = (int) Math.ceil(pct * 20); // approximate ticks remaining
             if (pct <= 0.0F)
@@ -1804,7 +1779,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             Identifier itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
             player.getCooldowns().removeCooldown(itemId);
             Messenger.m(context.getSource(), "g Cooldown reset for ", item.getDefaultInstance().getDisplayName().getString(),
@@ -1825,7 +1804,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             ItemStack stack = item.getDefaultInstance();
             // Default cooldowns: ender pearl = 20 ticks, chorus fruit = 20, shield = 100
             int defaultTicks = 20;
@@ -1848,7 +1831,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             Item item = itemInput.item().value();
+//?} else {
+/*            Item item = itemInput.getItem();
+*///?}
             ItemStack stack = item.getDefaultInstance();
             int ticks = IntegerArgumentType.getInteger(context, "ticks");
             player.getCooldowns().addCooldown(stack, ticks);
@@ -1991,7 +1978,11 @@ public class PlayerCommand
         try
         {
             ItemInput itemInput = ItemArgument.getItem(context, "item");
+//? if >=26.1 {
             ItemStack itemStack = itemInput.createItemStack(1);
+//?} else {
+/*            ItemStack itemStack = itemInput.createItemStack(1, false);
+*///?}
             
             // Validate that the item was created successfully
             if (itemStack.isEmpty()) {

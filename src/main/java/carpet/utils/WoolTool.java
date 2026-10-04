@@ -13,13 +13,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.ColorCollection;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.Vec3;
@@ -38,10 +36,31 @@ public class WoolTool
      * A map from a wool {@link Block} to its {@link DyeColor} which is used in {@link WoolTool#getWoolColorAtPosition}
      * to get the colour of wool at a position.
      */
+//? if <26.1 {
+/*    private static final Map<Block, DyeColor> WOOL_BLOCK_TO_DYE = Map.ofEntries(
+            entry(Blocks.WHITE_WOOL, DyeColor.WHITE),
+            entry(Blocks.ORANGE_WOOL, DyeColor.ORANGE),
+            entry(Blocks.MAGENTA_WOOL, DyeColor.MAGENTA),
+            entry(Blocks.LIGHT_BLUE_WOOL, DyeColor.LIGHT_BLUE),
+            entry(Blocks.YELLOW_WOOL, DyeColor.YELLOW),
+            entry(Blocks.LIME_WOOL, DyeColor.LIME),
+            entry(Blocks.PINK_WOOL, DyeColor.PINK),
+            entry(Blocks.GRAY_WOOL, DyeColor.GRAY),
+            entry(Blocks.LIGHT_GRAY_WOOL, DyeColor.LIGHT_GRAY),
+            entry(Blocks.CYAN_WOOL, DyeColor.CYAN),
+            entry(Blocks.PURPLE_WOOL, DyeColor.PURPLE),
+            entry(Blocks.BLUE_WOOL, DyeColor.BLUE),
+            entry(Blocks.BROWN_WOOL, DyeColor.BROWN),
+            entry(Blocks.GREEN_WOOL, DyeColor.GREEN),
+            entry(Blocks.RED_WOOL, DyeColor.RED),
+            entry(Blocks.BLACK_WOOL, DyeColor.BLACK)
+    );
+*///?} else {
     private static final Map<Block, DyeColor> WOOL_BLOCK_TO_DYE = Arrays.stream(DyeColor.values()).collect(Collectors.toUnmodifiableMap(
             Blocks.WOOL::pick, // gets the wool block of the colour
             color -> color // the value is just the colour itself))
             ));
+//?}
 
 
     /**

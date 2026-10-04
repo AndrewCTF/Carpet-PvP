@@ -33,19 +33,23 @@ public class OptimizedExplosion
     public static List<BlockPos> doExplosionA(Explosion e, ExplosionLogHelper eLogger) {
         ExplosionAccessor eAccess = (ExplosionAccessor) e;
 
+        // Everything here is static, so an explosion that skips the walk below would otherwise leave its
+        // work behind for the next one. Start every explosion from empty caches.
+        rayCalcDone = false;
+        firstRay = true;
+        affectedBlockPositionsSet.clear();
+        stateCache.clear();
+        fluidCache.clear();
+
         List<BlockPos> toBlow;
 
         if (!CarpetSettings.explosionNoBlockDamage && eAccess.getDamageSource() != null) {
-            rayCalcDone = false;
-            firstRay = true;
             getAffectedPositionsOnPlaneY(e,  0,  0, 15,  0, 15); // bottom
             getAffectedPositionsOnPlaneY(e, 15,  0, 15,  0, 15); // top
             getAffectedPositionsOnPlaneX(e,  0,  1, 14,  0, 15); // west
             getAffectedPositionsOnPlaneX(e, 15,  1, 14,  0, 15); // east
             getAffectedPositionsOnPlaneZ(e,  0,  1, 14,  1, 14); // north
             getAffectedPositionsOnPlaneZ(e, 15,  1, 14,  1, 14); // south
-            stateCache.clear();
-            fluidCache.clear();
 
             toBlow = new ArrayList<>(affectedBlockPositionsSet);
             affectedBlockPositionsSet.clear();
@@ -133,6 +137,7 @@ public class OptimizedExplosion
         double xInc = (xRel / len) * 0.3;
         double yInc = (yRel / len) * 0.3;
         double zInc = (zRel / len) * 0.3;
+//~ if >=26.1 'random' -> 'getRandom()'
         float rand = eAccess.getLevel().getRandom().nextFloat();
         float sizeRand = (CarpetSettings.tntRandomRange >= 0 ? (float) CarpetSettings.tntRandomRange : rand);
         float size = eAccess.getRadius() * (0.7F + sizeRand * 0.6F);

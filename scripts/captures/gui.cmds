@@ -1,0 +1,13 @@
+# The chest-screen menu a vanilla client sees for /bot gui.
+gamerule spawn_mobs false
+kill @e[type=!player]
+time set noon
+weather clear
+gamemode creative Viewer
+tp Viewer 0.5 -60 0.5 -90 5
+bot spawn Alpha sword expert at 4.5 -60 -1.5
+bot spawn Bravo mace average at 4.5 -60 2.5
+sleep 5
+execute as Viewer run bot gui
+sleep 3
+shot gui-01-main-menu

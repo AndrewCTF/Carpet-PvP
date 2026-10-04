@@ -23,9 +23,18 @@ public abstract class LivingEntity_damageTicksOverrideMixin {
         if (!CarpetSettings.damageTickOverrides) return;
         int ticks = resolveTicks(source);
         if (ticks >= 0) {
-            Entity_invulnerableTimeAccessor acc = (Entity_invulnerableTimeAccessor) (Object) this;
-            acc.carpet$setInvulnerableTime(Math.max(acc.carpet$getInvulnerableTime(), ticks));
+            holdOff((LivingEntity) (Object) this, ticks);
         }
+    }
+
+    /** Widens the window the entity cannot be hurt again for, never shortens it. */
+    private static void holdOff(LivingEntity entity, int ticks)
+    {
+        //? if >=26.3 {
+        entity.damageCooldownTime = Math.max(entity.damageCooldownTime, ticks);
+        //?} else {
+        /*entity.invulnerableTime = Math.max(entity.invulnerableTime, ticks);
+        *///?}
     }
 
     private static int resolveTicks(DamageSource source) {

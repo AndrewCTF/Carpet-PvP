@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.random.WeightedList;
 import net.minecraft.util.valueproviders.ConstantInt;
 import net.minecraft.util.valueproviders.UniformInt;
+//~ if >=26.1 'net.minecraft.world.entity.EntityType' -> 'net.minecraft.world.entity.EntityTypes'
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.level.StructureManager;
@@ -34,15 +35,20 @@ public class SpawnOverrides {
 
     static {
         addOverride(() -> CarpetSettings.huskSpawningInTemples, MobCategory.MONSTER, BuiltinStructures.DESERT_PYRAMID, StructureSpawnOverride.BoundingBoxType.STRUCTURE,
+                //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                 WeightedList.of(new MobSpawnSettings.SpawnerData(EntityTypes.HUSK, /*? if >=26.3 {*/ConstantInt.of(1)/*?} else {*//*1, 1*//*?}*/))
         );
         addOverride(() -> CarpetSettings.shulkerSpawningInEndCities, MobCategory.MONSTER, BuiltinStructures.END_CITY, StructureSpawnOverride.BoundingBoxType.PIECE,
+                //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                 WeightedList.of(new MobSpawnSettings.SpawnerData(EntityTypes.SHULKER, /*? if >=26.3 {*/ConstantInt.of(4)/*?} else {*//*4, 4*//*?}*/))
         );
         addOverride(() -> CarpetSettings.piglinsSpawningInBastions, MobCategory.MONSTER, BuiltinStructures.BASTION_REMNANT, StructureSpawnOverride.BoundingBoxType.PIECE,
                 WeightedList.<MobSpawnSettings.SpawnerData>builder()
+                        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                         .add(new MobSpawnSettings.SpawnerData(EntityTypes.PIGLIN_BRUTE, /*? if >=26.3 {*/UniformInt.of(1, 2)/*?} else {*//*1, 2*//*?}*/), 5)
+                        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                         .add(new MobSpawnSettings.SpawnerData(EntityTypes.PIGLIN, /*? if >=26.3 {*/UniformInt.of(2, 4)/*?} else {*//*2, 4*//*?}*/), 10)
+                        //~ if >=26.1 'EntityType.' -> 'EntityTypes.'
                         .add(new MobSpawnSettings.SpawnerData(EntityTypes.HOGLIN, /*? if >=26.3 {*/UniformInt.of(1, 2)/*?} else {*//*1, 2*//*?}*/), 2)
                         .build()
         );

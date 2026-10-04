@@ -22,6 +22,7 @@ public class ParticleDisplay
         Vec3 incvec = to.subtract(from).normalize();//    multiply(50/sqrt(lineLengthSq));
         for (Vec3 delta = new Vec3(0.0,0.0,0.0);
              delta.lengthSqr() < lineLengthSq;
+//~ if >=26.1 'random' -> 'getRandom()'
              delta = delta.add(incvec.scale(player.level().getRandom().nextFloat())))
         {
             ((net.minecraft.server.level.ServerLevel) player.level()).sendParticles(

@@ -1,0 +1,60 @@
+name: Modrinth page
+
+# Puts docs/modrinth.md on the project's Modrinth page and adds the pictures listed in
+# docs/modrinth-gallery.txt to its gallery. Run it by hand after changing either.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  page:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update the description and the gallery
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          api="https://api.modrinth.com/v2/project/$MODRINTH_PROJECT_ID"
+          agent="AndrewCTF/Carpet-PvP (https://github.com/AndrewCTF/Carpet-PvP)"
+
+          jq -n --rawfile body docs/modrinth.md '{body: $body}' > body.json
+          code=$(curl -sS -o response.txt -w '%{http_code}' -X PATCH "$api" \
+            -H "Authorization: $MODRINTH_TOKEN" -H "User-Agent: $agent" \
+            -H 'Content-Type: application/json' --data @body.json)
+          if [ "$code" != 204 ]; then
+            echo "::error::Modrinth refused the description ($code): $(cat response.txt)"
+            exit 1
+          fi
+          echo "description updated"
+
+          # A picture is told apart by its title, so running this twice adds nothing twice.
+          have=$(curl -sS "$api" -H "Authorization: $MODRINTH_TOKEN" -H "User-Agent: $agent" | jq -r '.gallery[].title // empty')
+          order=0
+          while IFS='|' read -r file title featured; do
+            case "$file" in ''|'#'*) continue ;; esac
+            order=$((order + 1))
+            if printf '%s\n' "$have" | grep -qxF "$title"; then
+              echo "already there: $title"
+              continue
+            fi
+            if [ ! -f "docs/images/$file" ]; then
+              echo "::error::docs/images/$file is listed in docs/modrinth-gallery.txt and does not exist"
+              exit 1
+            fi
+            encoded=$(jq -rn --arg t "$title" '$t | @uri')
+            code=$(curl -sS -o response.txt -w '%{http_code}' -X POST \
+              "$api/gallery?ext=png&featured=$featured&ordering=$order&title=$encoded" \
+              -H "Authorization: $MODRINTH_TOKEN" -H "User-Agent: $agent" \
+              -H 'Content-Type: image/png' --data-binary "@docs/images/$file")
+            if [ "$code" != 204 ]; then
+              echo "::error::Modrinth refused $file ($code): $(cat response.txt)"
+              exit 1
+            fi
+            echo "added: $title"
+          done < docs/modrinth-gallery.txt

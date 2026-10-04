@@ -55,11 +55,13 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import net.minecraft.ChatFormatting;
+//~ if >=26.1 'advancements.criterion' -> 'advancements.predicates'
 import net.minecraft.advancements.predicates.MinMaxBounds;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.AngleArgument;
+//~ if >=26.1 'commands.arguments.ColorArgument' -> 'commands.arguments.TeamColorArgument'
 import net.minecraft.commands.arguments.TeamColorArgument;
 import net.minecraft.commands.arguments.CompoundTagArgument;
 import net.minecraft.commands.arguments.DimensionArgument;
@@ -83,6 +85,8 @@ import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.commands.arguments.blocks.BlockInput;
 import net.minecraft.commands.arguments.blocks.BlockPredicateArgument;
 import net.minecraft.commands.arguments.blocks.BlockStateArgument;
+//~ if >=26.1 'ChatFormatting' -> 'world.scores.TeamColor'
+import net.minecraft.world.scores.TeamColor;
 import net.minecraft.commands.arguments.coordinates.ColumnPosArgument;
 import net.minecraft.commands.arguments.coordinates.RotationArgument;
 import net.minecraft.commands.arguments.coordinates.SwizzleArgument;
@@ -108,7 +112,6 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.scores.ScoreHolder;
 
-import net.minecraft.world.scores.TeamColor;
 import jakarta.annotation.Nullable;
 
 import static net.minecraft.commands.Commands.argument;
@@ -145,10 +148,16 @@ public abstract class CommandArgument
                     (c, p) -> ValueConversions.ofBlockPredicate(c.getSource().getServer().registryAccess(), BlockPredicateArgument.getBlockPredicate(c, p)),
                     param -> (ctx, builder) -> ctx.getArgument(param, BlockPredicateArgument.class).listSuggestions(ctx, builder)
             ),
+//~ if >=26.1 'ColorArgument::color' -> 'TeamColorArgument::teamColor'
             new VanillaUnconfigurableArgument("teamcolor", TeamColorArgument::teamColor,
                     (c, p) -> {
+//? if >=26.1 {
                         TeamColor format = TeamColorArgument.getTeamColor(c, p);
                         return ListValue.of(StringValue.of(format.getSerializedName()), ValueConversions.ofRGB(format.rgb()));
+//?} else {
+/*                        ChatFormatting format = ColorArgument.getColor(c, p);
+                        return ListValue.of(StringValue.of(format.getName()), ValueConversions.ofRGB(format.getColor()));
+*///?}
                     },
                     false
             ),
@@ -182,7 +191,11 @@ public abstract class CommandArgument
             // item_predicate  ?? //same as item but accepts tags, not sure right now
             new SlotArgument(),
             new VanillaUnconfigurableArgument("item", ItemArgument::item,
+//? if >=26.1 {
                     (c, p) -> ValueConversions.of(ItemArgument.getItem(c, p).createItemStack(1), c.getSource().registryAccess()),
+//?} else {
+/*                    (c, p) -> ValueConversions.of(ItemArgument.getItem(c, p).createItemStack(1, false), c.getSource().registryAccess()),
+*///?}
                     param -> (ctx, builder) -> ctx.getArgument(param, ItemArgument.class).listSuggestions(ctx, builder)
             ),
             new VanillaUnconfigurableArgument("message", MessageArgument::message,

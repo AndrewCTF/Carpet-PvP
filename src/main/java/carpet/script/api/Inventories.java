@@ -46,7 +46,9 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+//? if >=26.1 {
 import net.minecraft.world.item.ItemStackTemplate;
+//?}
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.CustomRecipe;
 import net.minecraft.world.item.crafting.PlacementInfo;
@@ -209,8 +211,12 @@ public class Inventories
             CarpetContext cc = (CarpetContext) c;
             Registry<Item> registry = cc.registry(Registries.ITEM);
             Item item = registry.getOptional(id).orElseThrow(() -> new ThrowStatement(itemStr, Throwables.UNKNOWN_ITEM));
+//? if >=26.1 {
             // In 26.1, crafting remainder may be accessed differently
             ItemStack reminder = ItemStack.EMPTY;
+//?} else {
+/*            ItemStack reminder = item.getCraftingRemainder();
+*///?}
             return reminder.isEmpty() ? Value.NULL : ValueConversions.of(reminder, cc.registryAccess());
         });
 
