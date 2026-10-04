@@ -82,7 +82,7 @@ final class SmpScenarios
                         // The target holds a netherite sword without ever swinging it: the survival
                         // model weighs what it is wearing, so with nothing in its hand the bot would
                         // never see itself as being in danger from it at all.
-                        SelfTest.run(server, "player " + b + " equip mainhand minecraft:netherite_sword");
+                        SelfTest.run(server, SelfTest.cmd(b + " equip mainhand minecraft:netherite_sword"));
                         // Hunger, so the regeneration between two hits cannot walk the bot's health
                         // back up while the scenario is putting it down.
                         SelfTest.run(server, "effect give " + a + " minecraft:hunger 4000 3 true");
@@ -176,20 +176,20 @@ final class SmpScenarios
                         // The shield out of the offhand: a fake player that is blocking takes no damage
                         // from the damage command at all, and this scenario has to be able to wound the
                         // bot on purpose.
-                        SelfTest.run(server, "player " + a + " unequip offhand");
+                        SelfTest.run(server, SelfTest.cmd(a + " unequip offhand"));
                         // Its armour off as well. The burst the model predicts has to be worth a totem,
                         // and through a full set of protection a netherite axe is not: the style would
                         // only fetch one at a few tenths of a heart, which natural regeneration walks
                         // back up before the scenario can land the killing hit.
                         for (String slot : List.of("head", "chest", "legs", "feet"))
                         {
-                            SelfTest.run(server, "player " + a + " unequip " + slot);
+                            SelfTest.run(server, SelfTest.cmd(a + " unequip " + slot));
                         }
                         // A strength one netherite axe on the target. Its hit has to be worth more than
                         // the heart and the absorption bar a pop leaves behind, or the bot stops
                         // expecting to be killed before its retotem wait is up and there is nothing
                         // left to measure.
-                        SelfTest.run(server, "player " + b + " equip mainhand minecraft:netherite_axe");
+                        SelfTest.run(server, SelfTest.cmd(b + " equip mainhand minecraft:netherite_axe"));
                         SelfTest.run(server, "effect give " + b + " minecraft:strength 3600 0 true");
                         phase[0] = 1;
                         return SelfTest.pending(SelfTest.fmt(
@@ -319,14 +319,14 @@ final class SmpScenarios
                         // and a retreat it does not believe in never happens.
                         for (String slot : List.of("head", "chest", "legs", "feet"))
                         {
-                            SelfTest.run(server, "player " + a + " unequip " + slot);
+                            SelfTest.run(server, SelfTest.cmd(a + " unequip " + slot));
                         }
                         // A strength four netherite sword is what the model weighs the bot's remaining
                         // health against; the target holds it rather than swings it, so the bot has
                         // the ticks it needs to line the throw up.
-                        SelfTest.run(server, "player " + b + " equip mainhand minecraft:netherite_sword");
+                        SelfTest.run(server, SelfTest.cmd(b + " equip mainhand minecraft:netherite_sword"));
                         SelfTest.run(server, "effect give " + b + " minecraft:strength 3600 3 true");
-                        SelfTest.run(server, "player " + b + " equip netherite");
+                        SelfTest.run(server, SelfTest.cmd(b + " equip netherite"));
                         phase[0] = 1;
                         return SelfTest.pending(SelfTest.fmt(
                                 "%s has no gaps and no potions left, and the hit %s is holding would finish it",
@@ -649,21 +649,21 @@ final class SmpScenarios
             String name = side == 0 ? first : second;
             // Whatever the last round left behind is cleared out before the next one starts, so the
             // two bots meet each other from the same place every round.
-            SelfTest.run(server, "player " + name + " stop");
+            SelfTest.run(server, SelfTest.cmd(name + " stop"));
             SelfTest.run(server, "bot option " + name + " combat false");
             SelfTest.run(server, "tp " + name + " " + SelfTest.coords(side == 0 ? spot : spot.add(0.0D, 0.0D, 3.0D)));
             SelfTest.run(server, "bot kit give " + name + " smp");
             // The same gold set on both, so a round is decided by hits: two players hurt each other
             // by the same amount are only hurt again once the damage cooldown has run out, and
             // through netherite protection a round would take the best part of a minute.
-            SelfTest.run(server, "player " + name + " equip gold");
+            SelfTest.run(server, SelfTest.cmd(name + " equip gold"));
             // No totems and no shield on either side. A shield a fake player has up takes no damage at
             // all (see EntityPlayerMPFake.hurtServer), and three totems each mean neither of them can
             // be finished inside a round; with both out of the way the round is decided by the hits,
             // and healing is all that separates the two bots.
             SelfTest.run(server, "bot option " + name + " autototem false");
             SelfTest.run(server, "clear " + name + " minecraft:totem_of_undying");
-            SelfTest.run(server, "player " + name + " unequip offhand");
+            SelfTest.run(server, SelfTest.cmd(name + " unequip offhand"));
             // Hunger on both: a full food bar regenerates faster than two players can hurt each
             // other, who are only hurt again once the damage cooldown has run out, so without it no
             // round could ever end. It costs both of them the same starvation.

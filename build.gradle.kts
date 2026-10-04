@@ -54,6 +54,12 @@ loom.runConfigs.create("clientCheck") {
     generateRunConfig.set(false)
 }
 
+sourceSets.main {
+    // The Paper plugin shares this source tree but has no place in the mod; its own node
+    // (versions/<minecraft>-paper) compiles it against a Paper dev bundle instead.
+    java.exclude("carpet/paper/**")
+}
+
 dependencies {
     // Per-version dependency versions live in versions/<minecraft>/gradle.properties
     add("minecraft", "com.mojang:minecraft:$mcVersion")

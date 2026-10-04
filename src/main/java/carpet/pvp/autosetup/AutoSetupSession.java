@@ -456,16 +456,16 @@ public final class AutoSetupSession
                 slots, List.of(), new ArenaBlocks());
     }
 
-    /** Turns on the rules a session needs, keeping what each of them was at. */
+    /** Turns on the settings a session needs, keeping what each of them was at. */
     private static List<String> switchRulesOn()
     {
         List<String> changed = new ArrayList<>();
-        for (String rule : AutoSetupSettings.neededRules())
+        for (String setting : AutoSetupSettings.neededSettings())
         {
-            String wanted = AutoSetupSettings.wantedValue(rule);
-            String now = AutoSetupSettings.value(rule);
+            String wanted = AutoSetupSettings.wantedValue(setting);
+            String now = AutoSetupSettings.value(setting);
             if (now == null || wanted == null || wanted.equals(now)) continue;
-            if (AutoSetupSettings.set(rule, wanted)) changed.add(rule + "=" + now);
+            if (AutoSetupSettings.set(setting, wanted)) changed.add(setting + "=" + now);
         }
         return changed;
     }

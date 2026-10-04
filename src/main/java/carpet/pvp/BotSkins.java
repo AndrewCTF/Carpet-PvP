@@ -121,7 +121,7 @@ public final class BotSkins
         EntityPlayerMPFake bot = EntityPlayerMPFake.respawnFake(server, level, setup.profile(),
                 ClientInformation.createDefault());
         server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), bot,
-                new CommonListenerCookie(setup.profile(), 0, bot.clientInformation(), false));
+                CommonListenerCookie.createInitial(setup.profile(), false));
         bot.teleportTo(level, setup.pos().x, setup.pos().y, setup.pos().z, Set.<Relative>of(),
                 setup.yaw(), setup.pitch(), true);
         bot.setHealth(20.0F);

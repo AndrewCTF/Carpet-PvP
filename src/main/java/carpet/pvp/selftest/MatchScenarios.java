@@ -285,7 +285,7 @@ final class MatchScenarios
             SelfTest.swordKit(a).forEach(command -> SelfTest.run(server, command));
             SelfTest.swordKit(b).forEach(command -> SelfTest.run(server, command));
             SelfTest.swordCombat(a, "expert").forEach(command -> SelfTest.run(server, command));
-            SelfTest.run(server, "player " + b + " move forward for 20");
+            SelfTest.run(server, SelfTest.cmd(b + " move forward for 20"));
         }, server ->
         {
             if ("armed".equals(step[0]))
@@ -313,7 +313,7 @@ final class MatchScenarios
                 SelfTest.swordKit(a).forEach(command -> SelfTest.run(server, command));
                 SelfTest.swordKit(b).forEach(command -> SelfTest.run(server, command));
                 SelfTest.swordCombat(a, "expert").forEach(command -> SelfTest.run(server, command));
-                SelfTest.run(server, "player " + b + " move forward for 20");
+                SelfTest.run(server, SelfTest.cmd(b + " move forward for 20"));
                 step[0] = "armed";
                 return SelfTest.pending(b + " walks up to " + a + " and then stands there");
             }
@@ -428,7 +428,7 @@ final class MatchScenarios
         {
             if (player.getName().getString().matches("(Free|Red|Blue)\\d+"))
             {
-                SelfTest.run(server, "player " + player.getName().getString() + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(player.getName().getString() + " disconnect"));
             }
         }
     }

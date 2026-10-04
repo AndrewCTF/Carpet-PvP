@@ -338,7 +338,7 @@ final class MaceSwapScenarios
     /** One hotbar change, which is what a player's scroll wheel does and what the game allows. */
     private void select(MinecraftServer server, String who, int slot)
     {
-        SelfTest.run(server, "player " + who + " hotbar " + slot);
+        SelfTest.run(server, SelfTest.cmd(who + " hotbar " + slot));
     }
 
     /** Lifts the fighter clear of the ground to begin the fall, and starts reading the dummy's health. */
@@ -386,7 +386,7 @@ final class MaceSwapScenarios
         ServerPlayer target = SelfTest.player(server, dummy);
         top = target.getHealth();
         bottom = top;
-        SelfTest.run(server, "player " + who + " attack once");
+        SelfTest.run(server, SelfTest.cmd(who + " attack once"));
         settle = SETTLE;
         ticks = 0;
     }

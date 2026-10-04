@@ -119,7 +119,7 @@ final class RangedScenarios
                 {
                     direction[0] = !direction[0];
                 }
-                SelfTest.run(server, "player " + b + " move " + (direction[0] ? "right" : "left") + " for 40");
+                SelfTest.run(server, SelfTest.cmd(b + " move " + (direction[0] ? "right" : "left") + " for 40"));
             }
             boolean nowDrawing = shooter.isUsingItem();
             if (drawing[0] && !nowDrawing)
@@ -250,7 +250,7 @@ final class RangedScenarios
                 }
                 // Three tridents, one of them in the hotbar where a click can reach it: a thrown one is spent.
                 int given = SelfTest.result(server, "give " + a + " minecraft:trident 2");
-                int equipped = SelfTest.result(server, "player " + a + " equip mainhand minecraft:trident");
+                int equipped = SelfTest.result(server, SelfTest.cmd(a + " equip mainhand minecraft:trident"));
                 if (given < 1 || equipped < 1)
                 {
                     return new Probe(false, SelfTest.fmt("could not arm %s: give returned %d, equip returned %d",
@@ -306,10 +306,10 @@ final class RangedScenarios
         course.add("bot option " + a + " targetrange 24");
         course.add("bot option " + a + " ranged.keep 4.5");
         course.add("bot option " + a + " combat true");
-        course.add("player " + b + " sprint");
+        course.add(SelfTest.cmd(b + " sprint"));
         // Turned round and walking at the bot, so the two close to the spear's window.
-        course.add("player " + b + " turn back");
-        course.add("player " + b + " move forward for 900");
+        course.add(SelfTest.cmd(b + " turn back"));
+        course.add(SelfTest.cmd(b + " move forward for 900"));
         return new Scenario(1200, List.of(new Bot(a, origin), new Bot(b, target)), course, server ->
         {
             ServerPlayer shooter = SelfTest.player(server, a);
@@ -321,7 +321,7 @@ final class RangedScenarios
                     return SelfTest.pending("waiting for " + a + " and " + b + " to finish loading");
                 }
                 int given = SelfTest.result(server, "give " + a + " minecraft:netherite_spear");
-                int equipped = SelfTest.result(server, "player " + a + " equip mainhand minecraft:netherite_spear");
+                int equipped = SelfTest.result(server, SelfTest.cmd(a + " equip mainhand minecraft:netherite_spear"));
                 if (given < 1 || equipped < 1)
                 {
                     return new Probe(false, SelfTest.fmt("could not arm %s: give returned %d, equip returned %d",
@@ -391,16 +391,16 @@ final class RangedScenarios
                 SelfTest.forceload(x, z, x + 24, z + 24),
                 SelfTest.fill(wallWestX, -60, z + 10, wallWestX, -59, z + 10, "minecraft:obsidian"),
                 SelfTest.fill(x + 10, -60, wallNorthZ, x + 10, -59, wallNorthZ, "minecraft:obsidian"),
-                "player " + a + " equip mainhand minecraft:bow",
+                SelfTest.cmd(a + " equip mainhand minecraft:bow"),
                 // A flaming bow is the only thing a player can set a tnt minecart off with.
                 "enchant " + a + " flame 1",
                 "give " + a + " minecraft:tnt_minecart",
                 "give " + a + " minecraft:rail 8",
                 "give " + a + " minecraft:arrow 32",
-                "player " + a + " equip head minecraft:diamond_helmet",
-                "player " + a + " equip chest minecraft:diamond_chestplate",
-                "player " + a + " equip legs minecraft:diamond_leggings",
-                "player " + a + " equip feet minecraft:diamond_boots",
+                SelfTest.cmd(a + " equip head minecraft:diamond_helmet"),
+                SelfTest.cmd(a + " equip chest minecraft:diamond_chestplate"),
+                SelfTest.cmd(a + " equip legs minecraft:diamond_leggings"),
+                SelfTest.cmd(a + " equip feet minecraft:diamond_boots"),
                 "bot option " + a + " combatstyle ranged",
                 "bot option " + a + " difficulty expert",
                 "bot option " + a + " targetrange 24",
@@ -492,16 +492,16 @@ final class RangedScenarios
                 "bot option " + a + " combat true",
                 "bot option " + a + " targetrange 32"));
         course.remove(course.size() - 1);
-        course.addAll(List.of("player " + a + " equip mainhand minecraft:diamond_sword",
-                "player " + a + " equip head minecraft:diamond_helmet",
-                "player " + a + " equip chest minecraft:diamond_chestplate",
-                "player " + a + " equip legs minecraft:diamond_leggings",
-                "player " + a + " equip feet minecraft:diamond_boots",
-                "player " + b + " equip mainhand minecraft:diamond_sword",
-                "player " + b + " equip head minecraft:diamond_helmet",
-                "player " + b + " equip chest minecraft:diamond_chestplate",
-                "player " + b + " equip legs minecraft:diamond_leggings",
-                "player " + b + " equip feet minecraft:diamond_boots",
+        course.addAll(List.of(SelfTest.cmd(a + " equip mainhand minecraft:diamond_sword"),
+                SelfTest.cmd(a + " equip head minecraft:diamond_helmet"),
+                SelfTest.cmd(a + " equip chest minecraft:diamond_chestplate"),
+                SelfTest.cmd(a + " equip legs minecraft:diamond_leggings"),
+                SelfTest.cmd(a + " equip feet minecraft:diamond_boots"),
+                SelfTest.cmd(b + " equip mainhand minecraft:diamond_sword"),
+                SelfTest.cmd(b + " equip head minecraft:diamond_helmet"),
+                SelfTest.cmd(b + " equip chest minecraft:diamond_chestplate"),
+                SelfTest.cmd(b + " equip legs minecraft:diamond_leggings"),
+                SelfTest.cmd(b + " equip feet minecraft:diamond_boots"),
                 "bot option " + b + " combatstyle sword",
                 "bot option " + b + " difficulty casual",
                 "bot option " + b + " combat true",
@@ -571,18 +571,18 @@ final class RangedScenarios
                 "bot option " + a + " difficulty expert",
                 "bot option " + a + " combat true",
                 "bot option " + a + " targetrange 40",
-                "player " + a + " equip mainhand minecraft:bow",
+                SelfTest.cmd(a + " equip mainhand minecraft:bow"),
                 "give " + a + " minecraft:arrow 64",
                 "give " + a + " minecraft:diamond_sword",
-                "player " + a + " equip head minecraft:diamond_helmet",
-                "player " + a + " equip chest minecraft:diamond_chestplate",
-                "player " + a + " equip legs minecraft:diamond_leggings",
-                "player " + a + " equip feet minecraft:diamond_boots",
-                "player " + b + " equip mainhand minecraft:diamond_sword",
-                "player " + b + " equip head minecraft:diamond_helmet",
-                "player " + b + " equip chest minecraft:diamond_chestplate",
-                "player " + b + " equip legs minecraft:diamond_leggings",
-                "player " + b + " equip feet minecraft:diamond_boots",
+                SelfTest.cmd(a + " equip head minecraft:diamond_helmet"),
+                SelfTest.cmd(a + " equip chest minecraft:diamond_chestplate"),
+                SelfTest.cmd(a + " equip legs minecraft:diamond_leggings"),
+                SelfTest.cmd(a + " equip feet minecraft:diamond_boots"),
+                SelfTest.cmd(b + " equip mainhand minecraft:diamond_sword"),
+                SelfTest.cmd(b + " equip head minecraft:diamond_helmet"),
+                SelfTest.cmd(b + " equip chest minecraft:diamond_chestplate"),
+                SelfTest.cmd(b + " equip legs minecraft:diamond_leggings"),
+                SelfTest.cmd(b + " equip feet minecraft:diamond_boots"),
                 "bot option " + b + " combatstyle sword",
                 "bot option " + b + " difficulty expert",
                 "bot option " + b + " combat true",

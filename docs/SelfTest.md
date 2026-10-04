@@ -377,6 +377,35 @@ Two details worth knowing:
 though it came from a given `Vec3`. `MatchScenarios.asPlayer` does the same for the player-scoped
 `/bot` subcommands.
 
+## Running it on a Paper server
+
+The self-test runs on the Paper plugin as well as on the mod, from the plugin's own tick task:
+
+```
+./gradlew :26.3-paper:runSelfTest
+./gradlew :26.3-paper:runSelfTest -PselfTest=spawn,nav_goto
+```
+
+What differs is written down in one place, `SelfTest.Platform`, which each host installs before the
+first scenario: the literal its fake-player command hangs off (`player` on the mod, `bot` on the
+plugin, which is why the scenarios build their commands through `SelfTest.cmd(...)`), the scenarios
+the host has no feature for, and the setup the run needs. A scenario the plugin reports unsupported
+is dropped from the run and logged with the reason before the first one starts, so the report says
+what did not run:
+
+```
+[selftest] SKIP fill_updates: it needs the carpet fillUpdates rule
+```
+
+Two things a course of blocks needs. A Paper server hands out the chunks of a course far from spawn
+after the command that fills them has answered "That position is not loaded", so a course starts
+with a `forceload` and a scenario that walks a course waits for it through `Courses.laid` rather
+than walking onto ground that has not arrived. And a Paper run does not `tick sprint 1d`, which the
+mod's runs do: a sprinting server gets through a scenario's nine hundred ticks before the chunk
+system has handed out the ground a few chunks away.
+
+See [Paper.md](Paper.md) for the plugin itself.
+
 ## Adding a scenario
 
 **Do not add scenarios to `SelfTest.java`.** Several people change it at once. Put yours in a new

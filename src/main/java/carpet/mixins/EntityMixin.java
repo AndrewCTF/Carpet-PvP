@@ -3,7 +3,6 @@ package carpet.mixins;
 import carpet.fakes.EntityInterface;
 import carpet.patches.EntityPlayerMPFake;
 import net.minecraft.util.Mth;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
@@ -39,10 +38,4 @@ public abstract class EntityMixin implements EntityInterface
         // getControllingPassenger() does not return the EntityPlayerMPFake if there are no passengers involved with it
         if ((Object) this instanceof EntityPlayerMPFake || getControllingPassenger() instanceof EntityPlayerMPFake) cir.setReturnValue(!level.isClientSide());
     }
-
-    @Shadow
-    public abstract boolean onGround();
-
-    @Shadow
-    public abstract Vec3 getDeltaMovement();
 }
