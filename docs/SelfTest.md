@@ -5,7 +5,8 @@
 The self-test boots a real server on a flat world and drives fake players through scripted
 scenarios from the server's tick loop. It checks the things a compiler cannot: that a fake player
 spawns where you asked, that it walks there, that a kit goes on, that a blocked sword hit takes less
-damage, that a bot program both acts and does not lock up the tick loop.
+damage, that a bot wins more duels than a weaker one, that a bot's crystal blast costs what the
+combat model says it costs.
 
 It is code, not a script: `carpet.pvp.selftest.SelfTest`, driven from `carpet.CarpetServer.tick`.
 Nothing in it is specific to one mod loader, and it uses only Minecraft and JDK types.
@@ -40,6 +41,7 @@ Chosen scenarios, one version:
 |---|---|---|
 | `-Dcarpet.selftest=<names>` | `-PselfTest`, or `all` | which scenarios to run |
 | `-Dcarpet.mixinAudit=true` | always | apply every mixin at boot so a stale one fails immediately |
+| `-Dcarpet.logicPort=0` | always | let the operating system pick a free port for the CarpetLogic editor |
 | `server-port` | `0` | the OS picks a free port, so parallel runs and other dev servers cannot collide |
 | `online-mode` | `false` | fake players resolve without asking Mojang |
 | `level-type` | `minecraft:flat` | the scenarios assume flat ground at Y = -60 |
@@ -97,57 +99,203 @@ An unknown scenario name is kept rather than skipped, so a typo shows up as a fa
 
 ## The scenarios
 
-Thirty-five scenarios, run in this order. Every one spawns its bots 256 blocks further along X than the
-last, so a bot left over from an earlier scenario cannot disturb a later one.
+There are **107** of them: 53 built into `SelfTest.java` and 54 more registered in
+`ScenarioIndex.java`, one file per feature. Every one spawns its bots 256 blocks further along X than
+the last, so a bot left over from an earlier scenario cannot disturb a later one.
 
-| Scenario | Ticks allowed | What it proves |
+The built-in list runs first, in the order below, and the index scenarios run after it. The
+"ticks" column is the timeout in game ticks; a scenario that reaches it has failed.
+
+### Fake players, navigation and the action pack
+
+| Scenario | Ticks | What it proves |
 |---|---|---|
 | `spawn` | 200 | `/player <name> spawn at <x> <y> <z>` puts the fake player within half a block of the position asked for. |
+| `spawn_exact_name` | 200 | A mixed-case name survives the spawn untouched — the player list matches names ignoring case, so only the game profile tells the two apart. |
+| `spawn_gamemode` | 200 | `spawn ... in creative` really puts the fake player in creative mode. |
 | `nav_goto` | 600 | `nav goto` walks to a goal 12 blocks away and finishes inside its default 1-block arrival radius. |
 | `nav_come` | 600 | `nav come` navigates to the position of whoever ran the command, not the bot's spawn point. |
 | `nav_patrol` | 600 | `nav patrol` with two waypoints visits both of them. |
 | `nav_stop` | 600 | `nav stop` stops the bot: four ticks after the command it has not moved a hundredth of a block. |
 | `nav_follow` | 600 | A following bot keeps within 4 blocks of a leader that walked more than 20 blocks. |
+| `nav_maze` | 900 | A bot finds its way through a six-cross-wall serpentine maze and ends within 1.5 blocks of the exit. |
+| `nav_parkour` | 900 | A bot crosses a walkway with 2-block and 3-block gaps dug two deep, using sprint jumps. |
+| `nav_ladder` | 1200 | A bot climbs a ladder up the west face of a tower and then descends a vine on the east face. |
+| `nav_partial_blocks` | 900 | A bot walks a corridor over a slab, slab+carpet, slab+snow, cobblestone+stairs, a bare stair, a grass path and a `blocksGoalmland` block without leaving the course. |
+| `nav_moving_target` | 900 | A chaser keeps a target that walks north and then turns west around a wall, never losing it. |
+| `nav_crowd` | 1200 | Ten bots chasing one target through a wall with one gate stay within 5 blocks of it while the busiest tick stays inside the shared search cap and at least one of them uses the shared flow field. |
+| `nav_tick_budget` | 1200 | A 125-block search is spread over at least two consecutive searching ticks without exceeding the per-bot or the shared node budget. |
+| `nav_smooth` | 900 | A bot walking a diagonal across open ground covers no more than 5% more distance than the straight line. |
 | `chase_attack` | 600 | `nav chase attack 2.5 0 <target>` closes and damages the target. |
 | `chase_crit` | 600 | `nav chase crit 2.5 0 <target>` closes and damages the target. |
-| `script_run` | 100 | `/script run 1+1` runs through the same command source and returns a positive result, so the mod's server-side setup is intact. |
-| `fill_updates` | 100 | A redstone lamp lights when a redstone block is placed next to it with `fillUpdates` on, and stays dark with the rule off. |
-| `logic_program` | 600 | A CarpetLogic program built through the Java API walks the bot forward and reaches `COMPLETED`. |
-| `logic_forever_budget` | 200 | A `FOREVER` loop with nothing to wait for does not stop the server ticking, and is still `RUNNING` after 40 ticks. |
-| `spawn_exact_name` | 200 | A mixed-case name (`sElF0a`) survives the spawn untouched — the player list matches names ignoring case, so only the profile tells the two apart. |
-| `spawn_gamemode` | 200 | `spawn ... in creative` really puts the fake player in creative mode. |
 | `animate_use` | 300 | `animate use` swings the off hand and `animate attack` the main hand, read off the swing each one leaves behind. |
 | `item_cd` | 300 | An ender pearl throw puts the bot on a 20-tick cooldown; the bare `itemCd` reports one cleared and the cooldown is gone on the same tick. |
 | `shield_disable` | 600 | A shield raised with `use continuous` is broken by an axe and goes on cooldown. |
-| `kit_give` | 200 | Every built-in kit loads, every entry builds, and each kit gives its bot the expected weapon, chestplate, enchantment and stack. |
-| `kit_roundtrip` | 200 | Saving a player's inventory, giving a kit over it and restoring puts every slot back, including the selected hotbar slot — through memory and through the kit file. |
-| `sword_block` | 300 | With `swordBlockHitting` on a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit; with the rule off they lose all of it. An idle player loses 4 either way. |
-| `explosion_rules` | 600 | With `optimizedTNT` on, a primed tnt leaves the stone next to it standing while `explosionNoBlockDamage` is on and blows it away while it is off. |
-| `xp_explosions` | 600 | An ore blown up drops experience with `xpFromExplosions` on and none with it off. |
-| `scarpet_events` | 400 | `__on_player_takes_damage` reaches a script only once an app with a handler is loaded, and `damageTickOther` swallows the hits inside its window. |
-| `scarpet_explosion` | 600 | `__on_explosion_outcome` fires for a plain tnt explosion. |
-| `update_suppression_block` | 100 | A barrier over an unpowered activator rail schedules a tick with `updateSuppressionBlock 0` and does not with the rule at -1. |
-| `stackable_shulker_boxes` | 100 | An empty shulker box stacks `stackableShulkerBoxes` times, and any other item is left alone. |
-| `structure_block_ignored` | 100 | `structureBlockIgnored` drops the named block from the palette of a saved structure. |
-| `persistent_parrots` | 200 | A parrot on the shoulder survives damage with `persistentParrots` on and is dropped with it off. |
-| `lag_free_spawning` | 400 | The natural spawner keeps running while `lagFreeSpawning` is on, which needs `carpet.fakes.LevelInterface` to have an implementation. |
-| `interaction_updates` | 200 | A redstone block placed by a real use-item-on packet lights the lamp next to it with `interactionUpdates` on and leaves it dark with the rule off. |
-| `punish_wrong_tool_hits` | 300 | Hitting a block that needs a tool with bare hands costs a heart with `punishWrongToolHits` on and nothing with it off. |
-| `scarpet_item_use_events` | 300 | `__on_player_uses_item` is called for a real use-item packet with `scarpetItemUseEvents` on and never with it off. |
-| `sculk_sensor_range` | 300 | A step 12 blocks from a sculk sensor is out of reach at the default range of 8 and inside the 16 `sculkSensorRange` sets, while one 24 blocks further stays out of reach either way. |
-| `summon_natural_lightning` | 400 | `/summon lightning` rolls for the skeleton horse trap only with `summonNaturalLightning` on; see the note below for the numbers. |
-| `explosion_state_leak` | 600 | An explosion that computes no block positions leaves nothing queued for the next block-damaging one — see the note below. |
-| `scarpet_world_data` | 100 | A Scarpet app saves the world data with `save()` and reads the result back. |
-| `tick_synced_world_borders` | 900 | A five second border lerp is finished after 160 game ticks at 40 ticks a second with `tickSyncedWorldBorders` on and has barely started with it off. |
-| `kit_folder` | 300 | A hand-written kit file and a saved one, dropped into `<world>/carpet-kits/`, both load after `bot kit reload` and hand out what they say. |
-| `sword_block` | 600 | With `swordBlockHitting` on a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit and is pushed by about half of what an idle player is pushed by. An idle player loses 4 either way. |
 | `kill` | 300 | `/player <name> kill` takes the bot off the server: it is gone from the player list. |
-| `mace_launch_height` | 400 | A wind charge thrown at the bot's own feet lifts it as high as the duel model's arc and no higher; the game bursts a little higher off the ground than the model assumes, which the scenario states. |
-| `mace_smash_damage` | 900 | A smash out of a measured fall does what `CombatMath` gives for that fall, that enchantment and that armour. |
-| `mace_stun_slam` | 900 | An axe takes a raised shield down and the mace hit that follows inside the hundred tick window costs the target health. |
-| `mace_no_fall_damage_on_miss` | 900 | A launch with the target lifted out of the arc still comes down harmless: the bot spends a second wind charge and lands on full health. |
-| `mace_attribute_swap_probe` | 600 | Whether this version lets a mace hit carry an attack cooldown collected under another item: two swings with the same wait, one of them swapping item on the tick of the hit. Passes either way, records the answer the style obeys. |
-| `mace_duel` | 4500 | The expert mace bot against the expert sword bot in netherite, alternating sides: a round is won by putting the other fighter down, or on the damage traded when neither went down. The mace bot has to win four of the six. |
+| `bot_death_respawn` | 400 | A fake player killed six blocks from its spawn stays on the server and, five ticks later, is alive at full health and back where it was. The delayed-task respawn does not stop the server. |
+
+### Kits
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `kit_give` | 200 | Every built-in kit loads, every entry builds, and each kit gives its bot the expected weapon, chestplate, enchantment level and stack count. |
+| `kit_roundtrip` | 200 | Saving a player's inventory, giving a kit over it and restoring puts every slot back, including the selected hotbar slot — through memory and through the kit file. |
+| `kit_folder` | 300 | A hand-written kit file and a saved one, dropped into `<world>/carpet-kits/`, both load after `bot kit reload` and hand out what they say. |
+| `ranged_kit` | 300 | `/bot kit give <n> ranged` yields a bow, a crossbow, at least 32 arrows, a sword and real armour value. |
+
+### Sword blocking and 1.8 combat
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `sword_block` | 600 | With `swordBlockHitting` on, a sword-blocking player loses `swordBlockDamageMultiplier` of a fixed 4-health hit and is pushed to between a quarter and three quarters of an idle player's knockback; with the rule off both lose the full 4 and get equal knockback. |
+
+### Upstream rules this fork carries
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `fill_updates` | 100 | A redstone lamp lights when a redstone block is placed next to it with `fillUpdates` on, and stays dark with the rule off. |
+| `interaction_updates` | 200 | A redstone block placed by a real use-item-on packet lights the lamp next to it with `interactionUpdates` on and leaves it dark with the rule off. |
+| `explosion_rules` | 600 | With `optimizedTNT` on, a primed tnt leaves the stone next to it standing while `explosionNoBlockDamage` is on and blows it away while it is off. |
+| `explosion_state_leak` | 600 | A leftover block position forced into the optimised explosion's static set does not make the next block-damaging explosion blow the previous one's block away. |
+| `xp_explosions` | 600 | An ore blown up drops experience with `xpFromExplosions` on and none with it off. |
+| `punish_wrong_tool_hits` | 300 | Hitting a block that needs a tool with bare hands costs a heart with `punishWrongToolHits` on and nothing with it off. |
+| `update_suppression_block` | 100 | A barrier over an unpowered activator rail schedules a tick with `updateSuppressionBlock 0` and does not with the rule at -1. |
+| `stackable_shulker_boxes` | 100 | An empty shulker box stacks `stackableShulkerBoxes` times, and a chest keeps its own stack limit either way. |
+| `structure_block_ignored` | 100 | `structureBlockIgnored` drops the named block from the palette of a saved structure. |
+| `persistent_parrots` | 400 | A parrot on the shoulder survives damage with `persistentParrots` on and is dropped with it off. |
+| `lag_free_spawning` | 400 | The natural spawner keeps running while `lagFreeSpawning` is on, which needs `carpet.fakes.LevelInterface` to have an implementation. |
+| `sculk_sensor_range` | 300 | A step 12 blocks from a sculk sensor is out of reach at the default range of 8 and inside the 16 `sculkSensorRange` sets, while one 36 blocks away is out of reach either way. |
+| `summon_natural_lightning` | 400 | Of 600 bolts, at least one rolls the skeleton horse trap with `summonNaturalLightning` on, and none of twenty bolts 32 blocks away does with it off. |
+| `tick_synced_world_borders` | 900 | A five second border lerp is finished after 160 game ticks at 40 ticks a second with `tickSyncedWorldBorders` on and has barely started with it off. |
+
+### Scarpet
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `script_run` | 100 | `/script run 1+1` runs through the same command source and returns a positive result, so the mod's server-side setup is intact. |
+| `scarpet_events` | 400 | `__on_player_takes_damage` reaches a script only once an app with a handler is loaded, and `damageTickOther 60` swallows a hit sent 15 ticks after the previous one. |
+| `scarpet_explosion` | 600 | `__on_explosion_outcome` fires exactly once for a plain tnt explosion once a handler is loaded. |
+| `scarpet_item_use_events` | 300 | `__on_player_uses_item` is called for a real use-item packet with `scarpetItemUseEvents` on and never with it off. |
+| `scarpet_world_data` | 100 | A Scarpet app saves the world data with `save()` and reads the result back. See the note below — this one is fragile in a long run. |
+
+### CarpetLogic
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `logic_program` | 600 | A CarpetLogic program built through the Java API walks the bot forward and reaches `COMPLETED`. |
+| `logic_forever_budget` | 200 | A `FOREVER` loop with nothing to wait for does not stop the server ticking, and is still `RUNNING` after 40 ticks. |
+| `logic_bot_snapshot` | 300 | `GET /api/bots` returns both bots with exactly the expected fields, the wounded bot's health equal to its real health, `pvp.style` `MELEE`, and `program` and `target` null for an idle bot. |
+| `logic_combat_start_stop` | 1000 | A program of `COMBAT_START` → wait for the target below 20 health → `COMBAT_STOP` → `STOP_MOVEMENT` reaches `COMPLETED`, and the bot comes to rest: no input, no target, no navigation, and no further hits. |
+| `logic_fight_node` | 1000 | A `FIGHT` node ends on the target's death rather than running its timeout, the program carries on to `COMPLETED`, and the bot comes to rest with combat off. |
+| `logic_combat_option` | 1000 | `SET_COMBAT_OPTION difficulty expert` reaches `BotPvpConfig`, while an unknown option puts the program into `ERROR` with `Unknown setting: nosuchoption`. |
+| `logic_on_kill_event` | 1000 | A `when_kill` handler runs when the game reports the kill. |
+| `logic_totem_pop_event` | 1000 | A `when_totem_pop` handler runs only after the bot's own totem has actually popped, and the bot is back at full health afterwards. |
+| `logic_stop_program_stops_fight` | 1000 | `stopProgram` in the middle of a fight leaves the program gone and the bot holding no input, with no target and not navigating. |
+
+### The bots
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `bot_spawn_kit` | 200 | `/bot spawn <n> mace expert` hands the bot the mace kit, turns combat on, applies `EXPERT`, refuses an unknown option and accepts the style name `sword` as `MELEE`. |
+| `sword_hits_require_aim` | 700 | A bot with its back to the target lands no hit until its view is within 30° of it, and every rotation step it takes is a whole mouse click. |
+| `sword_duel_damage` | 1000 | An expert sword bot against a passive target lands at least two hits, one of them a crit and one a sprint hit — which is what the sprint-reset W-tap buys. |
+| `sword_shield_break` | 1000 | A skilled bot breaks a shield that is being held up and hurts its owner. |
+| `sword_difficulty_order` | 2400 | Across six sequential expert-against-beginner duels the expert preset wins at least five. |
+| `sword_damage_rate` | 520 | An expert bot against a passive, non-regenerating target in full diamond reaches an 80% hit rate over 320 ticks and drives the target's lowest health to 8 or below, reporting every miss kind and every planner tick. |
+| `sword_ladder` | 1280 | Over twelve concurrent duels, four rungs of three, every preset wins at least two of its three duels against the preset below it. |
+| `sword_catches_runner` | 500 | An expert bot catches a target walking away in a straight line: it closes to 3.5 blocks or less with at least two hits, sprinting a substantial share of the time. |
+| `sword_shield_play` | 900 | With shield play on the bot has its shield up on at least ten ticks and takes at most 0.8× the damage of the identical fight with shield play off — at the cost of its own hits. |
+| `sword_settings` | 1200 | With a diamond sword in slot 0 and a netherite axe in slot 2: `autoWeapon` off holds the sword, `autoWeapon` with `preferSword` on still holds it, `preferSword` off switches to the axe, and `bhop` on leaves the bot off the ground on more ticks than `bhop` off. |
+| `sword_hits_passive_target` | 1400 | All five difficulty presets, run at once 60 blocks apart, each land a first hit on a same-kit passive target within 500 ticks, after closing the 4.6-block gap themselves. |
+| `bot_budget` | 700 | With eight average bots in four duels `botSimBudget` is never exceeded; cutting it to 64 starves fighter-ticks, restoring it makes the bots plan again, and the full budget produced no starved ticks at all. |
+
+### The ranged style
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `bow_hits_static` | 900 | Over 24 arrows at a stationary target 20 blocks away, the measured hit rate is within 0.4 of what the ballistics model predicts from the aim error, the release tolerance and the arrow spread. |
+| `bow_hits_moving` | 900 | The same comparison with the target walking across the line of fire, where the aim lead is what has to make the numbers agree. |
+| `crossbow_cycle` | 900 | The charged component appears and disappears at least three times, and at least two shots put the target below full health at 14 blocks. |
+| `trident_throw` | 900 | A ranged bot given three tridents completes at least one charge-and-release cast and hits twice from about twelve blocks. |
+| `spear_reach` | 1200 | With the spear charged past its wind-up the bot stands at a gap where the spear reaches and the sword does not, and records the peak closing speed. |
+| `tnt_cart_safe` | 1200 | The bot lays rail and a tnt minecart beside a target hemmed into two walls, stands off at least eight blocks from the cart — where its own plan says the blast can no longer reach — never drops below 20 health, and the cart is still standing. |
+| `ranged_keeps_distance` | 1200 | Against a casual sword bot in a walled arena the expert ranged bot holds at least six blocks for at least twenty ticks while holding a bow or crossbow, never closes inside three blocks while shooting, and does land a hit once it switches to the sword. |
+| `ranged_duel` | 1200 | In an expert-against-expert duel thirty blocks apart the ranged bot hurts the sword bot before it has to put the sword away. |
+
+### The crystal and anchor styles
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `crystal_damage_matches_model` | 600 | Five end-crystal blasts at six to ten blocks from a netherite-armoured fighter each cost what `CombatMath` predicts within 0.05 of a health point, and the model's exposure estimate matches the game's. |
+| `crystal_place_and_hit` | 900 | An average crystal bot places at least one crystal itself and sets at least one off, with at least its own click period between the two. |
+| `crystal_never_suicides` | 900 | An unarmoured casual bot in a pit refuses every blast that would also hit itself, keeps its own totem in the offhand, and ends at full health and alive. |
+| `crystal_retotem` | 600 | With the brain's own totem reflex off, a popped totem is not replaced on the pop tick but only after at least `crystal.retotem_delay` ticks. |
+| `crystal_anchor` | 800 | From a stone ledge where no crystal base is in reach, an `anchor`-style expert bot places and blows at least one respawn anchor and hurts the target below. |
+| `crystal_duel` | 4300 | Two experts with blast protection stripped between them pop a totem inside 1400 ticks and neither leaves the server, and then an expert beats a beginner in at least four of five rounds. |
+
+### The mace style
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `mace_launch_height` | 400 | A wind charge thrown at the bot's own feet lifts it as high as the duel model's arc and no higher; the game bursts a little higher off the ground than the model assumes, which the scenario allows for. |
+| `mace_smash_damage` | 900 | A smash out of a measured fall does within 15% of what `CombatMath` gives for that fall, that enchantment and that armour. |
+| `mace_stun_slam` | 900 | An axe takes a raised shield down and the mace hit inside the following hundred-tick window takes at least 2.5 health off what the axe left. |
+| `mace_no_fall_damage_on_miss` | 900 | A launch whose target is lifted out of the arc still comes down harmless: the bot spends a second wind charge and lands on full health. |
+| `mace_attribute_swap_probe` | 600 | Whether this Minecraft version lets a mace hit carry an attack cooldown collected under another item: two swings with the same wait, one of them swapping item on the tick of the hit. Passes either way and records the answer the style obeys. |
+| `mace_duel` | 4500 | The expert mace bot against the expert sword bot in netherite, alternating sides over six rounds: a round is a knockout or, failing that, a damage trade of at least 1.25×. The mace bot has to win four. |
+
+### The smp style
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `smp_heals` | 1200 | An average SMP bot wounded to 1.5 effective health recovers at least four by spending items, and then hits the dummy again — so the heal is not the bot standing still. |
+| `smp_retotem` | 1100 | With `autoTotem` off, a lethal hit pops the totem and a fresh one is back 20 to 24 ticks later. |
+| `smp_buffs` | 1400 | An SMP bot given thirty seconds of strength throws a splash and afterwards still has more than a thousand ticks of strength left — it re-buffed before the first ran out. |
+
+### Matches, factions, spectating and traces
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `match_ffa` | 1500 | `bot match ffa 4 sword skilled` starts four bots on four factions, all four deal damage and all four are hit by another bot, and the history names a winner. |
+| `match_teams` | 1500 | `bot match teams 2 sword skilled` starts four bots in two teams, all four deal damage, and no `HIT` in any bot's trace is against its own side. |
+| `faction_persistence` | 200 | Factions written to the world's `carpet-factions.json` come back with their names, their members and their alliance intact. |
+| `spectate_roundtrip` | 300 | `/bot spectate <target>` puts the caller in spectator with its camera on the target, and `/bot spectate stop` gives back the exact game mode, position, yaw and own camera. |
+| `trace_records_fight` | 1400 | The fight trace written after a fight holds exactly as many `HIT` events as the bot's own counters, with the same damage dealt and taken. |
+
+### Drills
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `drill_aim_scores` | 900 | `bot drill aim` is accepted with a diamond sword in hand, the run ends with at least one hit, and the player has their sword back. |
+| `drill_skips_without_needs` | 400 | Empty-handed, `bot drill stunslam`, `bot drill retotem` and an unknown drill name are all refused, no drill starts, and the player still holds nothing new. |
+
+### `/auto-setup`
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `autosetup_roundtrip` | 2400 | `auto-setup sword beginner` builds an arena inside the checked region, moves the player in and gives it the kit's sword, the bot lands a hit, killing the bot ends the round 1–0, re-issuing the mode keeps the score, and `auto-setup stop` restores every slot, the game mode, the position and all 5832 blocks of the snapshot region. |
+| `autosetup_each_mode` | 2000 | Bare `/auto-setup` prints its menu, and each of `sword`, `smp`, `mace` and `crystal` starts a session with that mode, that bot style, the right floor block and the kit's first item in the player's hand. `ranged` is not in this list. |
+| `autosetup_crash_safe` | 1200 | A session file exists on disk while fighting; after a simulated crash the live session is gone and the player is flagged unrecovered; after logging in again the inventory is fully restored, the file is deleted, `fakePlayerNavigation` is off again and the arena is gone. |
+| `autosetup_rules_restored` | 900 | `carpet fakePlayerNavigation` is off when a session starts, on while it runs, and back to false after `auto-setup stop`. |
+
+### The menu
+
+| Scenario | Ticks | What it proves |
+|---|---|---|
+| `gui_toggle_option` | 200 | A click on the `critical` toggle flips the setting and the button's name to `: off`; a quick-move and a swap click do not; and a change made by command shows up on the already-open button one tick later. |
+| `gui_cycle_style` | 200 | Clicking the style button advances to the next style and the button name follows, and a change made by command is reflected on the next tick. |
+| `gui_spawn` | 200 | Three clicks on the spawn page put a new bot on the server with that style, that difficulty and combat on. |
+| `gui_no_item_theft` | 400 | Every click type over every button on all three pages leaves the viewer's inventory byte-identical, leaves nothing on the cursor, never changes which menu slots hold something, and drops nothing on the ground. |
+| `gui_kit_editor_roundtrip` | 300 | A layout built in the kit editor, saved with `/bot gui saveas` and given with `/bot kit give`, comes back slot for slot identical, the viewer's inventory is unchanged throughout, and the empty editor still writes a kit. |
+
+### Two scenarios that are written but not registered
+
+`SmpScenarios.pearlRetreat` and `SmpScenarios.duel` exist and are not in `ScenarioIndex`, and their
+own comments say why: the pearl is regularly spent before it gets where the plan said it would, and
+over eight rounds the SMP bot lost to the sword bot three or four times and won the rest, which is
+a coin flip. They are left in the tree rather than weakened.
+
+## Notes on individual scenarios
 
 `kit_give` checks these values, one per built-in kit:
 
@@ -159,21 +307,36 @@ last, so a bot left over from an earlier scenario cannot disturb a later one.
 | `mace` | `mace` | `netherite_chestplate` | Protection 4 | 16 `wind_charge` |
 | `crystal` | `netherite_sword` | `netherite_chestplate` | Blast Protection 4 | 8 `end_crystal` |
 
-`summon_natural_lightning` is the one scenario that leans on a random number. The skeleton horse roll is one
-chance in fifty to twenty on a fresh world on hard, so the scenario sums up 600 bolts at one spot and counts
-the horses there, then turns the rule off and sums up 20 at a spot 32 blocks away and counts those. The chance
-of missing every one of 600 rolls is below one in a million; the count of zero with the rule off is not random
-at all, because vanilla only ever rolls that dice in `ServerLevel.tickThunder`, for a storm.
+There is no `ranged` row. `ranged_kit` checks the ranged kit separately.
 
-`explosion_state_leak` reaches into `carpet.helpers.OptimizedExplosion` by reflection to leave a block in its
-static position set, which is what an explosion that skips the walk would do. Nothing in the game can do it
-today, because the branch that fills the set also empties it — see the note in the report.
+`summon_natural_lightning` is the one scenario that leans on a random number. The skeleton horse
+roll is one chance in fifty to twenty on a fresh world on hard, so the scenario sums up 600 bolts at
+one spot and counts the horses there, then turns the rule off and sums up 20 at a spot 32 blocks
+away. The chance of missing every one of 600 rolls is below one in a million; the count of zero with
+the rule off is not random at all, because vanilla only ever rolls that dice in `ServerLevel
+.tickThunder`, for a storm.
 
-The `nav_stop` scenario is worth reading. It pins current behaviour, not the behaviour most people
-expect: `stopNavigation()` clears the navigation state but leaves the movement inputs alone, so a
-bot that was already walking keeps coasting at its last speed. The scenario's own comment says it
-should be tightened to "the bot stops moving" once `stopNavigation()` also stops movement. It is
-listed here as it stands.
+`explosion_state_leak` reaches into `carpet.helpers.OptimizedExplosion` by reflection to leave a
+block in its static position set, which is what an explosion that skips the walk would do. Nothing
+in the game can do it today, because the branch that fills the set also empties it.
+
+The `nav_stop` scenario pins current behaviour, not the behaviour most people expect:
+`stopNavigation()` clears the navigation state but leaves the movement inputs alone, so a bot that
+was already walking keeps coasting at its last speed. The scenario's own comment says it should be
+tightened to "the bot stops moving" once `stopNavigation()` also stops movement. It is listed here
+as it stands.
+
+`scarpet_world_data` is the fragile one. Scarpet's `save()` saves every chunk of the world on the
+server thread and waits for it, which is fine on a fresh world and fine on its own, but the 51
+scenarios before it have forceloaded chunks across about thirteen thousand blocks of X. Once that
+backlog is deep enough the synchronous save runs past the server watchdog's sixty seconds and the
+watchdog kills the server, so a full `all` run stops there on every Minecraft version with no report
+written. There is no "all but one" syntax, so the way through is to run it on its own and the rest in
+two lists:
+
+```
+./gradlew :26.3:runSelfTest -PselfTest=scarpet_world_data
+```
 
 ## How a scenario runs
 
@@ -181,9 +344,12 @@ Each scenario is a record of a timeout, the bots to spawn, the commands to issue
 `start` hook, and a `check` function polled every tick:
 
 ```java
-private record Scenario(int timeout, List<Bot> bots, List<String> commands,
-                        Consumer<MinecraftServer> start,
-                        Function<MinecraftServer, Probe> check) {}
+record Scenario(int timeout, List<Bot> bots, List<String> commands,
+                Consumer<MinecraftServer> start,
+                Function<MinecraftServer, Probe> check)
+{
+    // and a four-argument form that leaves start as "driven by commands only"
+}
 ```
 
 The flow per scenario:
@@ -192,7 +358,8 @@ The flow per scenario:
 2. Every tick, the check first confirms each bot is in the player list.
 3. The first time all bots are present, `start` runs and the command list is issued.
 4. `check` runs every tick. The scenario ends when it returns `ok`, or when the timeout runs out.
-5. Every bot is then disconnected with `player <name> disconnect` and the result is logged.
+5. Every bot is then disconnected with `player <name> disconnect` and the result is logged. Any rule
+   whose value moved during the scenario is put back and the report says so.
 
 Two details worth knowing:
 
@@ -202,57 +369,105 @@ Two details worth knowing:
   ticks; the scenarios take the same number of game ticks either way.
 
 `nav_come` needs a command source at a position, so it uses the overload that runs a command as
-though it came from a given `Vec3`.
+though it came from a given `Vec3`. `MatchScenarios.asPlayer` does the same for the player-scoped
+`/bot` subcommands.
 
 ## Adding a scenario
 
-1. Add the name to `SCENARIOS` in `SelfTest.java`. The order of that list is the order scenarios
-   run, and it decides each scenario's offset along X (`SPACING * (index + 1)`).
+**Do not add scenarios to `SelfTest.java`.** Several people change it at once. Put yours in a new
+file in `carpet.pvp.selftest` named after your feature, and register it with one line at the end of
+the static block in `ScenarioIndex.java`. `LifecycleScenarios.java` is the smallest example to
+copy, and `.gitattributes` marks `ScenarioIndex.java` `merge=union` so that branches which each add
+one line do not conflict.
 
-2. Add a `case` to `scenario(...)`. Use `a` for the bot under test and `b` for the second player it
-   follows or fights; both are named after the scenario's index so two scenarios never collide.
-   Everyone spawns looking along +z, so a bot 2 blocks in front of another is already facing it.
+A scenario file is a class with static methods of this shape:
 
-   ```java
-   case "my_check":
-       Vec3 goal = origin.add(12.0D, 0.0D, 0.0D);
-       return new Scenario(600, List.of(new Bot(a, origin)),
-               List.of("player " + a + " nav goto " + coords(goal)), server ->
-       {
-           double left = player(server, a).position().distanceTo(goal);
-           return new Probe(left <= 1.0D, fmt("%s is %.2f blocks from the goal", a, left));
-       });
-   ```
+```java
+static Scenario myThing(String a, String b, String c, Vec3 origin)
+```
 
-3. Conventions:
+`a` is `SelfA<index>`, the bot under test; `b` is `SelfB<index>`, a second player it can follow or
+fight; `c` is `SelfC<index>`, an extra attacker. They are named after the scenario's index, so two
+scenarios never collide. `origin` is a clear patch of flat ground 256 blocks from the next scenario.
+Everyone spawns looking along +z, so a bot at `origin.add(0, 0, 2)` is already facing one at
+`origin`.
 
-   - The timeout is in game ticks; 600 covers a navigation run, 100–300 is enough for anything
-     that does not walk.
-   - Return `new Probe(condition, message)`. The message goes in the report whether the check
-     passed or failed, so put the measured numbers in it.
-   - Use `pending(detail)` to say "not yet, keep polling" — a `Probe` that is not ok simply means
-     "try again", so the message becomes the explanation for a timeout.
-   - Anything with state that has to survive ticks (a flag, a counter) goes in a one-element array
-     captured by the lambda, as `nav_patrol`'s `visited[]` and `nav_stop`'s `stopping[]` do.
-   - Commands are issued once all bots have joined, so a scenario does not need to wait for the
-     profile to resolve itself.
-   - State the scenario needs before the first command (a carpet rule, a forceload, `give`) belongs
-     in the command list or the `start` hook.
-   - A fake player cannot use anything until the 60-tick client-load timer of its connection runs
-     down, and its listener drops block use packets until something answers the spawn teleport, so a
-     scenario that drives a packet path waits for `hasClientLoaded()` and calls `confirmTeleport`.
-   - Entities in a forceloaded chunk only become countable once the chunk map has picked the ticket
-     up, which takes some ticks. A scenario that counts entities in a chunk nobody is in waits for
-     one to be countable first, as `summon_natural_lightning` does.
+Then one line in `ScenarioIndex.java`:
 
-4. Run it on its own while you work:
+```java
+SCENARIOS.put("my_thing", MyScenarios::myThing);
+```
 
-   ```
-   ./gradlew :26.3:runSelfTest -PselfTest=my_check
-   ```
+Inside, the usual shape is a one-element array for the state that has to survive ticks:
 
-5. Add a unit test if the scenario depends on a piece of pure logic — scenario selection and the
-   report format are already covered in `SelfTestReportTest`.
+```java
+static Scenario myThing(String a, String b, String c, Vec3 origin)
+{
+    int[] phase = {0};
+    return new Scenario(600, List.of(new Bot(a, origin)), List.of(), server -> {
+        if (phase[0] == 0)
+        {
+            SelfTest.run(server, "bot option " + a + " combat true");
+            phase[0] = 1;
+            return SelfTest.pending("the bot is fighting");
+        }
+        BotBody body = SelfTest.body(server, a);
+        if (body == null) return SelfTest.pending("waiting for " + a + " to start fighting");
+        boolean ok = body.stats().hits >= 1;
+        return new Probe(ok, SelfTest.fmt("%s landed %d hits", a, body.stats().hits));
+    });
+}
+```
+
+`SelfTest`'s records (`Scenario`, `Probe`, `Bot`) and its static helpers are visible to every file
+in the package. The ones a scenario usually needs:
+
+| Helper | What it does |
+|---|---|
+| `run(server, command)` | issues a command as the console |
+| `run(server, command, pos)` | issues a command as if it came from a position |
+| `result(server, command)` | issues a command and returns its result, 0 on an exception |
+| `player(server, name)` | the named player, or null |
+| `pending(detail)` | a `Probe` that is not ok, meaning "not yet, keep polling" |
+| `warmingUp(server, names...)` | true while a bot's connection has not loaded yet |
+| `waiting(server, names...)` | true while a bot has no body yet |
+| `hittable(players...)` | true when every player is loaded, out of hurt animation and above 4 health |
+| `damage(server, victim)` | runs `/damage`, returning the health lost |
+| `same(a, b)` | whether two floats are within 0.05 |
+| `setBlock(pos, block)`, `fill(...)`, `forceload(...)`, `summonTnt(pos)` | return the **command strings** that build a world, so a scenario puts them in its command list rather than calling them |
+| `pack(server, name)` | the bot's action pack, where the navigation state lives |
+| `body(server, name)` | the bot's body, or null until it has started fighting |
+| `stats(bot)` | the bot's counters, an empty set when it has no body |
+| `slots(player)`, `holds(player, stack, item)`, `sameInventory(expected, actual)` | reading an inventory |
+| `swordKit(name)`, `swordKit(name, withAxe)`, `shieldKit(name)`, `swordCombat(name, difficulty)` | the loadouts several scenarios share |
+| `fmt(format, args...)`, `joined(parts...)` | formatting |
+
+Conventions:
+
+- The timeout is in game ticks. 600 covers a navigation run, 100–300 is enough for anything that
+  does not walk, and a duel that has to win four of six rounds needs thousands.
+- Return `new Probe(condition, message)`. The message goes in the report whether the check passed or
+  failed, so put the measured numbers in it.
+- Use `pending(detail)` to say "not yet, keep polling" — a `Probe` that is not ok simply means "try
+  again", so the message becomes the explanation for a timeout.
+- State the scenario needs before the first command (a Carpet rule, a forceload, a `give`) belongs
+  in the command list or the `start` hook.
+- A fake player cannot use anything until the 60-tick client-load timer of its connection runs down,
+  and its listener drops block use packets until something answers the spawn teleport, so a scenario
+  that drives a packet path waits for `warmingUp` and calls `confirmTeleport`.
+- Entities in a forceloaded chunk only become countable once the chunk map has picked the ticket up,
+  which takes some ticks. A scenario that counts entities in a chunk nobody is in waits for one to be
+  countable first, as `summon_natural_lightning` does.
+- A helper a scenario needs that `SelfTest` does not have belongs in the scenario's own file.
+
+Run it on its own while you work:
+
+```
+./gradlew :26.3:runSelfTest -PselfTest=my_thing
+```
+
+Add a unit test if the scenario depends on a piece of pure logic — scenario selection and the
+report format are already covered in `SelfTestReportTest`.
 
 ## The clean-exit check
 
@@ -285,11 +500,22 @@ as a leak.
 |---|---|
 | 0 | Every requested scenario passed, and no thread was left behind. |
 | 1 | At least one scenario failed, or the report could not be written. |
-| 3 | A thread was still running when the watchdog gave up — the server did not shut down cleanly. |
-| 3 | The watchdog itself was interrupted while waiting. |
+| 3 | A thread was still running when the watchdog gave up, or the watchdog was interrupted while waiting. |
 
 `Runtime.halt()` is used rather than a normal exit so the result does not depend on the JVM's own
 shutdown sequence.
 
 A run that executes nothing is not a pass: `allPassed` returns false for an empty result list, so a
 typo in `-PselfTest=` cannot look green.
+
+## Related pages
+
+- [Building.md](Building.md) — how the build and `runSelfTest` are wired up
+- [Commands.md](Commands.md) — the commands the scenarios drive
+- [Rules.md](Rules.md) — the rules they turn on and off
+- [Bots.md](Bots.md) — what the bot scenarios are about
+- [AutoSetup.md](AutoSetup.md) — what the `autosetup_*` scenarios cover
+- [Practice.md](Practice.md) — what the match, drill, trace and faction scenarios cover
+- [Menus.md](Menus.md) — what the `gui_*` scenarios cover
+- [Kits.md](Kits.md) — what the kit scenarios cover
+- [CarpetLogic.md](CarpetLogic.md) — what the `logic_*` scenarios cover

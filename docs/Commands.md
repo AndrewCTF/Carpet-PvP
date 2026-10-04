@@ -19,13 +19,40 @@ Two things to know before the list:
 | `/player <target> <action>` | `commandPlayer` | Drives a player: `move`, `sneak`, `sprint`, `jump`, `use`, `attack`, `swing`, `animate`, `look`, `turn`, `hotbar`, `drop`, `dropStack`, `swapHands`, `mount`, `dismount`, `equip`, `unequip`, `equipment`, `itemCd`, `kill`, `disconnect`, `shadow`, `stop`. | [FakePlayers.md](FakePlayers.md) |
 | `/player <target> nav ...` | `commandPlayer` and `fakePlayerNavigation` | Navigates a fake player: `goto`, `follow`, `chase`, `come`, `mine`, `patrol`, `options`, `status`, `stop`. | [FakePlayers.md](FakePlayers.md#navigation) |
 | `/player <target> glide ...` | `commandPlayer` and `fakePlayerElytraGlide` | Elytra controls for a fake player: `start`, `stop`, `freeze`, `arrival`, `launch`, `speed`, `rates`, `usePitch`, `input`, `heading`, `goto`, `freezeAtTarget`, `status`. | [FakePlayers.md](FakePlayers.md#elytra-gliding) |
-| `/player <target> ai ...` | `commandPlayer` | Reads and changes a fake player's combat AI configuration. | [FakePlayers.md](FakePlayers.md#combat-ai-ai) |
-| `/player <target> faction ...` | `commandPlayer` | Creates, joins, leaves, allies and inspects factions. | [FakePlayers.md](FakePlayers.md#factions) |
+| `/player <target> ai ...` | `commandPlayer` | Reads and changes a fake player's combat AI: `show`, `reset`, and `<setting> <value>`. The same settings `/bot option` takes. | [Bots.md](Bots.md#the-other-route-player-name-ai) |
+| `/player <target> faction ...` | `commandPlayer` | Creates, joins, leaves, allies and inspects factions: `list`, `create`, `delete`, `join`, `leave`, `info`, `ally`, `unally`. | [Practice.md](Practice.md#factions) |
 | `/spawnplayer <name> [...]` | `commandPlayer` | Alias for `/player <name> spawn`, forwarding any trailing arguments. | [FakePlayers.md](FakePlayers.md#spawning) |
-| `/bot kit ...` | `commandBot` | `list`, `reload`, `give`, `save`, `delete`, `restore`. Hands out, saves and restores PvP loadouts. | [Kits.md](Kits.md) |
-| `/auto-setup [mode] [difficulty]`, `/auto-setup stop` | `commandAutoSetup` | On its own, prints a menu of the modes and difficulties to click. With a mode, builds an arena next to you, hands out the kit, puts a bot in front of you and keeps score between rounds. `stop` takes it all back down. | below |
+
+## Bots
+
+All of these are behind `commandBot`, which is `"true"` by default.
+
+| Command | Permission | What it does | Details |
+|---|---|---|---|
+| `/bot spawn <name> <mode> [<difficulty>] [at <pos>]` | `commandBot` | Spawns a fighting bot. `<mode>` is `sword`, `crystal`, `anchor`, `ranged`, `mace` or `smp`. | [Bots.md](Bots.md#spawning-a-bot) |
+| `/bot option <name> [<setting> [<value>]]` | `commandBot` | Shows a bot's whole configuration, or sets one setting on it. | [Bots.md](Bots.md#reading-and-changing-a-bot) |
+| `/bot duel <a> <b>` | `commandBot` | Puts two bots in factions of their own and turns both on. | [Bots.md](Bots.md#fighting-stopping-and-reading-what-happened) |
+| `/bot stop <name>` | `commandBot` | Turns a bot's combat off and stops its navigation. The bot stays on the server. | [Bots.md](Bots.md#fighting-stopping-and-reading-what-happened) |
+| `/bot stats <name>` | `commandBot` | What a bot's body has done, and the last three fights it was recorded in. | [Bots.md](Bots.md#fighting-stopping-and-reading-what-happened) |
+| `/bot gui` | `commandBot` | Opens the in-game menu: the bots, their settings, the kits and the kit editor. | [Menus.md](Menus.md) |
+| `/bot gui saveas <name>` | `commandBot` | Writes the layout held in the kit editor under a name. | [Menus.md](Menus.md#saving-under-a-name-of-your-own) |
+| `/bot gui discard` | `commandBot` | Drops the layout held in the kit editor. | [Menus.md](Menus.md#saving-under-a-name-of-your-own) |
+| `/bot drill list\|<name>\|stop` | `commandBot` | Lists the drills, starts one, or stops yours. | [Practice.md](Practice.md#drills) |
+| `/bot match ffa <count> <mode> [<difficulty>]` | `commandBot` | Starts a free-for-all of that many bots where you stand. | [Practice.md](Practice.md#matches) |
+| `/bot match teams <size> <mode> [<difficulty>]` | `commandBot` | Starts a red against blue match of that many bots a side. | [Practice.md](Practice.md#matches) |
+| `/bot match join <team>` | `commandBot` | Joins a side of a running team match. | [Practice.md](Practice.md#matches) |
+| `/bot match stop` | `commandBot` | Takes the bots off the server without a winner. | [Practice.md](Practice.md#matches) |
+| `/bot spectate <name>\|stop` | `commandBot` | Looks through another player's eyes, or gives them back. | [Practice.md](Practice.md#looking-through-a-bots-eyes) |
+| `/bot skin <bot> <player>` | `commandBot` | Puts another account's skin on a bot. Needs online mode. | [Practice.md](Practice.md#putting-another-accounts-skin-on-a-bot) |
+| `/bot trace <name>` | `commandBot` | Prints the trace of a bot's current or last fight. | [Practice.md](Practice.md#traces) |
+| `/bot kit list\|reload\|give\|save\|delete\|restore` | `commandBot` | Hands out, saves and restores PvP loadouts. | [Kits.md](Kits.md) |
+| `/auto-setup [<mode>] [<difficulty>]`, `/auto-setup stop` | `commandAutoSetup` | On its own, prints a menu of the modes and difficulties to click. With a mode, builds an arena next to you, hands out the kit, puts a bot in front of you and keeps score between rounds. `stop` takes it all back down. | [AutoSetup.md](AutoSetup.md) |
+
+## CarpetLogic
+
+| Command | Permission | What it does | Details |
+|---|---|---|---|
 | `/carpetlogic ...` | `commandCarpetLogic` | `status`, `open`, `programs`, `programs run`, `programs stop`, `bots`. Runs bot programs and opens the web editor. | [CarpetLogic.md](CarpetLogic.md) |
-| `/schedule ...` | `commandPlayer` | `command <ticks> <command>`, `list`, `clear`. Runs a command after a delay in ticks. | below |
 
 ## Settings
 
@@ -50,7 +77,7 @@ Two things to know before the list:
 | Command | Permission | What it does | Details |
 |---|---|---|---|
 | `/log [<logger> [<option>] [<player>]]`, `/log clear [<player>]` | `commandLog` | Subscribes players to a logger and configures it. `/log` alone lists them. | below |
-| `/profile [health|entities] [<ticks>]` | `commandProfile` | Reports on server performance over the next `ticks` ticks (20 to 24000, default 100). | below |
+| `/profile [health\|entities] [<ticks>]` | `commandProfile` | Reports on server performance over the next `ticks` ticks (20 to 24000, default 100). | below |
 | `/perf` | `perfPermissionLevel` | Vanilla's server performance report. Registered only on a non-dedicated server, so in singleplayer. | — |
 | `/testcarpet ...` | dev builds only | `dump [category]` prints the rules to stdout; anything else prints a message. Registered only in a development environment. | — |
 
@@ -59,6 +86,11 @@ Two things to know before the list:
 | Command | Permission | What it does | Details |
 |---|---|---|---|
 | `/script ...` | `commandScript` | The Scarpet language: `globals`, `resume`, `stop`, `run`, `invoke`, `invokepoint`, `invokearea`, `scan`, `fill`, `outline`, `load`, `unload`, `event`, `download`, `remove`, and the same set under `/script in <app>`. | [docs/scarpet](scarpet/Documentation.md) |
+
+## Other mods
+
+A Paper plugin build of the bots is in progress and brings its own page,
+[Paper.md](Paper.md), with the differences a Bukkit server needs.
 
 ## Notes on the individual commands
 
@@ -173,36 +205,12 @@ last.
 `/profile` and `/profile health [ticks]` report on the server tick itself; `/profile entities
 [ticks]` on the entity count. The report is printed to whoever asked for it when the ticks are up.
 
-### `/auto-setup`
-
-`/auto-setup` on its own prints two lines of buttons: the modes, then the difficulties. Every button
-runs the same command as if it had been typed, so one click is enough.
-
-`/auto-setup <mode> [difficulty]` does the whole thing:
-
-- turns on the rules the bot needs, remembering which ones it changed;
-- builds an arena twenty blocks east of you: a flat fenced floor for `sword` and `smp`, open sky over
-  four pillars for `mace`, an obsidian floor with a few holes in it for `crystal`;
-- saves your inventory, your place and your game mode to disk, then gives you the kit of the mode
-  and moves you into the arena in survival;
-- spawns a bot with the same kit at the difficulty you asked for, facing you, and starts the fight
-  after three seconds.
-
-A round ends when one of the two is down, or when a totem goes off in crystal. The score is kept,
-and the menu after each round is `[Rematch] [Easier] [Harder] [Change mode] [Stop]`, which run
-`/auto-setup <mode>`, `/auto-setup <mode> <difficulty>`, the menu, and `/auto-setup stop`.
-
-Asking for the mode you are already fighting is a rematch; asking for another one ends the session
-you had and starts a new one. A mode whose combat style is not written yet falls back to the sword
-and is still playable.
-
-`/auto-setup stop` takes the bot away, puts every block the arena wrote back, and gives you your
-inventory, your place and your game mode. The same happens if you log out or the server stops. If
-the server dies instead, the inventory stays on disk until you log back in, and then it is handed
-back along with the arena coming down.
-
 ## Related pages
 
+- [Bots.md](Bots.md) — the PvP bots
+- [AutoSetup.md](AutoSetup.md) — `/auto-setup`
+- [Menus.md](Menus.md) — `/bot gui`
+- [Practice.md](Practice.md) — drills, matches, spectating, skins, traces and factions
 - [Rules.md](Rules.md) — the rules these commands are gated on
 - [FakePlayers.md](FakePlayers.md) — `/player` in full
 - [Kits.md](Kits.md) — `/bot kit`
@@ -210,4 +218,5 @@ back along with the arena coming down.
 - [SwordBlocking.md](SwordBlocking.md) — `swordBlockHitting`
 - [Building.md](Building.md) — building the mod
 - [SelfTest.md](SelfTest.md) — the self-test scenarios
+- [Paper.md](Paper.md) — the Paper plugin build
 - [docs/scarpet](scarpet/Documentation.md) — the Scarpet language
