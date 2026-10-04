@@ -1195,20 +1195,11 @@ public class CarpetSettings
     @Rule(desc = "Bots auto-eat when hungry (uses existing nav auto-eat)", category = PVP)
     public static boolean botAutoFood = true;
 
-    @Rule(desc = "Bots auto-drink/throw potions in combat (planned)", category = PVP)
-    public static boolean botAutoPotion = false;
-
-    @Rule(desc = "Bots auto-equip the best available armor (planned)", category = PVP)
-    public static boolean botAutoArmor = false;
-
     @Rule(desc = "Bots auto-equip the best available weapon (planned)", category = PVP)
     public static boolean botAutoWeapon = false;
 
-    @Rule(desc = "Bots auto-repair gear with Mending XP (planned)", category = PVP)
-    public static boolean botAutoRepair = false;
-
     @Rule(desc = "Default bot combat style", category = PVP,
-            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE"}, strict = true)
+            options = {"MELEE", "CRYSTAL", "ANCHOR", "RANGED", "MACE", "SMP"}, strict = true)
     public static String botCombatStyle = "MELEE";
 
     @Rule(desc = "Default bot difficulty preset, sets skill, pace and techniques at once", category = PVP,

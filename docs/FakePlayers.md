@@ -648,10 +648,7 @@ pitch, the horizontal boost and how many ticks of it.
 | `autototem` | `true`/`false` | keep a totem in the offhand |
 | `autoshield` | `true`/`false` | put a shield up when low, if no totem |
 | `autofood` | `true`/`false` | eat while walking; pushed into navigation as its `autoEat` option |
-| `autopotion` | `true`/`false` | stored, not used yet |
-| `autoarmor` | `true`/`false` | stored, not used yet |
 | `autoweapon` | `true`/`false` | let the sword style pick the best weapon in the hotbar |
-| `autorepair` | `true`/`false` | stored, not used yet |
 | `combatstyle` | `sword`, `crystal`, `anchor`, `ranged`, `mace`, `smp` | which style fights. All six have an implementation; `sword` is the `MELEE` enum |
 | `difficulty` | `beginner`, `casual`, `average`, `skilled`, `expert` | applies a whole difficulty preset at once |
 | `prefersword` | `true`/`false` | prefer a sword to an axe in melee |
@@ -764,9 +761,9 @@ What the brain does each tick, in order: survival reflexes, then the combat chec
 check, then target selection, then the chase and the strafing. Turning `combat` off only stops a
 chase the brain itself started, so a `nav chase` you set by hand keeps working.
 
-`autopotion`, `autoarmor` and `autorepair` are the only settings here with nothing behind them:
-they are stored on the bot and no code reads them. The `smp` style's own `smp.armor`, `smp.mend`,
-`smp.totem` and `smp.buff` options are the paths that work today.
+The `smp` style does its drinking, its armour swaps and its mending under its own `smp.splashheal`,
+`smp.armor`, `smp.mend`, `smp.totem` and `smp.buff` options, which is why there are no settings of
+their own here for them.
 
 `autofood` is the odd one out in how it is applied: the eating itself is navigation's, so the
 per-bot value is pushed into navigation as its `autoEat` option every tick. A bot with it off never

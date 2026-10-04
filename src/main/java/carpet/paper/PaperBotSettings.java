@@ -59,10 +59,7 @@ public final class PaperBotSettings
         BotSettings.botAutoTotem = config.getBoolean("combat.autoTotem", true);
         BotSettings.botAutoShield = config.getBoolean("combat.autoShield", false);
         BotSettings.botAutoFood = config.getBoolean("combat.autoFood", true);
-        BotSettings.botAutoPotion = config.getBoolean("combat.autoPotion", false);
-        BotSettings.botAutoArmor = config.getBoolean("combat.autoArmor", false);
         BotSettings.botAutoWeapon = config.getBoolean("combat.autoWeapon", false);
-        BotSettings.botAutoRepair = config.getBoolean("combat.autoRepair", false);
         BotSettings.botCombatStyle = config.getString("combat.style", "MELEE");
         BotSettings.botDifficulty = config.getString("combat.difficulty", "AVERAGE");
         BotSettings.botPreferSword = config.getBoolean("combat.preferSword", true);

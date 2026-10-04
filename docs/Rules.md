@@ -103,16 +103,13 @@ All of these are in the `pvp` category.
 | `botAutoTotem` | bool | `true` | Move a totem of undying into the offhand when there is none, swapping it out of the main inventory. |
 | `botAutoShield` | bool | `false` | Put a shield in the offhand at 8 health or less. Only when `botAutoTotem` is off, so the two never fight over the slot. |
 | `botAutoFood` | bool | `true` | Automatic eating. The per-bot value is pushed into navigation as its own `autoEat` option, so a bot with it off never eats on its way somewhere; `fakePlayerNavAutoEat` is the global default behind it. |
-| `botAutoPotion` | bool | `false` | Stored per bot, not acted on. |
-| `botAutoArmor` | bool | `false` | Stored per bot, not acted on. The `smp` style's own `smp.armor` option is the path that works. |
 | `botAutoWeapon` | bool | `false` | Whether the sword style may pick the best weapon in its hotbar instead of holding the sword. |
-| `botAutoRepair` | bool | `false` | Stored per bot, not acted on. The `smp` style's own `smp.mend` option is the path that works. |
 
 ### What it fights with
 
 | Rule | Type | Default | Values | What it does |
 |---|---|---|---|---|
-| `botCombatStyle` | string | `MELEE` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | Which style fights. The list is missing `SMP`, so the `smp` style can only be set per bot, through `/player <name> ai combatstyle smp`, `/bot option <name> combatstyle smp` or the menu, none of which go through this rule. |
+| `botCombatStyle` | string | `MELEE` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE`, `SMP` | Which style every bot spawned after this inherits. |
 | `botDifficulty` | string | `AVERAGE` | `BEGINNER`, `CASUAL`, `AVERAGE`, `SKILLED`, `EXPERT` | Which difficulty preset `/bot spawn` and `/auto-setup` start from. See [Bots.md](Bots.md#what-the-difficulty-presets-change). |
 | `botPreferSword` | bool | `true` | | Prefer a sword to an axe in melee. |
 | `botShieldBreak` | bool | `false` | | Switch to an axe while the target has a shield up. |

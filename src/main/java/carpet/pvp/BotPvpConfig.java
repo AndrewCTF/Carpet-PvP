@@ -136,10 +136,7 @@ public final class BotPvpConfig
     public boolean autoTotem;
     public boolean autoShield;
     public boolean autoFood;
-    public boolean autoPotion;
-    public boolean autoArmor;
     public boolean autoWeapon;
-    public boolean autoRepair;
 
     // --- combat tactics ---
     public CombatStyle combatStyle;
@@ -194,10 +191,7 @@ public final class BotPvpConfig
         autoTotem  = BotSettings.botAutoTotem;
         autoShield = BotSettings.botAutoShield;
         autoFood   = BotSettings.botAutoFood;
-        autoPotion = BotSettings.botAutoPotion;
-        autoArmor  = BotSettings.botAutoArmor;
         autoWeapon = BotSettings.botAutoWeapon;
-        autoRepair = BotSettings.botAutoRepair;
 
         combatStyle    = parseStyle(BotSettings.botCombatStyle);
         difficulty     = parseDifficulty(BotSettings.botDifficulty);
@@ -354,10 +348,7 @@ public final class BotPvpConfig
                 case "autototem"  -> autoTotem = parseBool(value);
                 case "autoshield" -> autoShield = parseBool(value);
                 case "autofood"   -> autoFood = parseBool(value);
-                case "autopotion" -> autoPotion = parseBool(value);
-                case "autoarmor"  -> autoArmor = parseBool(value);
                 case "autoweapon" -> autoWeapon = parseBool(value);
-                case "autorepair" -> autoRepair = parseBool(value);
 
                 case "combatstyle"    -> combatStyle = styleOf(value);
                 case "difficulty"     -> {
@@ -417,7 +408,7 @@ public final class BotPvpConfig
                 + " revenge=" + revenge
                 + " range=" + targetRange + " retreatHP=" + retreatHealth
                 + " | auto[totem=" + autoTotem + ",shield=" + autoShield + ",food=" + autoFood
-                + ",potion=" + autoPotion + ",armor=" + autoArmor + ",weapon=" + autoWeapon + ",repair=" + autoRepair + "]"
+                + ",weapon=" + autoWeapon + "]"
                 + " | style=" + combatStyle + " difficulty=" + difficulty
                 + " preferSword=" + preferSword + " shieldBreak=" + shieldBreak
                 + " crit=" + critical + " strafe=" + strafe + " bhop=" + bhop
@@ -451,7 +442,7 @@ public final class BotPvpConfig
     public static final String[] KEYS = {
             "combat", "autotarget", "targetplayers", "targetmobs", "targetbots", "revenge",
             "targetrange", "retreathealth",
-            "autototem", "autoshield", "autofood", "autopotion", "autoarmor", "autoweapon", "autorepair",
+            "autototem", "autoshield", "autofood", "autoweapon",
             "combatstyle", "difficulty", "prefersword", "shieldbreak", "critical", "strafe", "bhop",
             "wtap", "shieldplay", "meleerange", "attackcooldown",
             "skill", "reactiondelay", "pingticks", "clickspersecond", "plannerrange",

@@ -184,10 +184,7 @@ column is the range a per-bot value is clamped to.
 | `autototem` | bool | `true` | | Move a totem of undying into the offhand, swapping out of the main inventory |
 | `autoshield` | bool | `false` | | Put a shield in the offhand at 8 health or less. Only when `autototem` is off, so the two do not fight over the slot |
 | `autofood` | bool | `true` | | Eat while walking. This is passed to navigation as its own `autoEat` option |
-| `autopotion` | bool | `false` | | Stored per bot. Nothing reads it yet |
-| `autoarmor` | bool | `false` | | Stored per bot. Nothing reads it yet. The `smp` style swaps armour under its own `smp.armor` option instead |
 | `autoweapon` | bool | `false` | | Let the sword style pick the best weapon in the hotbar instead of holding the sword |
-| `autorepair` | bool | `false` | | Stored per bot. Nothing reads it yet. The `smp` style mends under `smp.mend` |
 | `combatstyle` | style | `MELEE` | the six styles | Which style fights |
 | `difficulty` | preset | `AVERAGE` | the five presets | Applies the whole preset, as in the table above |
 | `prefersword` | bool | `true` | | Prefer a sword to an axe in melee |
@@ -210,10 +207,10 @@ column is the range a per-bot value is clamped to.
 | `mistakechance` | int | `0` | 0–100 | Percent of ticks the sword style aims a long way off the target |
 | `faction` | name | none | | Which faction the bot is in. `none` or an empty value clears it |
 
-`autopotion`, `autoarmor` and `autorepair` are the only settings here with no code behind them: they
-are stored on the bot and nothing reads them. The `smp` style's `smp.armor`, `smp.mend`,
-`smp.totem` and `smp.buff` options, and the mace style's own shield break, are the paths that work
-today. Two options are on in code but unreachable with the stock kits: `mace.elytra`, because the
+The `smp` style drinks, swaps armour and mends under its own `smp.splashheal`, `smp.armor`,
+`smp.mend`, `smp.totem` and `smp.buff` options rather than through settings of their own, and the mace
+style's shield break works the same way. Two options are on in code but unreachable with the stock
+kits: `mace.elytra`, because the
 mace kit carries the elytra in the hotbar rather than in the chest slot the style reads, and
 `mace.swap`, because the measurement that enables it only runs inside the self-test.
 
