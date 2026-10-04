@@ -11,6 +11,7 @@ import carpet.pvp.selftest.SelfTest;
 import carpet.utils.SpawnReporter;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 
@@ -60,6 +61,36 @@ public final class CarpetSelfTest
         };
         SelfTest.botSnapshot = (server, name) -> new Api(server, CarpetLogic.INSTANCE)
                 .handle("GET", "/api/bots", CONSOLE_SESSION, "").body().toString();
+        SelfTest.consoleSays = (server, command) -> {
+            List<String> lines = new ArrayList<>();
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSource(new CommandSource()
+            {
+                @Override
+                public void sendSystemMessage(Component message)
+                {
+                    lines.add(message.getString());
+                }
+
+                @Override
+                public boolean acceptsSuccess()
+                {
+                    return true;
+                }
+
+                @Override
+                public boolean acceptsFailure()
+                {
+                    return true;
+                }
+
+                @Override
+                public boolean shouldInformAdmins()
+                {
+                    return false;
+                }
+            }), command);
+            return String.join(" | ", lines);
+        };
         SelfTest.webEditorUrl = () -> {
             WebServer web = CarpetLogic.INSTANCE.getWebServer();
             return web == null ? null : web.url();

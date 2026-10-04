@@ -5,8 +5,6 @@ import carpet.pvp.selftest.SelfTest.Scenario;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.commands.CommandSource;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.phys.Vec3;
 
@@ -15,7 +13,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
@@ -256,34 +253,7 @@ final class AdminLoginScenarios
     /** Runs a command as the console and answers what the console was told. */
     private static String said(MinecraftServer server, String command)
     {
-        List<String> lines = new ArrayList<>();
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSource(new CommandSource()
-        {
-            @Override
-            public void sendSystemMessage(Component message)
-            {
-                lines.add(message.getString());
-            }
-
-            @Override
-            public boolean acceptsSuccess()
-            {
-                return true;
-            }
-
-            @Override
-            public boolean acceptsFailure()
-            {
-                return true;
-            }
-
-            @Override
-            public boolean shouldInformAdmins()
-            {
-                return false;
-            }
-        }), command);
-        return String.join(" | ", lines);
+        return SelfTest.consoleSays.apply(server, command);
     }
 
     private static String find(Pattern pattern, String text, int group)

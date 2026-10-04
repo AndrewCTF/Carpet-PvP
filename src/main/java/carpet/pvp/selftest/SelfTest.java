@@ -157,6 +157,12 @@ public final class SelfTest
      * {@code CarpetSelfTest} on Fabric; the scenario that signs in to it is unsupported elsewhere.
      */
     public static Supplier<String> webEditorUrl;
+
+    /**
+     * Runs a command as the console and answers what the console was told. Set by {@code CarpetSelfTest} on
+     * Fabric, where a command source can be stood in for; the scenario that needs it is unsupported elsewhere.
+     */
+    public static BiFunction<MinecraftServer, String, String> consoleSays;
     /** How many mob spawn attempts the spawn reporter has counted so far, or 0 where it has none. */
     public static Supplier<Long> spawnAttempts;
     /**
