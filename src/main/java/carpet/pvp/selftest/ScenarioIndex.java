@@ -32,6 +32,7 @@ final class ScenarioIndex
         SCENARIOS.put("trace_records_fight", MatchScenarios::traceRecordsFight);
         SCENARIOS.put("drill_aim_scores", DrillScenarios::aimScores);
         SCENARIOS.put("drill_skips_without_needs", DrillScenarios::skipsWithoutWhatItNeeds);
+        SCENARIOS.put("drill_stunslam_shield", DrillScenarios::stunslamShield);
         SCENARIOS.put("gui_toggle_option", GuiScenarios::toggleOption);
         SCENARIOS.put("gui_cycle_style", GuiScenarios::cycleStyle);
         SCENARIOS.put("gui_spawn", GuiScenarios::spawn);
@@ -53,6 +54,8 @@ final class ScenarioIndex
         SCENARIOS.put("crossbow_cycle", RangedScenarios::crossbowCycle);
         SCENARIOS.put("trident_throw", RangedScenarios::tridentThrow);
         SCENARIOS.put("spear_reach", RangedScenarios::spearReach);
+        SCENARIOS.put("spear_thrust_damage", SpearThrustScenarios::thrustDamage);
+        SCENARIOS.put("ranged_closes_ground", RangedCloseScenarios::closesGround);
         SCENARIOS.put("tnt_cart_safe", RangedScenarios::tntCartSafe);
         SCENARIOS.put("ranged_keeps_distance", RangedScenarios::rangedKeepsDistance);
         SCENARIOS.put("ranged_duel", RangedScenarios::rangedDuel);
@@ -60,6 +63,7 @@ final class ScenarioIndex
         SCENARIOS.put("sword_ladder", SwordScenarios::ladder);
         SCENARIOS.put("sword_catches_runner", SwordScenarios::catchesRunner);
         SCENARIOS.put("sword_shield_play", SwordScenarios::shieldPlay);
+        SCENARIOS.put("sword_only", SwordScenarios::swordOnly);
         SCENARIOS.put("sword_settings", SwordScenarios::swordSettings);
         SCENARIOS.put("crystal_damage_matches_model", CrystalScenarios::damageMatchesModel);
         SCENARIOS.put("crystal_place_and_hit", CrystalScenarios::placeAndHit);
@@ -85,5 +89,6 @@ final class ScenarioIndex
         SCENARIOS.put("smp_heals", SmpScenarios::heals);
         SCENARIOS.put("smp_retotem", SmpScenarios::retotem);
         SCENARIOS.put("smp_buffs", SmpScenarios::buffs);
+        SCENARIOS.put("bot_stop_stats_trace", BotCommandScenarios::fightingCommands);
     }
 }

@@ -1,6 +1,5 @@
 package carpet.pvp.drill;
 
-import carpet.fakes.ServerPlayerInterface;
 import carpet.helpers.EntityPlayerActionPack;
 import carpet.patches.EntityPlayerMPFake;
 import carpet.pvp.BotBody;
@@ -36,7 +35,7 @@ public final class DrillBot
     public DrillBot(EntityPlayerMPFake bot)
     {
         this.bot = bot;
-        this.pack = ((ServerPlayerInterface) bot).getActionPack();
+        this.pack = bot.getActionPack();
         this.body = new BotBody(bot, pack, BotBody.profileFor(SKILL, BotPvpConfig.SENSITIVITY),
                 new Random(bot.getRandom().nextLong()), CLICKS_PER_SECOND);
     }

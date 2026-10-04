@@ -1,0 +1,11 @@
+name: CarpetPvp
+version: '${version}'
+main: carpet.paper.CarpetPvpPlugin
+api-version: '1.21'
+description: Fake player bots, navigation, kits and a combat brain, built from the Carpet PvP sources.
+authors:
+  - AndrewCTF, gnembon, TheobaldTheBird, redbuc
+permissions:
+  carpetpvp.bot:
+    description: Create and drive bots with /bot.
+    default: op

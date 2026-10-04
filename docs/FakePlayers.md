@@ -93,7 +93,7 @@ A spawn is refused, with a message, when:
 - the player is already online,
 - the player is already logging on,
 - the resolved profile is banned,
-- the server is whitelisted, the player is not on it, and the sender is not op level 2
+- the server is whitelisted, the player is on it, and the sender is not op level 2
   ("Whitelisted players can only be spawned by operators"),
 - the name cannot be resolved and `allowSpawningOfflinePlayers` is off.
 
@@ -145,10 +145,11 @@ Who may do what:
   "Non OP players can't control other real players".
 - Navigation additionally needs `fakePlayerNavigation` (on by default), and only works on fake players.
 - Gliding additionally needs `fakePlayerElytraGlide`, and only works on fake players.
-- `ai` and `faction` only do anything to fake players; naming a real player is silently skipped.
+- `ai` and `faction join`/`leave` only do anything to fake players; naming a real player is silently
+  skipped. `faction info` answers "No fake player selected" instead.
 
 `/player <name> stop` clears everything the player had going: every action, the movement inputs, the
-crit state and navigation.
+crit state, navigation and gliding.
 
 ## Action modes
 
@@ -533,7 +534,6 @@ waypoint is worse than walking slowly:
 
 - the bot stops sprinting on it,
 - within three blocks of the waypoint it drops to 40% forward speed,
-- it accepts arriving from 1.8 blocks out instead of the usual 0.85,
 - the pathfinder costs ice 30% more, so it prefers a grippier route when one exists.
 
 See [Rules.md](Rules.md) for the rule defaults.
@@ -642,27 +642,36 @@ pitch, the horizontal boost and how many ticks of it.
 | `targetplayers` | `true`/`false` | may target real players |
 | `targetmobs` | `true`/`false` | may target mobs |
 | `targetbots` | `true`/`false` | may target other fake players |
-| `revenge` | `true`/`false` | retaliate against whoever hit it in the last 100 ticks |
+| `revenge` | `true`/`false` | retaliate against whoever hit it in the last 100 ticks, even out of `targetrange` |
 | `targetrange` | 2–64 | how far to look for a target |
 | `retreathealth` | 0–20 | break off below this health; 0 means never |
 | `autototem` | `true`/`false` | keep a totem in the offhand |
 | `autoshield` | `true`/`false` | put a shield up when low, if no totem |
-| `autofood` | `true`/`false` | see below |
-| `autopotion` | `true`/`false` | planned, not implemented |
-| `autoarmor` | `true`/`false` | planned, not implemented |
-| `autoweapon` | `true`/`false` | planned, not implemented |
-| `autorepair` | `true`/`false` | planned, not implemented |
-| `combatstyle` | `MELEE`, `CRYSTAL`, `ANCHOR`, `RANGED`, `MACE` | which style fights; the sword (`sword`, `MELEE`) and the mace (`mace`) are implemented, the others fall back to the sword |
-| `prefersword` | `true`/`false` | stored, not used yet |
-| `shieldbreak` | `true`/`false` | stored, not used yet |
+| `autofood` | `true`/`false` | eat while walking; pushed into navigation as its `autoEat` option |
+| `autopotion` | `true`/`false` | stored, not used yet |
+| `autoarmor` | `true`/`false` | stored, not used yet |
+| `autoweapon` | `true`/`false` | let the sword style pick the best weapon in the hotbar |
+| `autorepair` | `true`/`false` | stored, not used yet |
+| `combatstyle` | `sword`, `crystal`, `anchor`, `ranged`, `mace`, `smp` | which style fights. All six have an implementation; `sword` is the `MELEE` enum |
+| `difficulty` | `beginner`, `casual`, `average`, `skilled`, `expert` | applies a whole difficulty preset at once |
+| `prefersword` | `true`/`false` | prefer a sword to an axe in melee |
+| `shieldbreak` | `true`/`false` | switch to an axe while the target has a shield up |
 | `critical` | `true`/`false` | chase with crit hits |
 | `strafe` | `true`/`false` | strafe sideways in melee range |
-| `bhop` | `true`/`false` | stored, not used yet |
+| `bhop` | `true`/`false` | sprint-hop while closing on a target more than three blocks away |
+| `wtap` | `true`/`false` | release sprint for a tick after a sprint hit |
+| `shieldplay` | `true`/`false` | raise the shield against a swing about to land |
 | `meleerange` | 2–6 | how close it tries to stay |
 | `attackcooldown` | 0–40 | ticks between hits |
+| `skill` | 0–1 | how good the bot's view is: reaction time, aim noise, rotation speed |
+| `reactiondelay` | 0–40 | ticks between seeing a target and acting on it |
+| `pingticks` | 0–20 | ticks the target's state is behind by |
+| `clickspersecond` | 1–20 | how fast the bot can click |
+| `plannerrange` | 2–16 | how close the target has to be before the fight planner runs |
+| `plannerhorizon` | 2–40 | ticks ahead the fight planner looks |
+| `plannerpopulation` | 2–64 | action sequences the fight planner keeps |
 | `misschance` | 0–100 | chance of deliberately missing a swing |
-| `mistakechance` | 0–100 | stored, not used yet |
-| `reactiondelay` | 0–40 | ticks to wait before engaging a new target |
+| `mistakechance` | 0–100 | chance of aiming a long way off the target |
 | `faction` | a name, or empty/`none` | the faction this bot belongs to |
 
 Booleans also accept `1` and `0`. Numbers outside their range are clamped rather than refused.
@@ -670,16 +679,49 @@ Booleans also accept `1` and `0`. Numbers outside their range are clamped rather
 `ai show` prints one line per selected bot:
 
 ```
-Bot1: combat=true autoTarget=true targets[players=true,mobs=false,bots=true] revenge=true
-range=16.0 retreatHP=0 | auto[totem=true,shield=false,food=true,potion=false,armor=false,weapon=false,repair=false]
-| style=MELEE preferSword=true shieldBreak=false crit=true strafe=true bhop=false meleeRange=3.0
-atkCd=0 | realism[miss=0,mistake=0,reaction=0] | faction=none
+Bot1: combat=true autoTarget=true targets[players=true,mobs=false,bots=true] revenge=true range=16.0
+retreatHP=0 | auto[totem=true,shield=false,food=true,potion=false,armor=false,weapon=false,repair=false]
+| style=MELEE difficulty=AVERAGE preferSword=true shieldBreak=false crit=true strafe=true bhop=false
+wtap=true shieldPlay=true meleeRange=3.0 atkCd=0 | human[skill=0.6,reaction=0,ping=1,clicks/s=10.0,plannerRange=8.0]
+planner[horizon=12,population=10] | realism[miss=0,mistake=0] | faction=none
 ```
+
+The numbers are the global rule values, so this is what a fresh server with no `/carpet` changes
+prints. Any style option the bot has been given is added at the end as `style options {...}`.
 
 Setting `faction` through `ai` also joins or leaves the faction registry, so `/player <name>
 faction info` stays right.
 
-### Mace style options
+### Style options
+
+Besides the settings above, each style reads options of its own, set the same way and per bot. They
+are named `<style>.<option>`, they keep the type of their default, and every one of them is also
+gated by the bot's difficulty, so turning one on below its floor changes nothing.
+
+```
+/player <name> ai mace.windcharge false
+/player <name> ai crystal.reach 3.5
+```
+
+There are 38 of them. [Bots.md](Bots.md#the-per-style-settings) lists all of them with what each
+does and the difficulty each one needs; the nine `mace.*` options are:
+
+| Option | Values | What it does |
+|---|---|---|
+| `mace.windcharge` | `true`/`false` | the wind charge launch |
+| `mace.chain` | `true`/`false` | a second charge on the way down |
+| `mace.pearl` | `true`/`false` | the ender pearl entry |
+| `mace.elytra` | `true`/`false` | the elytra dive, which needs the wings on the chest |
+| `mace.stunslam` | `true`/`false` | the axe on a raised shield, then the smash inside the window |
+| `mace.enchants` | `true`/`false` | pick between the Density and the Breach mace by the target's armour |
+| `mace.bounce` | `true`/`false` | one more hit off the bounce a Wind Burst mace gives |
+| `mace.safeland` | `true`/`false` | the charge that keeps a launch that hit nothing from costing fall damage |
+| `mace.swap` | `true`/`false` | change item on the tick of the hit, where a measurement says it is worth anything |
+
+Every one of them is also gated by the difficulty preset: a beginner knows the launch, the safe
+landing and the enchantment pick, and each harder preset adds more of them — the chain at `casual`,
+the pearl and the stun slam at `average`, the dive and the bounce at `skilled`, and the swap, which
+only an expert may try.
 
 The mace style reads a set of options of its own, set the same way as any other bot setting and
 per bot:
@@ -722,13 +764,21 @@ What the brain does each tick, in order: survival reflexes, then the combat chec
 check, then target selection, then the chase and the strafing. Turning `combat` off only stops a
 chase the brain itself started, so a `nav chase` you set by hand keeps working.
 
-`autofood` is the odd one out: the automatic eating is the navigation system's own
-`fakePlayerNavAutoEat`, and it does not read this per-bot setting.
+`autopotion`, `autoarmor` and `autorepair` are the only settings here with nothing behind them:
+they are stored on the bot and no code reads them. The `smp` style's own `smp.armor`, `smp.mend`,
+`smp.totem` and `smp.buff` options are the paths that work today.
+
+`autofood` is the odd one out in how it is applied: the eating itself is navigation's, so the
+per-bot value is pushed into navigation as its `autoEat` option every tick. A bot with it off never
+eats on its way somewhere, and `fakePlayerNavAutoEat` is the global default behind it.
 
 ## Factions
 
 Factions decide which bots and players are friendly, so the AI will not pick a target that shares a
-faction or is allied to it. They live in memory for the server session only.
+faction or is allied to it. They are saved when the server stops and read back when it starts, in
+`<world>/carpet-factions.json`; a missing or unreadable file is an empty registry rather than a
+failure. `/bot match teams` and `/bot match join` are built on this — see
+[Practice.md](Practice.md#factions).
 
 ```
 /player <name> faction list
@@ -741,8 +791,8 @@ faction or is allied to it. They live in memory for the server session only.
 /player <name> faction unally <a> <b>
 ```
 
-`create`, `delete`, `ally` and `unally` are server-wide and take no player target into account.
-`join`, `leave` and `info` act on the selected fake players.
+`create`, `delete`, `ally` and `unally` are server-wide, take no player target into account and do
+not need `commandPlayer`. `join`, `leave` and `info` act on the selected fake players and do need it.
 
 `join` creates the faction if it does not exist, so `create` is only needed to make an empty one.
 
@@ -762,12 +812,22 @@ twice.
 
 Nothing about a fake player is written to disk. When the server comes back there are no fake players,
 and any scheduled commands are gone. Inventories saved as kits are on disk; the in-memory
-inventory snapshots `/bot kit give` takes are not.
+inventory snapshots `/bot kit give` takes are not. A `/auto-setup` session is the one thing that does
+save a player's inventory to disk and hand it back — see [AutoSetup.md](AutoSetup.md).
+
+Equipment a fake player is wearing is remembered across a dimension change or a respawn within one
+session, and not across a restart.
 
 ## Related pages
 
 - [Commands.md](Commands.md) — every command the mod registers
 - [Rules.md](Rules.md) — the PvP, bot and fake-player rules and their defaults
+- [Bots.md](Bots.md) — the combat AI, its difficulty presets and its settings
+- [Menus.md](Menus.md) — the in-game menu, including a kit editor
+- [AutoSetup.md](AutoSetup.md) — `/auto-setup`, which saves a player's things to disk
+- [Practice.md](Practice.md) — drills, matches, spectating, traces and factions
 - [Kits.md](Kits.md) — `/bot kit`, the kit file format and the built-in kits
 - [CarpetLogic.md](CarpetLogic.md) — programming bots in the web editor
 - [SwordBlocking.md](SwordBlocking.md) — `swordBlockHitting` and 1.8-style block hitting
+- [SelfTest.md](SelfTest.md) — the scenarios that cover fake players
+- [Paper.md](Paper.md) — the Paper plugin build

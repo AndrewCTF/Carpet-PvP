@@ -1,3 +1,4 @@
+import java.util.concurrent.TimeUnit
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import java.time.Duration
 
@@ -46,6 +47,18 @@ loom.runConfigs.create("selfTest") {
     )
     generateRunConfig.set(false)
 }
+loom.runConfigs.create("clientCheck") {
+    // Boots the client on a private X display, applies every client mixin and quits again.
+    client()
+    jvmArguments.add("-Dcarpet.mixinAudit=true")
+    generateRunConfig.set(false)
+}
+
+sourceSets.main {
+    // The Paper plugin shares this source tree but has no place in the mod; its own node
+    // (versions/<minecraft>-paper) compiles it against a Paper dev bundle instead.
+    java.exclude("carpet/paper/**")
+}
 
 dependencies {
     // Per-version dependency versions live in versions/<minecraft>/gradle.properties
@@ -84,7 +97,9 @@ tasks.named<JavaExec>("runSelfTest") {
     val dir = rootProject.file("run/selftest-$mcVersion")
     val report = dir.resolve("selftest-report.json")
     val log = dir.resolve("logs/latest.log")
-    timeout = Duration.ofMinutes(10)
+    // A full run takes about four minutes on a free machine. Limited to four cores the three servers
+    // needed another 100 seconds each to stop, writing the chunks the scenarios had touched.
+    timeout = Duration.ofMinutes(15)
     doFirst {
         dir.resolve("world").deleteRecursively()
         report.delete()
@@ -117,6 +132,95 @@ tasks.named<JavaExec>("runSelfTest") {
             }
         }
     }
+}
+
+// runClientCheck boots the dev client far enough to load every class a client mixin targets, which
+// is where a mixin that no longer matches its target shows up, and then quits. The client needs a
+// display, so a private Xvfb with Mesa's software GLX is started for it and killed afterwards.
+val xvfbProcesses = mutableMapOf<String, Process>()
+val stopXvfb = tasks.register("stopXvfb") {
+    group = "verification"
+    description = "Stops the Xvfb runClientCheck started, if it is still running."
+    doLast {
+        xvfbProcesses.values.forEach {
+            // SIGTERM, so Xvfb removes its socket instead of leaving a stale one behind.
+            it.destroy()
+            it.waitFor(5, TimeUnit.SECONDS)
+            it.destroyForcibly()
+        }
+        xvfbProcesses.clear()
+    }
+}
+tasks.named<JavaExec>("runClientCheck") {
+    group = "verification"
+    description = "Applies every client mixin on a dev client and fails on any that does not match."
+    val dir = rootProject.file("run/$mcVersion/clientCheck")
+    val log = dir.resolve("logs/latest.log")
+    val xvfbLog = dir.resolve("xvfb.log")
+    // The marker carpet.client.ClientMixinAudit logs once the audit got through every mixin.
+    val done = "client mixin audit finished"
+    timeout = Duration.ofMinutes(10)
+    outputs.upToDateWhen { false }
+    doFirst {
+        log.delete()
+        dir.mkdirs()
+        xvfbLog.writeText("")
+        // Other people run displays on this machine, so take the first one Xvfb can open rather than
+        // a fixed number. A stale socket from an earlier killed run is fine: Xvfb takes it over.
+        val socket = File("/tmp/.X11-unix")
+        // Xvfb picks up the host's GLX vendor by default and dies in InitExtensions; Mesa's is needed.
+        fun startXvfb(display: String): Process = ProcessBuilder("Xvfb", display, "-screen", "0", "1280x720x24")
+            .redirectOutput(xvfbLog)
+            .redirectErrorStream(true)
+            .apply {
+                environment()["LIBGL_ALWAYS_SOFTWARE"] = "1"
+                environment()["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+                environment()["__EGL_VENDOR_LIBRARY_FILENAMES"] = "/usr/share/glvnd/egl_vendor.d/50_mesa.json"
+            }
+            .start()
+        // Each version gets its own first choice of display so the three checks can run at once.
+        val first = 90 + stonecutter.versions.indexOfFirst { it.version == mcVersion } * 2
+        var display: String? = null
+        for (number in first until first + 10) {
+            val candidate = ":$number"
+            val xvfb = startXvfb(candidate)
+            val deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos()
+            while (xvfb.isAlive && !File(socket, "X$number").exists() && System.nanoTime() < deadline) {
+                Thread.sleep(100)
+            }
+            if (xvfb.isAlive && File(socket, "X$number").exists()) {
+                display = candidate
+                xvfbProcesses[candidate] = xvfb
+                break
+            }
+            xvfb.destroyForcibly()
+        }
+        if (display == null) throw GradleException("No X display between :$first and :${first + 9} would start Xvfb:\n${xvfbLog.readText()}")
+        logger.lifecycle("client check display $display")
+        environment("DISPLAY", display)
+        environment("LIBGL_ALWAYS_SOFTWARE", "1")
+        environment("__GLX_VENDOR_LIBRARY_NAME", "mesa")
+        environment("__EGL_VENDOR_LIBRARY_FILENAMES", "/usr/share/glvnd/egl_vendor.d/50_mesa.json")
+        // 26.3's window comes from SDL, which prefers a Wayland session if there is one.
+        environment.remove("WAYLAND_DISPLAY")
+        environment("XDG_SESSION_TYPE", "x11")
+        environment("SDL_VIDEODRIVER", "x11")
+    }
+    doLast {
+        val text = if (log.isFile) log.readText() else ""
+        val failures = text.lines().filter {
+            it.contains("MixinApplyError") || it.contains("InvalidInjectionException") ||
+                it.contains("Critical injection failure")
+        }
+        if (failures.isNotEmpty()) {
+            throw GradleException("Client mixins failed to apply:\n${failures.joinToString("\n")}")
+        }
+        if (!text.contains(done)) {
+            throw GradleException("The client never reported \"$done\"; see $log")
+        }
+    }
+    // A finalizer, not part of doLast, so a failed client does not leave a display running.
+    finalizedBy(stopXvfb)
 }
 
 // The CarpetLogic web editor's JavaScript has its own tests. check runs them when node is installed.

@@ -3,14 +3,20 @@ package carpet.pvp.sim;
 /**
  * Frequency-table model of a duel opponent. The context is a coarse view of the state
  * (distance bucket, target in reach, attack charged, airborne, sprint locked after a sprint hit); the prediction is the most frequent action seen in that context,
- * with a prior of "approach sprinting, and attack when charged and in reach".
+ * and a context nothing has been seen in answers with a prior of "approach sprinting, and attack when charged
+ * and in reach".
  *
  * <p>A table per exact context has no answer in most of the contexts a fight passes through: closing from five
  * blocks to two walks the opponent out of one distance bucket and into another, and a model that answered
  * those with its prior described a target that stood still as one that charges. The counts are therefore kept a
  * second time without the distance bucket, and a context with nothing in it is answered from the same situation
- * at whatever distance, and failing that from anything the opponent was ever seen to do. Only a model that has
- * never watched the opponent at all falls back on the prior, which is what the prior is for.</p>
+ * at whatever distance, and failing that from anything the opponent was ever seen to do.</p>
+ *
+ * <p>What a row answers with is what the opponent was <em>seen</em> to do there, from the first observation on.
+ * The prior is only what a row answers with while nothing has been seen, which is the one thing it is good for:
+ * giving it a weight in the tally as well lets a context observed once or twice answer with an opponent that
+ * charges, which is exactly the phantom that keeps a bot walking in circles a few blocks short of a target
+ * that never moved.</p>
  */
 public final class OpponentModel
 {
@@ -23,7 +29,6 @@ public final class OpponentModel
     private static final int ANY = CONTEXTS;
     private static final int EVERYTHING = CONTEXTS + FLAGS;
     private static final int ROWS = EVERYTHING + 1;
-    private static final int PRIOR_WEIGHT = 2;
     private static final int APPROACH = DuelSim.action(1, 0, false, true, false);
     private static final int WALK = DuelSim.action(1, 0, false, false, false);
     private static final int WALK_ATTACK = DuelSim.action(1, 0, false, false, true);
@@ -33,7 +38,6 @@ public final class OpponentModel
     private final int[] prior = new int[ROWS];
     private final int[] best = new int[ROWS];
     private final int[] bestScore = new int[ROWS];
-    private final int[] seen = new int[ROWS];
 
     public OpponentModel()
     {
@@ -43,7 +47,6 @@ public final class OpponentModel
     public void reset()
     {
         java.util.Arrays.fill(counts, 0);
-        java.util.Arrays.fill(seen, 0);
         for (int c = 0; c < CONTEXTS; c++)
         {
             prior[c] = priorOf(c & (FLAGS - 1));
@@ -56,7 +59,7 @@ public final class OpponentModel
         for (int row = 0; row < ROWS; row++)
         {
             best[row] = prior[row];
-            bestScore[row] = PRIOR_WEIGHT;
+            bestScore[row] = 0;
         }
     }
 
@@ -85,19 +88,24 @@ public final class OpponentModel
         return bucket * FLAGS + reach + (f.sprintLocked ? 4 : 0) + charged * 2 + airborne;
     }
 
+    /**
+     * What this opponent does next in the given state: what it was seen to do in this exact situation, else in
+     * this situation at whatever distance, else anything it was ever seen to do, else what an opponent is
+     * assumed to do when nothing at all is known about it.
+     */
     public int predict(DuelSim sim, int who)
     {
         int c = context(sim, who);
-        if (seen[c] > 0)
+        if (bestScore[c] > 0)
         {
             return best[c];
         }
         int any = ANY + (c & (FLAGS - 1));
-        if (seen[any] > 0)
+        if (bestScore[any] > 0)
         {
             return best[any];
         }
-        return seen[EVERYTHING] > 0 ? best[EVERYTHING] : best[c];
+        return bestScore[EVERYTHING] > 0 ? best[EVERYTHING] : best[c];
     }
 
     /** Records the action fighter who actually took in the given (pre-step) state. */
@@ -111,9 +119,8 @@ public final class OpponentModel
 
     private void tally(int row, int action)
     {
-        int score = ++counts[row * DuelSim.ACTION_COUNT + action] + (action == prior[row] ? PRIOR_WEIGHT : 0);
-        seen[row]++;
-        if (score > bestScore[row] || best[row] == action)
+        int score = ++counts[row * DuelSim.ACTION_COUNT + action];
+        if (score > bestScore[row])
         {
             best[row] = action;
             bestScore[row] = score;

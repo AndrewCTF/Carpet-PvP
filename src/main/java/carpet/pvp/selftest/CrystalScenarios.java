@@ -112,10 +112,10 @@ final class CrystalScenarios
         return List.of("give " + name + " minecraft:netherite_sword",
                 "give " + name + " minecraft:respawn_anchor 16",
                 "give " + name + " minecraft:glowstone 16",
-                "player " + name + " equip head minecraft:netherite_helmet",
-                "player " + name + " equip chest minecraft:netherite_chestplate",
-                "player " + name + " equip legs minecraft:netherite_leggings",
-                "player " + name + " equip feet minecraft:netherite_boots");
+                SelfTest.cmd(name + " equip head minecraft:netherite_helmet"),
+                SelfTest.cmd(name + " equip chest minecraft:netherite_chestplate"),
+                SelfTest.cmd(name + " equip legs minecraft:netherite_leggings"),
+                SelfTest.cmd(name + " equip feet minecraft:netherite_boots"));
     }
 
     /** The same for the anchor half of the crystal style. */
@@ -245,10 +245,10 @@ final class CrystalScenarios
         return new Scenario(600, List.of(new Bot(a, spot(origin, 12, 6))), arena((int) origin.x, (int) origin.z, 19),
                 server ->
                 {
-                    SelfTest.run(server, "player " + a + " equip head minecraft:netherite_helmet");
-                    SelfTest.run(server, "player " + a + " equip chest minecraft:netherite_chestplate");
-                    SelfTest.run(server, "player " + a + " equip legs minecraft:netherite_leggings");
-                    SelfTest.run(server, "player " + a + " equip feet minecraft:netherite_boots");
+                    SelfTest.run(server, SelfTest.cmd(a + " equip head minecraft:netherite_helmet"));
+                    SelfTest.run(server, SelfTest.cmd(a + " equip chest minecraft:netherite_chestplate"));
+                    SelfTest.run(server, SelfTest.cmd(a + " equip legs minecraft:netherite_leggings"));
+                    SelfTest.run(server, SelfTest.cmd(a + " equip feet minecraft:netherite_boots"));
                 }, new DamageProbe(a, origin));
     }
 
@@ -491,9 +491,9 @@ final class CrystalScenarios
                     crystalCombat(a, "casual").forEach(command -> SelfTest.run(server, command));
                     SelfTest.run(server, "give " + a + " minecraft:end_crystal 24");
                     SelfTest.run(server, "give " + b + " minecraft:totem_of_undying");
-                    SelfTest.run(server, "player " + b + " equip offhand minecraft:totem_of_undying");
+                    SelfTest.run(server, SelfTest.cmd(b + " equip offhand minecraft:totem_of_undying"));
                     // A totem of its own, so the scenario can say the bot never popped one.
-                    SelfTest.run(server, "player " + a + " equip offhand minecraft:totem_of_undying");
+                    SelfTest.run(server, SelfTest.cmd(a + " equip offhand minecraft:totem_of_undying"));
                 }, new NeverSuicidesProbe(a));
     }
 
@@ -854,11 +854,11 @@ final class CrystalScenarios
                 first = fighter(duel, "a");
                 second = fighter(duel, "b");
                 int z = expertsFirst ? 4 : 4 + duel * 20;
-                SelfTest.run(server, "player " + first + " spawn at "
-                        + SelfTest.coords(spot(origin, 2, z)) + " facing 90 0 in minecraft:overworld in survival");
-                SelfTest.run(server, "player " + second + " spawn at "
+                SelfTest.run(server, SelfTest.cmd(first + " spawn at "
+                        + SelfTest.coords(spot(origin, 2, z)) + " facing 90 0 in minecraft:overworld in survival"));
+                SelfTest.run(server, SelfTest.cmd(second + " spawn at "
                         + SelfTest.coords(spot(origin, 5, z)) + " facing 270 0 in minecraft:overworld"
-                        + " in survival");
+                        + " in survival"));
                 return SelfTest.pending(first + " and " + second + " are logging in");
             }
             for (String name : List.of(first, second))
@@ -964,8 +964,8 @@ final class CrystalScenarios
                 expertWins++;
             }
             BotStats stats = SelfTest.stats(expert);
-            SelfTest.run(server, "player " + first + " disconnect");
-            SelfTest.run(server, "player " + second + " disconnect");
+            SelfTest.run(server, SelfTest.cmd(first + " disconnect"));
+            SelfTest.run(server, SelfTest.cmd(second + " disconnect"));
             first = "";
             return SelfTest.pending(SelfTest.fmt("round %d went to the %s: the expert is on %.1f health with"
                     + " %d crystals placed and %d blasts, the beginner on %.1f with %d hits missed",
@@ -977,11 +977,11 @@ final class CrystalScenarios
         {
             if (!first.isEmpty())
             {
-                SelfTest.run(server, "player " + first + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(first + " disconnect"));
             }
             if (!second.isEmpty())
             {
-                SelfTest.run(server, "player " + second + " disconnect");
+                SelfTest.run(server, SelfTest.cmd(second + " disconnect"));
             }
             first = "";
             second = "";

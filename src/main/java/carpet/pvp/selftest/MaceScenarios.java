@@ -80,15 +80,15 @@ final class MaceScenarios
                 if (SelfTest.warmingUp(server, a)) return SelfTest.pending(a + " is still loading");
                 SelfTest.run(server, "bot kit give " + a + " mace");
                 if (charges(bot) <= 0) return SelfTest.pending(a + " has no wind charges yet");
-                SelfTest.run(server, "player " + a + " hotbar 3");
-                SelfTest.run(server, "player " + a + " look down");
+                SelfTest.run(server, SelfTest.cmd(a + " hotbar 3"));
+                SelfTest.run(server, SelfTest.cmd(a + " look down"));
                 phase[0] = 1;
                 return SelfTest.pending(a + " is looking down at its own feet");
             }
             if (phase[0] == 1)
             {
                 if (bot.getXRot() < 85.0F) return SelfTest.pending(a + " has not looked down yet");
-                SelfTest.run(server, "player " + a + " use once");
+                SelfTest.run(server, SelfTest.cmd(a + " use once"));
                 phase[0] = 2;
                 return SelfTest.pending(a + " threw a wind charge at its feet");
             }
@@ -131,7 +131,7 @@ final class MaceScenarios
                     return new Probe(false, SelfTest.fmt("waiting for %s and %s to finish loading", a, b));
                 }
                 maceBot(server, a, "expert");
-                SelfTest.run(server, "player " + b + " equip chest minecraft:netherite_chestplate");
+                SelfTest.run(server, SelfTest.cmd(b + " equip chest minecraft:netherite_chestplate"));
                 // A dummy that cannot die keeps the bot landing smashes instead of killing it once and
                 // being put back at its spawn point with its health and its position made new.
                 topUp(server, b);
@@ -219,8 +219,8 @@ final class MaceScenarios
                     return new Probe(false, SelfTest.fmt("waiting for %s and %s to finish loading", a, b));
                 }
                 SelfTest.shieldKit(b).forEach(command -> SelfTest.run(server, command));
-                SelfTest.run(server, "player " + b + " equip chest minecraft:netherite_chestplate");
-                SelfTest.run(server, "player " + b + " use continuous");
+                SelfTest.run(server, SelfTest.cmd(b + " equip chest minecraft:netherite_chestplate"));
+                SelfTest.run(server, SelfTest.cmd(b + " use continuous"));
                 phase[0] = 1;
                 held[0] = 0;
                 return new Probe(false, SelfTest.fmt("%s is raising its shield", b));
@@ -441,8 +441,8 @@ final class MaceScenarios
             }
             maceHits[0] += (float) SelfTest.stats(mace).damageDealt;
             swordHits[0] += (float) SelfTest.stats(sword).damageDealt;
-            SelfTest.run(server, "player " + maceName + " disconnect");
-            SelfTest.run(server, "player " + swordName + " disconnect");
+            SelfTest.run(server, SelfTest.cmd(maceName + " disconnect"));
+            SelfTest.run(server, SelfTest.cmd(swordName + " disconnect"));
             round[0]++;
             ticks[0] = 0;
             down[0] = 0;
@@ -468,10 +468,10 @@ final class MaceScenarios
         Vec3 spot = origin.add(0.0D, 0.0D, round * 40.0D);
         Vec3 near = round % 2 == 0 ? spot : spot.add(0.0D, 0.0D, DUEL_RANGE);
         Vec3 far = round % 2 == 0 ? spot.add(0.0D, 0.0D, DUEL_RANGE) : spot;
-        SelfTest.run(server, "player " + maceName + " spawn at " + SelfTest.coords(near)
-                + " facing 0 0 in minecraft:overworld in survival");
-        SelfTest.run(server, "player " + swordName + " spawn at " + SelfTest.coords(far)
-                + " facing 180 0 in minecraft:overworld in survival");
+        SelfTest.run(server, SelfTest.cmd(maceName + " spawn at " + SelfTest.coords(near)
+                + " facing 0 0 in minecraft:overworld in survival"));
+        SelfTest.run(server, SelfTest.cmd(swordName + " spawn at " + SelfTest.coords(far)
+                + " facing 180 0 in minecraft:overworld in survival"));
         ServerPlayer mace = SelfTest.player(server, maceName);
         ServerPlayer sword = SelfTest.player(server, swordName);
         if (mace == null || sword == null)

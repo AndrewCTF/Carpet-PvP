@@ -195,6 +195,17 @@ public final class SwordStyle implements BotStyle
         techniques.tick();
     }
 
+    /**
+     * What the opponent model says the target will do next, encoded by {@link DuelSim#action}, as of the last
+     * fight the planner was run on. A scenario that has to explain a bot which stood still for a while reads it
+     * from here rather than from the game, which is where a target that never moved has to look like a target
+     * that never moves.
+     */
+    public int predictedOpponent()
+    {
+        return model.predict(sim, 1);
+    }
+
     @Override
     public void disengage(BotBody body)
     {

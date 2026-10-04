@@ -3,7 +3,17 @@
 Kits are named loadouts. `/bot kit give <players> <kit>` puts one on a player: the inventory is
 cleared and refilled, so a `/bot kit restore` later hands back what they were carrying.
 
-Five kits ship with the mod, one per PvP mode. A server can make its own with `/bot kit save`.
+Six kits ship with the mod, one for each bot style plus an extra. A server can make its own with
+`/bot kit save`, or build one in the menu with `/bot gui` — see [Menus.md](Menus.md#the-kit-editor).
+
+| Kit | Given by |
+|---|---|
+| `sword` | `/bot spawn <name> sword`, `/auto-setup sword`, a `sword` drill |
+| `smp` | `/bot spawn <name> smp`, `/auto-setup smp`, a `retotem` drill |
+| `mace` | `/bot spawn <name> mace`, `/auto-setup mace`, a `pearlcatch` drill |
+| `crystal` | `/bot spawn <name> crystal` and `/bot spawn <name> anchor`, `/auto-setup crystal`, a `crystaltiming` drill |
+| `ranged` | `/bot spawn <name> ranged`, `/auto-setup ranged`, `/bot match ... ranged` |
+| `axe` | nothing by default. A sword, a diamond axe, a shield, golden apples and steak, for practising shield play and shield breaks by hand |
 
 ## The kit command
 
@@ -41,13 +51,14 @@ Permissions:
 | Slot | Item | Count | Enchantments |
 |---|---|---|---|
 | 0 (main hand) | `minecraft:diamond_sword` | 1 | Sharpness 2 |
-| 1 | `minecraft:golden_apple` | 4 | |
-| 2 | `minecraft:cooked_beef` | 16 | |
 | head | `minecraft:diamond_helmet` | 1 | Protection 4 |
 | chest | `minecraft:diamond_chestplate` | 1 | Protection 4 |
 | legs | `minecraft:diamond_leggings` | 1 | Protection 4 |
 | feet | `minecraft:diamond_boots` | 1 | Protection 4 |
-| offhand | `minecraft:shield` | 1 | |
+
+A sword and armour, and nothing else: no shield, no food. A sword fight is decided by spacing,
+timing and aim, so the kit leaves out everything that would turn it into a different mode. Shield
+play and shield breaking are practised with the `axe` kit.
 
 ### `axe`
 
@@ -75,14 +86,21 @@ Permissions:
 | 5 | `minecraft:ender_pearl` | 3 | |
 | 6 | `minecraft:experience_bottle` | 16 | |
 | 7 | `minecraft:cobweb` | 3 | |
-| 8 | `minecraft:bucket` | 1 | |
+| 8 | `minecraft:water_bucket` | 1 | |
 | 9 | `minecraft:totem_of_undying` | 1 | |
 | 10 | `minecraft:totem_of_undying` | 1 | |
-| head | `minecraft:netherite_helmet` | 1 | Protection 4, Unbreaking 3 |
-| chest | `minecraft:netherite_chestplate` | 1 | Protection 4, Unbreaking 3 |
-| legs | `minecraft:netherite_leggings` | 1 | Protection 4, Unbreaking 3 |
-| feet | `minecraft:netherite_boots` | 1 | Protection 4, Unbreaking 3 |
+| 11 | `minecraft:netherite_helmet` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| 12 | `minecraft:netherite_chestplate` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| 13 | `minecraft:netherite_leggings` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| 14 | `minecraft:netherite_boots` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| head | `minecraft:netherite_helmet` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| chest | `minecraft:netherite_chestplate` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| legs | `minecraft:netherite_leggings` | 1 | Protection 4, Unbreaking 3, Mending 1 |
+| feet | `minecraft:netherite_boots` | 1 | Protection 4, Unbreaking 3, Mending 1 |
 | offhand | `minecraft:shield` | 1 | |
+
+A second full netherite set in slots 11 to 14 is what the `smp` style swaps into, so a player given
+this kit carries eight netherite pieces.
 
 ### `mace`
 
@@ -127,8 +145,29 @@ Permissions:
 | feet | `minecraft:netherite_boots` | 1 | Protection 4, Unbreaking 3 |
 | offhand | `minecraft:totem_of_undying` | 1 | |
 
+### `ranged`
+
+| Slot | Item | Count | Enchantments |
+|---|---|---|---|
+| 0 (main hand) | `minecraft:bow` | 1 | Power 5 |
+| 1 | `minecraft:crossbow` | 1 | Quick Charge 3 |
+| 2 | `minecraft:arrow` | 64 | |
+| 3 | `minecraft:diamond_sword` | 1 | Sharpness 3 |
+| 4 | `minecraft:golden_apple` | 4 | |
+| 5 | `minecraft:cooked_beef` | 16 | |
+| head | `minecraft:diamond_helmet` | 1 | Protection 4 |
+| chest | `minecraft:diamond_chestplate` | 1 | Protection 4 |
+| legs | `minecraft:diamond_leggings` | 1 | Protection 4 |
+| feet | `minecraft:diamond_boots` | 1 | Protection 4 |
+| offhand | `minecraft:shield` | 1 | |
+
+The `ranged` style also knows how to throw a trident, thrust a spear and lay a tnt minecart, and
+its `ranged.trident`, `ranged.spear` and `ranged.tntcart` options turn those on. Nothing in this kit
+gives it one of those, so on a server with the stock kit it only uses the bow, the crossbow and the
+sword.
+
 Slot 0 is always the main inventory index 0, so the first weapon listed is the one the player ends
-up holding: `apply()` sets the selected slot to 0 after the kit goes on.
+up holding: `overwrite()` sets the selected slot to 0 after the kit goes on.
 
 ## The kit file format
 
@@ -137,7 +176,7 @@ is written in is up to whoever wrote it.
 
 ### Hand-written kits: item descriptions
 
-This is the shape the five built-in kits use, in `src/main/resources/assets/carpet/kits/`:
+This is the shape the six built-in kits use, in `src/main/resources/assets/carpet/kits/`:
 
 ```json
 {
@@ -181,10 +220,14 @@ Rules the parser enforces:
 - `items` has to be there and has to be an array; every element has to be an object.
 - `item` and `count` must be a string and a number of the right kind.
 - An enchantment level below 1 is refused, and so is a `count` below 1.
-- An unknown slot name, or an inventory index outside 0–35, is refused.
+- An unknown slot name, or an inventory index outside 0–35, is refused, as is a `slot` written as a
+  number when a name was meant or the other way round.
+- The kit's own `name` is refused on read too, with `invalid kit name: <name>`, under the same rules
+  `/bot kit save` applies.
 - Item, potion and enchantment ids are resolved when the stack is built, not when the file is read,
   so a kit file can be parsed without a running game. An id that is not in the registry then fails
-  with `no such item: <id>` when the kit is handed out.
+  with `no such item: <id>`, `no such potion: <id>` or `no such enchantment: <id>` when the kit is
+  handed out, and `/bot kit give` prints that per player.
 
 `slot` distinguishes the two kinds of position by type: a number is a main-inventory index, a
 string is the name of a position. That is why `"chest"` (the chestplate) and `0` are both fixed
@@ -230,9 +273,11 @@ One file per kit, named after the kit. `/bot kit save` creates the folder if it 
 - `/bot kit save` writes the file immediately and updates the in-memory copy as it writes, so there
   is nothing to reload afterwards.
 - The folder is read when the store is built, which happens the first time anything asks for it on a
-  given server, and then cached for that server's lifetime.
-- A file dropped in or edited by hand is picked up by `/bot kit reload`, which re-reads the folder
-  and drops the problems of any kit that has gone. A fresh server does that for you at startup.
+  given server, and then cached for the lifetime of that server object.
+- A file dropped in or edited by hand is picked up by `/bot kit reload`, which re-reads the folder,
+  drops the problems of any kit that has gone and prints `Reloaded the kits in the world's kit
+  folder, N of them are custom`. It returns 0 if any kit is broken, like `/bot kit list`. A fresh
+  server does the read for you at startup.
 - Only files ending in `.json` are read. The name is the file name without the extension.
 
 Names are restricted because a name doubles as a file name: 1 to 64 characters, letters, digits,
@@ -245,9 +290,12 @@ ever list custom kits, so a built-in name cannot be deleted.
 `/bot kit list` also reports kits that would not load, with the reason:
 
 ```
-Kits: sword, axe, smp, mace, crystal, mykit
+Kits: sword, axe, smp, mace, crystal, ranged, mykit
 Kit mykit cannot be used: cannot read the kit: a kit needs an 'items' array
 ```
+
+A built-in kit that fails to load says `the built-in kit file is missing` or gives the exception it
+threw, without the `cannot read the kit:` prefix a custom file gets.
 
 The command's return value is 1 when every kit loaded and 0 when any did not. A kit with a problem is
 still listed by name; it just cannot be given out.
@@ -288,3 +336,17 @@ succeeds overall when every target got the kit:
 Gave kit sword to Bot1
 Could not give kit sword to Steve: kit sword does not fit in the inventory
 ```
+
+## Self-test coverage
+
+`kit_give`, `kit_roundtrip` and `kit_folder` cover the format and the built-in kits; `ranged_kit`
+covers the `ranged` kit on its own. See [SelfTest.md](SelfTest.md).
+
+## Related pages
+
+- [Bots.md](Bots.md) — the bot that is spawned with each of these
+- [Menus.md](Menus.md) — the in-game kit editor
+- [AutoSetup.md](AutoSetup.md) — a session that saves your inventory to disk and gives it back
+- [Practice.md](Practice.md) — drills and matches, which hand out kits
+- [Commands.md](Commands.md) — every command
+- [Rules.md](Rules.md) — the rules these commands are behind
