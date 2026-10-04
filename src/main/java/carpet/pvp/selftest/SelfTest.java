@@ -2666,6 +2666,9 @@ boolean[] walkAsked = {false};
         String restored = RuleGuard.leave();
         // the two scenarios that need mobs to spawn turn this on for themselves
         run(server, "gamerule spawn_mobs false");
+        // four scenarios turn this off to measure damage, and a bot in a later one would then heal only
+        // what its items give it
+        run(server, "gamerule natural_health_regeneration true");
         Result result = new Result(names.get(results.size()), passed, ticks,
                 restored.isEmpty() ? detail : detail + "; rules put back: " + restored);
         results.add(result);
