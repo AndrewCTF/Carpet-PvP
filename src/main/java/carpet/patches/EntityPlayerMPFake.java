@@ -657,7 +657,6 @@ public class EntityPlayerMPFake extends ServerPlayer
         {
             super.tick();
             this.doTick();
-            recordFallDistance();
         }
         catch (NullPointerException ignored)
         {
@@ -676,23 +675,6 @@ public class EntityPlayerMPFake extends ServerPlayer
             if (method.getName().equals("disable") && method.getParameterCount() == parameterCount) return method;
         }
         return null;
-    }
-
-    /**
-     * Keeps the fall distance of a fake player, which a critical hit and fall damage both read.
-     * A client reports its own fall distance; a fake player has none, so it is summed here from the
-     * movement each tick while the player is on the way down.
-     */
-    private void recordFallDistance()
-    {
-        if (onGround())
-        {
-            if (fallDistance > 0.0F) fallDistance = 0.0F;
-        }
-        else if (getDeltaMovement().y < 0.0D)
-        {
-            fallDistance += (float) -getDeltaMovement().y;
-        }
     }
 
     private void shakeOff()
