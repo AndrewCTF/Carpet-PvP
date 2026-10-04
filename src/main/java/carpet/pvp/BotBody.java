@@ -193,6 +193,16 @@ public final class BotBody
         return clicks.period();
     }
 
+    /**
+     * The last action the body carried out, encoded by {@link DuelSim#action}: forward, strafe, jump, sprint and
+     * click. What the style asked for rather than what the game made of it, so a scenario can say what a bot
+     * that was not doing anything had decided to do.
+     */
+    public int lastAction()
+    {
+        return lastAction;
+    }
+
     /** Look profile of a bot with the given skill, in the 0 to 1 range. */
     public static LookProfile profileFor(double skill, float sensitivity)
     {
