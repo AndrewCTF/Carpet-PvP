@@ -10,17 +10,26 @@ Every `/bot` subcommand is behind the `commandBot` rule, which is `"true"` by de
 ## Spawning a bot
 
 ```
-/bot spawn <name> <mode> [<difficulty>] [at <x> <y> <z>]
+/bot spawn
+```
+
+That is enough: a sword bot named `Bot1` (then `Bot2`, and so on) appears three blocks in front of
+you and attacks any survival player near it. `/bot` on its own opens the [menu](Menus.md).
+
+Every part can be spelled out instead:
+
+```
+/bot spawn [<name>] [<mode>] [<difficulty>] [at <x> <y> <z>]
 ```
 
 | Part | What it means |
 |---|---|
-| `<name>` | the fake player's name. It has to be free; a name that is online or still logging in is refused |
-| `<mode>` | the combat style: `sword`, `crystal`, `anchor`, `ranged`, `mace` or `smp` |
+| `[<name>]` | the fake player's name. It has to be free; a name that is online or still logging in is refused |
+| `[<mode>]` | the combat style: `sword`, `crystal`, `anchor`, `ranged`, `mace` or `smp`. Left out, `sword` |
 | `[<difficulty>]` | `beginner`, `casual`, `average`, `skilled` or `expert`. Left out, the `botDifficulty` rule decides |
 | `[at <x> <y> <z>]` | where to put it. Left out, where the command came from |
 
-The bot spawns at your position, in your dimension, in survival, facing where you face, and it
+A named bot spawns at your position, in your dimension, in survival, facing where you face, and it
 logs in as a fake player like any other. It is given the kit of its style (see [Kits.md](Kits.md)),
 combat and auto-targeting are switched on, it will accept other bots as targets, and the difficulty
 preset is applied. So this is enough to get a fight:

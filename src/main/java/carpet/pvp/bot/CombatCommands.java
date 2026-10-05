@@ -12,6 +12,8 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -72,6 +74,27 @@ public final class CombatCommands
         }
     }
 
+    /** The style of a bot that was not given one. */
+    public static final String DEFAULT_MODE = "sword";
+
+    /** {@code /bot spawn} with nothing after it: a sword bot under the first free name, in front of the sender. */
+    public static int spawn(CommandSourceStack source)
+    {
+        MinecraftServer server = source.getServer();
+        int number = 1;
+        while (server.getPlayerList().getPlayerByName("Bot" + number) != null || EntityPlayerMPFake.isSpawningPlayer("Bot" + number))
+        {
+            number++;
+        }
+        // Three blocks in front of the sender, where it can be seen, unless something is in the way there.
+        Vec3 here = source.getPosition();
+        float yaw = source.getRotation().y * Mth.DEG_TO_RAD;
+        Vec3 ahead = here.add(-Mth.sin(yaw) * 3.0D, 0.0D, Mth.cos(yaw) * 3.0D);
+        // A player's box, written out: where the player entity type lives differs between the versions built here.
+        boolean free = source.getLevel().noCollision(new AABB(ahead.x - 0.3D, ahead.y, ahead.z - 0.3D, ahead.x + 0.3D, ahead.y + 1.8D, ahead.z + 0.3D));
+        return spawn(source, "Bot" + number, DEFAULT_MODE, defaultDifficulty(), free ? ahead : here);
+    }
+
     public static int spawn(CommandSourceStack source, String name, String mode, String difficulty, Vec3 pos)
     {
         if (!BotCommands.canUse(source))
@@ -113,8 +136,11 @@ public final class CombatCommands
             applySpawn(bot, spawn);
             pending.remove(name);
         }
-        say(source, grey("Spawned ").append(grey(name)).append(grey(" fighting with ")).append(yellow(style.toString()))
-                .append(grey(" at difficulty ")).append(yellow(difficulty)));
+        // With a profile to look up first, the bot joins a moment later: only one that is here is called spawned.
+        say(source, grey(pending.containsKey(name) ? "Spawning " : "Spawned ").append(grey(name)).append(grey(" fighting with "))
+                .append(yellow(style.toString())).append(grey(" at difficulty ")).append(yellow(difficulty)));
+        say(source, grey("It attacks players in survival mode. ").append(yellow("/bot stop " + name))
+                .append(grey(" makes it stand still, ")).append(yellow("/bot")).append(grey(" has everything else")));
         return 1;
     }
 

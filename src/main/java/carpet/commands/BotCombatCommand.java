@@ -51,8 +51,11 @@ public class BotCombatCommand
 
     private static LiteralArgumentBuilder<CommandSourceStack> makeSpawn()
     {
+        // Every part can be left out: /bot spawn alone puts a sword bot in front of the sender.
         return literal("spawn")
+                .executes(c -> CombatCommands.spawn(c.getSource()))
                 .then(argument("name", StringArgumentType.word())
+                        .executes(BotCombatCommand::spawn)
                         .then(argument("mode", StringArgumentType.word())
                                 .suggests((c, b) -> suggest(BotCommands.styles(), b))
                                 .then(argument("difficulty", StringArgumentType.word())
@@ -93,7 +96,7 @@ public class BotCombatCommand
     private static int spawn(CommandContext<CommandSourceStack> context) throws CommandSyntaxException
     {
         return CombatCommands.spawn(context.getSource(), StringArgumentType.getString(context, "name"),
-                StringArgumentType.getString(context, "mode"),
+                getArgOrDefault(() -> StringArgumentType.getString(context, "mode"), CombatCommands.DEFAULT_MODE),
                 getArgOrDefault(() -> StringArgumentType.getString(context, "difficulty"), CombatCommands.defaultDifficulty()),
                 getArgOrDefault(() -> Vec3Argument.getVec3(context, "position"), context.getSource().getPosition()));
     }

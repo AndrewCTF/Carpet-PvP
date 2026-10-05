@@ -23,6 +23,8 @@ public class BotGuiCommand
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext buildContext)
     {
         LiteralArgumentBuilder<CommandSourceStack> command = literal("bot")
+                // /bot alone opens the menu, so nobody has to know a subcommand to get started.
+                .executes(c -> MenuCommands.open(c.getSource()))
                 .then(literal("gui")
                         .executes(c -> MenuCommands.open(c.getSource()))
                         .then(literal("saveas")
