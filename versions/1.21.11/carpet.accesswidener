@@ -17,4 +17,6 @@ accessible method net/minecraft/world/level/redstone/DefaultRedstoneWireEvaluato
 #cause I don't want to deal with the interfaces until stuff is stable
 #accessible method net/minecraft/world/level/block/entity/SkullBlockEntity fetchGameProfile (Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
 
+# a fake player's connection gets an embedded channel; the Paper server already has this field public
+accessible field net/minecraft/network/Connection channel Lio/netty/channel/Channel;
 accessible field net/minecraft/world/level/block/state/BlockBehaviour UPDATE_SHAPE_ORDER [Lnet/minecraft/core/Direction;

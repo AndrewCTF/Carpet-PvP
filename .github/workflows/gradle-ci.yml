@@ -64,6 +64,10 @@ jobs:
         run: chmod +x ./gradlew
       - name: Build ${{ matrix.node }} and run its unit tests
         run: ./gradlew --no-daemon ":${{ matrix.node }}:build"
+      - name: Spawn a bot with the built jar on a stock Fabric server
+        # The self-test below is a dev run, which has Minecraft under its readable names. A released
+        # jar for an obfuscated version does not, so the jar itself is booted too.
+        run: scripts/release-jar-check.sh "${{ matrix.node }}"
       - name: Self-test the ${{ matrix.node }} server
         run: ./gradlew --no-daemon ":${{ matrix.node }}:runSelfTest"
       - name: Check the client mixins

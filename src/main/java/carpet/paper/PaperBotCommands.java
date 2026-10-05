@@ -124,6 +124,7 @@ public final class PaperBotCommands
     private static LiteralArgumentBuilder<CommandSourceStack> root()
     {
         return literal("bot")
+                .executes(c -> MenuCommands.open(vanilla(c)))
                 // The shared /bot: the kits, then the combat bots.
                 .then(kitTree())
                 .then(combatSpawnTree())
@@ -276,8 +277,10 @@ public final class PaperBotCommands
     private static LiteralArgumentBuilder<CommandSourceStack> combatSpawnTree()
     {
         return literal("spawn")
+                .executes(c -> CombatCommands.spawn(vanilla(c)))
                 .then(argument("name", StringArgumentType.word())
                         .suggests(botSuggestions())
+                        .executes(PaperBotCommands::combatSpawn)
                         .then(argument("mode", StringArgumentType.word())
                                 .suggests(suggestions(List.of(BotCommands.styles())))
                                 .then(argument("difficulty", StringArgumentType.word())
@@ -574,8 +577,16 @@ public final class PaperBotCommands
         {
             pos = vanilla(context).getPosition();
         }
-        return CombatCommands.spawn(vanilla(context), StringArgumentType.getString(context, "name"),
-                StringArgumentType.getString(context, "mode"), difficulty, pos);
+        String mode;
+        try
+        {
+            mode = StringArgumentType.getString(context, "mode");
+        }
+        catch (IllegalArgumentException notPresent)
+        {
+            mode = CombatCommands.DEFAULT_MODE;
+        }
+        return CombatCommands.spawn(vanilla(context), StringArgumentType.getString(context, "name"), mode, difficulty, pos);
     }
 
     // --- kits ---

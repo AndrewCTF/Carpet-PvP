@@ -6,12 +6,8 @@ import net.minecraft.network.PacketListener;
 import net.minecraft.network.ProtocolInfo;
 import net.minecraft.network.protocol.PacketFlow;
 
-import java.lang.reflect.Field;
-
 public class FakeClientConnection extends Connection
 {
-    private static final Field CHANNEL = channelField();
-
     public FakeClientConnection(PacketFlow p)
     {
         super(p);
@@ -20,29 +16,9 @@ public class FakeClientConnection extends Connection
         // keeps adventure-platform-fabric, which reads the channel, working.
         // This does NOT trigger other vanilla handlers for establishing a channel
         // also makes #isOpen return true, allowing enderpearls to teleport fake players
-        try
-        {
-            CHANNEL.set(this, new EmbeddedChannel());
-        }
-        catch (ReflectiveOperationException e)
-        {
-            throw new IllegalStateException("Could not give the fake connection a channel", e);
-        }
-    }
-
-    /** Vanilla keeps the channel private and Paper's server makes it public, so it is written the one way that works on both. */
-    private static Field channelField()
-    {
-        try
-        {
-            Field field = Connection.class.getDeclaredField("channel");
-            field.setAccessible(true);
-            return field;
-        }
-        catch (ReflectiveOperationException e)
-        {
-            throw new IllegalStateException("Vanilla's Connection no longer has a channel field", e);
-        }
+        // The field is opened by the access widener on Fabric and is public on Paper. It is not looked up
+        // by name: a released jar for an obfuscated Minecraft has no field called "channel".
+        this.channel = new EmbeddedChannel();
     }
 
     @Override

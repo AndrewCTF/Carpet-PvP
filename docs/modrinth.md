@@ -26,7 +26,9 @@ fight.
 1. Install [Fabric Loader](https://fabricmc.net/use/installer/) and
    [Fabric API](https://modrinth.com/mod/fabric-api) on the server, and put the jar for your Minecraft version
    in `mods`.
-2. Join and run `/auto-setup sword average`, or open the menu with `/bot gui`.
+2. Join in survival mode and type `/bot spawn`. A bot with a sword appears in front of you and attacks you.
+3. `/bot` opens a menu with everything else, and `/auto-setup sword average` builds an arena with rounds and a
+   score.
 
 ![The bot menu](https://raw.githubusercontent.com/AndrewCTF/Carpet-PvP/main/docs/images/bot-gui.png)
 
@@ -37,7 +39,7 @@ what the graph says.
 
 1. In game, run `/carpetlogic open` and click **open in browser** in chat. It is for operators by
    default; `/carpet commandCarpetLogic true` opens it to everyone.
-2. In the editor, spawn a bot from the **Bots** panel. It appears where you are standing.
+2. In the editor, press **Spawn** in the **Bots** panel. The bot appears where you are standing.
 3. Press a preset such as *W-Tap* or *Crit Chain* on the empty canvas, or click nodes in the library on
    the left to chain them after `Start`.
 4. Choose the bot under the canvas and press **Run**.

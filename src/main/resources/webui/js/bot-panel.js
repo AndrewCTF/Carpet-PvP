@@ -21,6 +21,7 @@ const BotPanel = (() => {
         combatSettings: [],  // the setting names /player <name> ai takes
         viewerMode: false,
         targetBot: "",       // the bot the editor's Play button runs on
+        spawning: "",        // the bot Spawn was pressed for, until it has joined
         connected: false
     };
 
@@ -79,6 +80,13 @@ const BotPanel = (() => {
         state.programs = snapshot.programs || {};
         if (snapshot.combatSettings) state.combatSettings = snapshot.combatSettings;
         state.viewerMode = Boolean(snapshot.viewerMode);
+        // The bot just asked for is chosen once it has joined. Its name can come back in other capitals:
+        // a name that is also a real account's is spelled the way the account spells it.
+        const arrived = state.spawning && Object.keys(state.bots).find((name) => name.toLowerCase() === state.spawning.toLowerCase());
+        if (arrived) {
+            state.targetBot = arrived;
+            state.spawning = "";
+        }
         if (state.targetBot && !state.bots[state.targetBot]) state.targetBot = "";
         // A single bot is the obvious one to run on.
         if (!state.targetBot && Object.keys(state.bots).length === 1) state.targetBot = Object.keys(state.bots)[0];
@@ -362,7 +370,7 @@ const BotPanel = (() => {
         try {
             // No position is sent: the server puts the bot where the player this link belongs to is standing.
             await API.spawnBot(name);
-            selectBot(name);
+            state.spawning = name;
             log("Spawning bot " + name);
         } catch (e) {
             complain(e, "Could not spawn " + name);

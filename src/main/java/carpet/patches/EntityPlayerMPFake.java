@@ -232,7 +232,18 @@ public class EntityPlayerMPFake extends ServerPlayer
                 profile = offlineProfile(username);
             }
             if (!canPlace(profile, server, source)) return;
-            placeFake(profile, server, worldIn, pos, yaw, pitch, dimensionId, gamemode, flying);
+            try
+            {
+                placeFake(profile, server, worldIn, pos, yaw, pitch, dimensionId, gamemode, flying);
+            }
+            catch (Throwable e)
+            {
+                // A future swallows what its callback throws: without this the command reports a spawn
+                // and nobody is ever told that the bot did not arrive.
+                LOGGER.error("Could not spawn fake player {}", username, e);
+                source.sendSuccess(() -> Component.literal("Could not spawn " + username + ": " + e
+                        + ". The server log has the details").withStyle(ChatFormatting.RED), false);
+            }
         }, server);
         return true;
     }

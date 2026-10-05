@@ -34,18 +34,25 @@ Needs [Fabric Loader](https://fabricmc.net/use/installer/) and
 
 ## Quick start
 
-1. Install the mod and start the server.
-2. Join and open the menu with `/bot gui`, or type the commands below.
-3. Run `/auto-setup sword average`.
+1. Put the jar in `mods` and start the game.
+2. Type `/bot spawn`.
 
-What the player sees: `/auto-setup` builds a flat fenced arena twenty blocks east of them, saves
+A bot in diamond armour with a sword appears in front of you and attacks you. That is the whole
+setup. Be in survival mode: a bot leaves a creative player alone.
+
+- Another bot: `/bot spawn` again.
+- Make one stand still: `/bot stop Bot1`.
+- Everything else, as buttons: `/bot`.
+- A fenced arena with rounds and a score: `/auto-setup sword average`.
+
+What the player sees with the last one: `/auto-setup` builds a flat fenced arena twenty blocks east of them, saves
 everything they are carrying, gives them a diamond sword and armour and nothing else, and
 puts a bot holding the same kit six blocks away facing them. Three seconds later the bot fights. A
 round ends when one of you is down, the score is kept, and a menu offers a rematch, an easier or a
 harder fight, a different mode, or stopping. `/auto-setup stop` takes the bot away, puts every block
 of the arena back and hands the player their own inventory, place and game mode.
 
-Or from the command line:
+Two bots that fight each other, with their name, mode and difficulty spelled out:
 
 ```
 /bot spawn Bot1 sword average

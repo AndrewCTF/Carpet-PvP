@@ -29,7 +29,8 @@ All of these are behind `commandBot`, which is `"true"` by default.
 
 | Command | Permission | What it does | Details |
 |---|---|---|---|
-| `/bot spawn <name> <mode> [<difficulty>] [at <pos>]` | `commandBot` | Spawns a fighting bot. `<mode>` is `sword`, `crystal`, `anchor`, `ranged`, `mace` or `smp`. | [Bots.md](Bots.md#spawning-a-bot) |
+| `/bot` | `commandBot` | Opens the bot menu, the same as `/bot gui`. | [Menus.md](Menus.md) |
+| `/bot spawn [<name>] [<mode>] [<difficulty>] [at <pos>]` | `commandBot` | Spawns a fighting bot. With nothing after it, a sword bot in front of you. `<mode>` is `sword`, `crystal`, `anchor`, `ranged`, `mace` or `smp`. | [Bots.md](Bots.md#spawning-a-bot) |
 | `/bot option <name> [<setting> [<value>]]` | `commandBot` | Shows a bot's whole configuration, or sets one setting on it. | [Bots.md](Bots.md#reading-and-changing-a-bot) |
 | `/bot duel <a> <b>` | `commandBot` | Puts two bots in factions of their own and turns both on. | [Bots.md](Bots.md#fighting-stopping-and-reading-what-happened) |
 | `/bot stop <name>` | `commandBot` | Turns a bot's combat off and stops its navigation. The bot stays on the server. | [Bots.md](Bots.md#fighting-stopping-and-reading-what-happened) |

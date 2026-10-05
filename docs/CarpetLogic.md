@@ -17,8 +17,9 @@ Two things are independent of each other:
    operator runs `/carpet commandCarpetLogic true`.
 2. **Open the editor.** In game, run `/carpetlogic open` and click **open in browser** in chat. The
    link is for you only, lasts 24 hours and works while you are online.
-3. **Get a bot.** In the editor's **Bots** panel on the right, type a name and press **Spawn**: the bot
-   appears where you are standing in game. Bots spawned with `/bot spawn` or `/player` are listed too.
+3. **Get a bot.** In the editor's **Bots** panel on the right, press **Spawn**: the bot appears where you
+   are standing in game, under the name in the field beside the button. Bots spawned with `/bot spawn`
+   or `/player` are listed too.
 4. **Make a program.** On an empty canvas the editor offers presets such as *W-Tap* and *Crit Chain*:
    press one to load it. Or build your own: click a node in the library on the left and it is added
    after the selected node and wired to it. Click a node on the canvas to change its settings.
